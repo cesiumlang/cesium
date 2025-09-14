@@ -1,3 +1,3 @@
-[submodule "docs/quartz_repo"]
-	path = docs/quartz_repo
-	url = https://github.com/jackyzha0/quartz
+[submodule "buildtools"]
+	path = buildtools
+	url = https://github.com/cesiumlang/cesium-buildtools

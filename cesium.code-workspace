@@ -6,10 +6,7 @@
 	],
 	"settings": {
     "files.exclude": {
-      "_site/**": true,
-      "docs/quartz_repo/.github/workflows/**": true,
-      // "**/node_modules/**": true,
-      "docs/quartz/**": true
+      "**/node_modules/**": true,
     },
 		"editor.wrappingIndent": "indent",
     // "markdown.styles": ["custom-tag-style.css"]
@@ -21,24 +18,21 @@
       }
     },
     "files.insertFinalNewline": true,
-    "foam.openDailyNote.onStartup": false,
-    "foam.edit.linkReferenceDefinitions": "off",
-    "foam.files.ignore": [
-      "readme.md",
-      "docs/quartz/**/*",
-      "docs/quartz_repo/**/*",
-      // "docs/private/**/*"
-    ],
-    "foam.files.newNotePath": "currentDir",
-    "foam.completion.useAlias": "whenPathDiffersFromTitle",
-    "foam.preview.embedNoteType": "content-inline",
+    // "foam.openDailyNote.onStartup": false,
+    // "foam.edit.linkReferenceDefinitions": "off",
+    // "foam.files.ignore": [
+    //   "readme.md",
+    // ],
+    // "foam.files.newNotePath": "currentDir",
+    // "foam.completion.useAlias": "whenPathDiffersFromTitle",
+    // "foam.preview.embedNoteType": "content-inline",
   },
   "extensions": {
     // See http://go.microsoft.com/fwlink/?LinkId=827846
     // for the documentation about the extensions.json format
     "recommendations": [
       // Foam's own extension
-      "foam.foam-vscode",
+      // "foam.foam-vscode",
 
       // Tons of markdown goodies (lists, tables of content, so much more)
       "yzhang.markdown-all-in-one",

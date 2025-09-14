@@ -1,8 +1,0 @@
-{
-  "ignores": [
-    // "**/docs/private/chatgpt/**/*",
-    // "**/docs/private/claude/**/*",
-    // "**/content/chatgpt/**/*"
-    // "**/content/claude/**/*"
-  ]
-}
