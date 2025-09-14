@@ -24,14 +24,9 @@
     "cesium",
     "project-words",
   ],
-  "words": [
-    "CMake",
-  ],
-  "ignoreWords": [
-
-  ],
+  "words": [],
+  "ignoreWords": [],
   "ignoreRegExpList": [
-    "/-D.*/",
     "/-W.*/",
   ]
 }
