@@ -1,8 +1,8 @@
 /.claude/
 /.cache/
 /build/
-/buildtools/bin/
-/buildtools/downloads/
-/buildtools/llvm-*/
-/buildtools/clang+llvm-*-x86_64-pc-windows-msvc/
-/buildtools/build/
+# /buildtools/bin/
+# /buildtools/downloads/
+# /buildtools/llvm-*/
+# /buildtools/clang+llvm-*-x86_64-pc-windows-msvc/
+# /buildtools/build/
