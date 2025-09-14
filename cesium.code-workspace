@@ -14,7 +14,7 @@
 		},
     "files.exclude": {
       "**/node_modules/**": true,
-      "**/.cache/**": true,
+      ".cache/**": true,
     },
 		"editor.wrappingIndent": "indent",
     // "markdown.styles": ["custom-tag-style.css"]
