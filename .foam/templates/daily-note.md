@@ -8,7 +8,7 @@ tags:
   - news
 foam_template:
   description: Blog entries
-  filepath: docs/src/news/$FOAM_SLUG.md
+  filepath: content/news/$FOAM_SLUG.md
 ---
 
 * Content
