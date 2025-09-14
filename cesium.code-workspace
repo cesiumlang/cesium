@@ -5,6 +5,13 @@
 		}
 	],
 	"settings": {
+    "files.watcherExclude": {
+			"buildtools/clang+llvm-*/": true,
+			"buildtools/llvm-*/": true,
+			"buildtools/bin/cmake-*-windows-x86_64/**": true,
+			"buildtools/bin/cmake-*/**": true,
+			"build/CMakeFiles/**": true,
+		},
     "files.exclude": {
       "**/node_modules/**": true,
     },
@@ -26,6 +33,14 @@
     // "foam.files.newNotePath": "currentDir",
     // "foam.completion.useAlias": "whenPathDiffersFromTitle",
     // "foam.preview.embedNoteType": "content-inline",
+    // "cmake.environment": {
+    //   "PATH": "${workspaceFolder}/buildtools/bin:${workspaceFolder}/buildtools/llvm-21.1.0/bin:${env:PATH}"
+    // },
+    // "cmake.additionalCompilerSearchDirs": [
+    //   "./buildtools/bin",
+    //   "./buildtools/llvm-21.1.0/bin",
+    // ],
+    "cmake.cmakePath": "${workspaceFolder}/buildtools/bin/cmake-4.1.1/bin/cmake",
   },
   "extensions": {
     // See http://go.microsoft.com/fwlink/?LinkId=827846

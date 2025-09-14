@@ -21,6 +21,8 @@ lightgray
 Monomorphization
 MSVC
 Namespacing
+PYRANDYOS
+PYTHONUNBUFFERED
 RRGGBB
 Schibsted
 scrutinising

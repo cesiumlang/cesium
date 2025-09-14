@@ -1,4 +1,4 @@
-# Cesium Programming Language
+# The Cesium Programming Language
 
 ## Overview
 
