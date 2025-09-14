@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(cesium VERSION 0.1.0 LANGUAGES CXX)
+project(cesium VERSION 0.1.0 LANGUAGES C CXX)
 
 # Set C standard to C17
 set(CMAKE_C_STANDARD 17)
@@ -56,3 +56,10 @@ set_target_properties(cesium PROPERTIES
 
 # Installation rules
 install(TARGETS cesium RUNTIME DESTINATION bin)
+
+include(CTest)
+enable_testing()
+
+set(CPACK_PROJECT_NAME ${PROJECT_NAME})
+set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
+include(CPack)

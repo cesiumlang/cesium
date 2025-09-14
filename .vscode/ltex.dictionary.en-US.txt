@@ -2,6 +2,7 @@ Backlinks
 bigz
 buildtools
 cesiumlang
+CPACK
 darkgray
 Darkmode
 Deallocation

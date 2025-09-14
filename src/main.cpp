@@ -1,6 +1,6 @@
-#include <cstdio>
+#include <iostream>
 
-int main(int argc, char** argv) {
-  printf("Hello, World!\n");
-  return 0;
+int main(int argc, char** argv){
+    std::cout << "Hello, from cesium!\n";
+    return 0;
 }

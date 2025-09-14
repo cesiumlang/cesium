@@ -14,6 +14,7 @@
 		},
     "files.exclude": {
       "**/node_modules/**": true,
+      "**/.cache/**": true,
     },
 		"editor.wrappingIndent": "indent",
     // "markdown.styles": ["custom-tag-style.css"]
@@ -33,14 +34,16 @@
     // "foam.files.newNotePath": "currentDir",
     // "foam.completion.useAlias": "whenPathDiffersFromTitle",
     // "foam.preview.embedNoteType": "content-inline",
-    // "cmake.environment": {
-    //   "PATH": "${workspaceFolder}/buildtools/bin:${workspaceFolder}/buildtools/llvm-21.1.0/bin:${env:PATH}"
-    // },
-    // "cmake.additionalCompilerSearchDirs": [
-    //   "./buildtools/bin",
-    //   "./buildtools/llvm-21.1.0/bin",
-    // ],
+    "cmake.environment": {
+      "PATH": "${workspaceFolder}/buildtools/bin;${workspaceFolder}/buildtools/llvm-21.1.0/bin;${env:PATH}"
+    },
+    "cmake.additionalCompilerSearchDirs": [
+      "${workspaceFolder:cesium-src}/buildtools/bin",
+      "${workspaceFolder:cesium-src}/buildtools/llvm-21.1.0/bin",
+    ],
     "cmake.cmakePath": "${workspaceFolder}/buildtools/bin/cmake-4.1.1/bin/cmake",
+    "clangd.path": "${workspaceFolder}/buildtools/llvm-21.1.0/bin/clangd.exe",
+    // "cmake.configureOnOpen": false,
   },
   "extensions": {
     // See http://go.microsoft.com/fwlink/?LinkId=827846
@@ -67,7 +70,7 @@
       "type": "lldb",
       "request": "launch",
       "name": "Launch",
-      "program": "${workspaceFolder}/build/bin/cesium.exe",
+      "program": "${workspaceFolder}/build/bin/cesium.exe", //build/clang-21.1.0-x86_64-pc-windows-msvc/bin/cesium.exe
       "args": [],
       "cwd": "${workspaceFolder}"
     }
