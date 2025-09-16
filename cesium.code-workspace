@@ -43,9 +43,13 @@
     "cmake.environment": {
       "PATH": "${workspaceFolder}/buildtools/bin;${workspaceFolder}/buildtools/llvm-21.1.0/bin;${env:PATH}"
     },
+    // "cmake.additionalCompilerSearchDirs": [
+    //   "${workspaceFolder:cesium-src}/buildtools/bin",
+    //   "${workspaceFolder:cesium-src}/buildtools/llvm-21.1.0/bin",
+    // ],
     "cmake.additionalCompilerSearchDirs": [
-      "${workspaceFolder:cesium-src}/buildtools/bin",
-      "${workspaceFolder:cesium-src}/buildtools/llvm-21.1.0/bin",
+      "${workspaceFolder}/buildtools/bin",
+      "${workspaceFolder}/buildtools/llvm-21.1.0/bin",
     ],
     "cmake.cmakePath": "${workspaceFolder}/buildtools/bin/cmake-4.1.1/bin/cmake",
     "clangd.path": "${workspaceFolder}/buildtools/llvm-21.1.0/bin/clangd.exe",
