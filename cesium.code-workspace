@@ -12,11 +12,15 @@
     "files.watcherExclude": {
 			"buildtools/clang+llvm-*/": true,
 			"buildtools/llvm-*/": true,
+      "buildtools/bin/zig-*/": true,
+			"buildtools/bin/zig-x86_64-windows-*/": true,
 			"buildtools/bin/cmake-*-windows-x86_64/**": true,
 			"buildtools/bin/cmake-*/**": true,
-			"build/CMakeFiles/**": true,
+			"build/**": true,
+      "**/.zig-cache/**": true,
       "**/node_modules/**": true,
       "**/.cache/**": true,
+      "**/.git/**": true,
 		},
     "files.exclude": {
       "**/node_modules/**": true,
@@ -40,16 +44,20 @@
     // "foam.files.newNotePath": "currentDir",
     // "foam.completion.useAlias": "whenPathDiffersFromTitle",
     // "foam.preview.embedNoteType": "content-inline",
-    "cmake.environment": {
-      "PATH": "${workspaceFolder}/buildtools/bin;${workspaceFolder}/buildtools/llvm-21.1.0/bin;${env:PATH}"
-    },
-    "cmake.additionalCompilerSearchDirs": [
-      "${workspaceFolder:cesium-src}/buildtools/bin",
-      "${workspaceFolder:cesium-src}/buildtools/llvm-21.1.0/bin",
-    ],
-    "cmake.cmakePath": "${workspaceFolder}/buildtools/bin/cmake-4.1.1/bin/cmake",
+    // "cmake.environment": {
+    //   "PATH": "${workspaceFolder}/buildtools/bin;${workspaceFolder}/buildtools/llvm-21.1.0/bin;${env:PATH}"
+    // },
+    // "cmake.additionalCompilerSearchDirs": [
+    //   "${workspaceFolder:cesium-src}/buildtools/bin",
+    //   "${workspaceFolder:cesium-src}/buildtools/llvm-21.1.0/bin",
+    // ],
+    // "cmake.cmakePath": "${workspaceFolder}/buildtools/bin/cmake-4.1.1/bin/cmake",
     "clangd.path": "${workspaceFolder}/buildtools/llvm-21.1.0/bin/clangd.exe",
-    // "cmake.configureOnOpen": false,
+    "cmake.configureOnOpen": false,
+    "cmake.configureOnEdit": false,
+    "terminal.integrated.env.windows": {
+      "PATH": "${workspaceFolder}/buildtools/bin/zig-0.15.1;${workspaceFolder}/buildtools/llvm-21.1.0/bin;${env:PATH}"
+    },
   },
   "extensions": {
     // See http://go.microsoft.com/fwlink/?LinkId=827846

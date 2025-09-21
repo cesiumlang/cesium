@@ -1,6 +1,8 @@
 /.claude/
 /.cache/
 /build/
+/.zig-cache/
+/zig-out/
 # /buildtools/bin/
 # /buildtools/downloads/
 # /buildtools/llvm-*/

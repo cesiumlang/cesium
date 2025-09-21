@@ -38,4 +38,5 @@ void = main() {
 
 ## Building
 
-To build on Windows, you will need to install the [Windows SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/).  The current default builds use Clang, which can be installed via the script in [buildtools](https://github.com/cesiumlang/cesium-buildtools).
+<!-- To build on Windows, you will need to install the [Windows SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/).   -->
+The current default builds use Zig and Clang, which can be installed via the script in [buildtools](https://github.com/cesiumlang/cesium-buildtools).
