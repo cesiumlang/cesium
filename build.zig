@@ -1,9 +1,17 @@
 const std = @import("std");
 
-fn setupYyJsonDependency(b: *std.Build, exe: *std.Build.Step.Compile) void {
+fn createYyjsonLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
     const yyjson_dep = b.dependency("yyjson", .{});
 
-    exe.addCSourceFiles(.{
+    const lib = b.addLibrary(.{
+        .name = "yyjson",
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    lib.addCSourceFiles(.{
         .root = yyjson_dep.path(""),
         .files = &[_][]const u8{
             "src/yyjson.c",
@@ -13,46 +21,73 @@ fn setupYyJsonDependency(b: *std.Build, exe: *std.Build.Step.Compile) void {
         },
     });
 
-    exe.addIncludePath(yyjson_dep.path("src"));
+    lib.addIncludePath(yyjson_dep.path("src"));
+    lib.linkLibC();
+
+    return lib;
 }
 
-fn setupTreeSitterCppDependency(b: *std.Build, exe: *std.Build.Step.Compile) void {
+fn createTreeSitterCppLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
     const tree_sitter_cpp_dep = b.dependency("tree_sitter_cpp", .{});
 
-    exe.addCSourceFiles(.{
+    const lib = b.addLibrary(.{
+        .name = "tree-sitter-cpp",
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    lib.addCSourceFiles(.{
         .root = tree_sitter_cpp_dep.path(""),
         .files = &[_][]const u8{
             "src/parser.c",
-            "src/scanner.c", 
+            "src/scanner.c",
         },
         .flags = &[_][]const u8{
-            "-std=c11",  // Use C11 for static_assert support
+            "-std=c11", // Use C11 for static_assert support
         },
     });
+
+    lib.linkLibC();
+
+    return lib;
 }
 
-fn setupTreeSitterCoreDependency(b: *std.Build, exe: *std.Build.Step.Compile) void {
+fn createTreeSitterCoreLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
+    const lib = b.addLibrary(.{
+        .name = "tree-sitter-core",
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
     // Add tree-sitter core from git submodule
-    exe.addCSourceFiles(.{
+    lib.addCSourceFiles(.{
         .root = b.path("."),
         .files = &[_][]const u8{
-            "thirdparty/tree-sitter/lib/src/lib.c",  // Amalgamated source
+            "thirdparty/tree-sitter/lib/src/lib.c", // Amalgamated source
         },
         .flags = &[_][]const u8{
             "-std=c11",
         },
     });
-    
+
     // Add tree-sitter include paths
-    exe.addIncludePath(b.path("thirdparty/tree-sitter/lib/include"));
-    exe.addIncludePath(b.path("thirdparty/tree-sitter/lib/src"));
-    
+    lib.addIncludePath(b.path("thirdparty/tree-sitter/lib/include"));
+    lib.addIncludePath(b.path("thirdparty/tree-sitter/lib/src"));
+
     // Add tree-sitter macros
-    exe.root_module.addCMacro("_POSIX_C_SOURCE", "200112L");
-    exe.root_module.addCMacro("_DEFAULT_SOURCE", "");
+    lib.root_module.addCMacro("_POSIX_C_SOURCE", "200112L");
+    lib.root_module.addCMacro("_DEFAULT_SOURCE", "");
+
+    lib.linkLibC();
+
+    return lib;
 }
 
-fn configureExecutable(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
+fn createCesiumExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
     const exe = b.addExecutable(.{
         .name = "cesium",
         .root_module = b.createModule(.{
@@ -67,11 +102,11 @@ fn configureExecutable(b: *std.Build, target: std.Build.ResolvedTarget, optimize
             "cesium/src/main.cpp",
         },
         .flags = &[_][]const u8{
-            "-std=c++20",  // CMAKE_CXX_STANDARD 20
-            "-Wall",       // target_compile_options
+            "-std=c++20", // CMAKE_CXX_STANDARD 20
+            "-Wall", // target_compile_options
             "-Wextra",
-            "-Wpedantic", 
-            "-Wno-unused-parameter",  // Clang-specific flag from CMake
+            "-Wpedantic",
+            "-Wno-unused-parameter", // Clang-specific flag from CMake
         },
     });
 
@@ -84,7 +119,13 @@ fn configureExecutable(b: *std.Build, target: std.Build.ResolvedTarget, optimize
 
 fn setupBuildSteps(b: *std.Build, exe: *std.Build.Step.Compile) void {
     // Install the executable
-    b.installArtifact(exe);
+    // b.installArtifact(exe);
+    const install = b.addInstallArtifact(exe, .{
+        .dest_dir = .{ .override = .{ .custom = "../build/bin" } },
+        .pdb_dir = .{ .override = .{ .custom = "../build/bin" } },
+        .h_dir = .{ .override = .{ .custom = "../build/include" } },
+    });
+    b.default_step.dependOn(&install.step);
 
     // Create a run step
     const run_cmd = b.addRunArtifact(exe);
@@ -109,14 +150,18 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Configure the main executable
-    const exe = configureExecutable(b, target, optimize);
+    const exe = createCesiumExe(b, target, optimize);
 
-    // Setup all dependencies
-    setupYyJsonDependency(b, exe);
-    setupTreeSitterCppDependency(b, exe);
-    setupTreeSitterCoreDependency(b, exe);
+    const yyjson_lib = createYyjsonLib(b, target, optimize);
+    exe.linkLibrary(yyjson_lib);
+    exe.addIncludePath(b.dependency("yyjson", .{}).path("src"));
 
-    // Setup build steps
+    const tree_sitter_core_lib = createTreeSitterCoreLib(b, target, optimize);
+    exe.linkLibrary(tree_sitter_core_lib);
+    exe.addIncludePath(b.path("thirdparty/tree-sitter/lib/include"));
+
+    const tree_sitter_cpp_lib = createTreeSitterCppLib(b, target, optimize);
+    exe.linkLibrary(tree_sitter_cpp_lib);
+
     setupBuildSteps(b, exe);
 }

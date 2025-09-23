@@ -22,7 +22,7 @@
     // original project's identity. Thus it is recommended to leave the comment
     // on the following line intact, so that it shows up in code reviews that
     // modify the field.
-    .fingerprint = 0x31b74be1c2c745f5, // Changing this has security and trust implications.
+    .fingerprint = 0x31b74be1568d57fb, // Changing this has security and trust implications.
     // Tracks the earliest Zig version that the package considers to be a
     // supported use case.
     .minimum_zig_version = "0.15.1",
@@ -53,8 +53,8 @@
         "build.zig",
         "build.zig.zon",
         "cesium",
-        // For example...
-        //"LICENSE",
-        //"README.md",
+        "thirdparty",
+        "LICENSE",
+        "readme.md",
     },
 }
