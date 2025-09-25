@@ -8,3 +8,4 @@
 # /buildtools/llvm-*/
 # /buildtools/clang+llvm-*-x86_64-pc-windows-msvc/
 # /buildtools/build/
+/thirdparty/qt/qt/

@@ -1,0 +1,34 @@
+{
+  "version": 8,
+  "configurePresets": [
+    {
+      "name": "clang-21.1.0-x86_64-pc-windows-msvc",
+      "displayName": "Clang (llvm-21.1.0, WinSDK libs) Win x64",
+      "description": "Using WinSDK libs and compilers: C = llvm-21.1.0\\bin\\clang.exe, CXX = llvm-21.1.0\\bin\\clang++.exe",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_C_COMPILER": "c:/cesium/cesiumlang.org/cesium-src/buildtools/llvm-21.1.0/bin/clang.exe",
+        "CMAKE_CXX_COMPILER": "c:/cesium/cesiumlang.org/cesium-src/buildtools/llvm-21.1.0/bin/clang++.exe"
+      }
+    },
+    {
+      "name": "clang-21.1.0-x86_64-pc-windows-mingw",
+      "inherits": "clang-21.1.0-x86_64-pc-windows-msvc",
+      "displayName": "Clang (llvm-21.1.0, mingw libs) Win x64",
+      "description": "Using mingw libs and compilers: C = llvm-21.1.0\\bin\\clang.exe, CXX = llvm-21.1.0\\bin\\clang++.exe",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER_TARGET": "x86_64-w64-mingw32",
+        "CMAKE_CXX_COMPILER_TARGET": "x86_64-w64-mingw32",
+        "_comment_CMAKE_CXX_COMPILER_TARGET": {
+          "value": "This forces clang++ to link with MinGW libraries and not MSVC",
+          "type": "UNINITIALIZED"
+        }
+      }
+    }
+  ]
+}

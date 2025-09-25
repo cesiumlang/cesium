@@ -21,6 +21,7 @@
       "**/node_modules/**": true,
       "**/.cache/**": true,
       "**/.git/**": true,
+      // "thirdparty/qt/qt/**": true,
 		},
     "files.exclude": {
       "**/node_modules/**": true,
