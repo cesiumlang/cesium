@@ -13,6 +13,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 ## proj src dir is location of this file
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
+# # Cache FetchContent downloads outside build directory
+# set(FETCHCONTENT_BASE_DIR "${CMAKE_BINARY_DIR}/../.depcache" CACHE PATH "FetchContent cache directory")
+
 include(CompileCommands)
 include(DefaultBuildType)
 include(DefaultInstallPath)

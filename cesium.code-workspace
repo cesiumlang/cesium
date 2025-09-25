@@ -21,6 +21,7 @@
       "**/node_modules/**": true,
       "**/.cache/**": true,
       "**/.git/**": true,
+      "**/.dep-cache/**": true,
       // "thirdparty/qt/qt/**": true,
 		},
     "files.exclude": {
@@ -97,20 +98,4 @@
       }
     ]
   },
-  // "tasks": {
-  //   "version": "2.0.0",
-  //   "tasks": [
-  //     {
-  //       "type": "cmake",
-  //       "label": "CMake: build",
-  //       "command": "build",
-  //       "targets": [ "all" ],
-  //       "group": {
-  //         "isDefault": true,
-  //         "kind": "build"
-  //       },
-  //       "detail": "Builds all targets."
-  //     }
-  //   ]
-  // }
 }

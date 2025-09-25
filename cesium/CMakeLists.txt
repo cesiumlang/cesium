@@ -1,11 +1,4 @@
-qt_standard_project_setup()
-qt_add_executable(cesium)
-set_target_properties(cesium PROPERTIES
-    WIN32_EXECUTABLE ON
-    MACOSX_BUNDLE ON
-)
-
-# add_executable(cesium)  # WIN32)
+add_executable(cesium)
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT cesium)
 
 # Set output directory to build/bin
@@ -37,32 +30,19 @@ endif()
 # Clang-specific flags
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   target_compile_options(cesium PRIVATE -Wno-unused-parameter)
-  # Fix lld-link warning about multiple entry points
-  if(WIN32)
-    target_link_options(cesium PRIVATE -Xlinker /ENTRY:wWinMainCRTStartup)
-  endif()
+  # # Fix lld-link warning about multiple entry points
+  # if(WIN32)
+  #   target_link_options(cesium PRIVATE -Xlinker /ENTRY:wWinMainCRTStartup)
+  # endif()
 endif()
 
 target_link_libraries(cesium
   PRIVATE
     ${CMAKE_DL_LIBS}  # For dlopen/dlsym on Unix systems
-    Qt6::Core
-    Qt6::Widgets
     yyjson
     tree-sitter-core
     tree-sitter-cpp
 )
-
-# Deploy Qt libraries after build (for debug/development)
-if(WIN32)
-  find_program(WINDEPLOYQT_EXECUTABLE windeployqt HINTS ${QT6_INSTALL_PREFIX}/bin)
-  if(WINDEPLOYQT_EXECUTABLE)
-    add_custom_command(TARGET cesium POST_BUILD
-      COMMAND ${WINDEPLOYQT_EXECUTABLE} --debug --no-translations --no-system-d3d-compiler $<TARGET_FILE:cesium>
-      COMMENT "Deploying Qt libraries"
-    )
-  endif()
-endif()
 
 # Installation rules
 install(TARGETS cesium
@@ -73,3 +53,4 @@ install(TARGETS cesium
 
 add_subdirectory(src)
 add_subdirectory(include)
+add_subdirectory(gui)
