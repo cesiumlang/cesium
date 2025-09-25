@@ -61,6 +61,7 @@
     "terminal.integrated.env.windows": {
       "PATH": "${workspaceFolder}/buildtools/bin/zig-0.15.1;${workspaceFolder}/buildtools/llvm-21.1.0/bin;${env:PATH}"
     },
+    "lldb.verboseLogging": true,
   },
   "extensions": {
     // See http://go.microsoft.com/fwlink/?LinkId=827846

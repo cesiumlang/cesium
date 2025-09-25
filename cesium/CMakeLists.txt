@@ -37,6 +37,10 @@ endif()
 # Clang-specific flags
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   target_compile_options(cesium PRIVATE -Wno-unused-parameter)
+  # Fix lld-link warning about multiple entry points
+  if(WIN32)
+    target_link_options(cesium PRIVATE -Xlinker /ENTRY:wWinMainCRTStartup)
+  endif()
 endif()
 
 target_link_libraries(cesium
@@ -48,6 +52,17 @@ target_link_libraries(cesium
     tree-sitter-core
     tree-sitter-cpp
 )
+
+# Deploy Qt libraries after build (for debug/development)
+if(WIN32)
+  find_program(WINDEPLOYQT_EXECUTABLE windeployqt HINTS ${QT6_INSTALL_PREFIX}/bin)
+  if(WINDEPLOYQT_EXECUTABLE)
+    add_custom_command(TARGET cesium POST_BUILD
+      COMMAND ${WINDEPLOYQT_EXECUTABLE} --debug --no-translations --no-system-d3d-compiler $<TARGET_FILE:cesium>
+      COMMENT "Deploying Qt libraries"
+    )
+  endif()
+endif()
 
 # Installation rules
 install(TARGETS cesium
