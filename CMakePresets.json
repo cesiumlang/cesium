@@ -7,11 +7,25 @@
       "description": "Using WinSDK libs and compilers: C = llvm-21.1.0\\bin\\clang.exe, CXX = llvm-21.1.0\\bin\\clang++.exe",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
+      "environment": {
+        "buildtoolsDir": "${sourceDir}/buildtools",
+        "buildtoolsBin": "${env:buildtoolsDir}/bin",
+        "llvmVersion": "21.1.0",
+        "llvmBin": "${env:buildtoolsDir}/llvm-${env:llvmVersion}/bin",
+        "QtVersion": "6.9.2",
+        "QtTarget": "msvc2022_64",
+        "Qt6_ROOT": "C:/Qt/${env:QtVersion}/${env:QtTarget}/lib/cmake/Qt6",
+        "WinSdkVersion": "10.0.26100.0",
+        "WinSdkDir": "C:/Program Files (x86)/Windows Kits/10/bin/${env:WinSdkVersion}/x64",
+        "WINSYS32": "${env:SystemRoot}\\System32",
+        "PATH": "${env:buildtoolsBin};${env:WINSYS32};${env:SystemRoot};${env:WINSYS32}\\Wbem;${env:WINSYS32}\\WindowsPowerShell\\v1.0;${env:WINSYS32}\\OpenSSH;${env:ProgramFiles}\\dotnet;${env:LOCALAPPDATA}\\Microsoft\\WindowsApps;${env:LOCALAPPDATA}\\Programs\\Git\\bin;${env:ProgramFiles}\\Git\\cmd"
+      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "CMAKE_C_COMPILER": "c:/cesium/cesiumlang.org/cesium-src/buildtools/llvm-21.1.0/bin/clang.exe",
-        "CMAKE_CXX_COMPILER": "c:/cesium/cesiumlang.org/cesium-src/buildtools/llvm-21.1.0/bin/clang++.exe"
+        "CMAKE_C_COMPILER": "${env:llvmBin}/clang.exe",
+        "CMAKE_CXX_COMPILER": "${env:llvmBin}/clang++.exe",
+        "CMAKE_RC_COMPILER": "${env:WinSdkDir}/rc.exe"
       }
     },
     {

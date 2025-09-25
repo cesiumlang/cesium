@@ -1,6 +1,10 @@
+AUTOMOC
+AUTORCC
+AUTOUIC
 Backlinks
 bigz
 buildtools
+cesium-buildtools
 cesiumlang
 CPACK
 darkgray
@@ -43,7 +47,6 @@ Variadic
 variadics
 vmovups
 windarkmode
+WINSYS
 yyjson
 Zig
-
-cesium-buildtools

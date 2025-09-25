@@ -1,0 +1,5 @@
+#pragma once
+
+#define CESIUM_VERSION_MAJOR @cesium_VERSION_MAJOR@
+#define CESIUM_VERSION_MINOR @cesium_VERSION_MINOR@
+#define CESIUM_VERSION_PATCH @cesium_VERSION_PATCH@

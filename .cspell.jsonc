@@ -30,5 +30,6 @@
   "ignoreWords": [],
   "ignoreRegExpList": [
     "/-W.*/",
+    "/-D.*/",
   ]
 }
