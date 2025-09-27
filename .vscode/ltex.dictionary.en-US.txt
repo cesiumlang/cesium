@@ -13,6 +13,7 @@ Deallocation
 dlopen
 dlsym
 dylib
+dynlib
 EBNF
 Enums
 Fallthrough
@@ -27,12 +28,15 @@ katex
 lexer
 libtree
 lightgray
+mac
+macdeployqt
 Monomorphization
 MSVC
 Namespacing
 nlohmann
 PYRANDYOS
 PYTHONUNBUFFERED
+qt
 RRGGBB
 Schibsted
 scrutinising
@@ -46,7 +50,12 @@ vaddps
 Variadic
 variadics
 vmovups
+win
 windarkmode
+windeployqt
 WINSYS
 yyjson
 Zig
+
+CesiumDocCLI
+JsonDoc

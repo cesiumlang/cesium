@@ -1,0 +1,20 @@
+If:
+  PathMatch: .*\.in
+
+CompileFlags:
+  Remove:
+    - -Wall
+    - -Wextra
+    - -Wpedantic
+
+Diagnostics:
+  Suppress:
+    - "*"
+
+---
+
+CompileFlags:
+  Add:
+    - -Wall
+    - -Wextra
+    - -Wpedantic

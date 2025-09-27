@@ -1,5 +1,19 @@
 #pragma once
 
-#define CESIUM_VERSION_MAJOR @cesium_VERSION_MAJOR@
-#define CESIUM_VERSION_MINOR @cesium_VERSION_MINOR@
-#define CESIUM_VERSION_PATCH @cesium_VERSION_PATCH@
+#include <string>
+
+namespace cesium {
+  namespace version {
+    constexpr int MAJOR = @cesium_VERSION_MAJOR@;
+    constexpr int MINOR = @cesium_VERSION_MINOR@;
+    constexpr int PATCH = @cesium_VERSION_PATCH@;
+
+    inline std::string getVersionString() {
+      return std::to_string(MAJOR) + "." + std::to_string(MINOR) + "." + std::to_string(PATCH);
+    }
+
+    inline std::string getFullVersionInfo() {
+      return "Cesium v" + getVersionString();
+    }
+  }
+}

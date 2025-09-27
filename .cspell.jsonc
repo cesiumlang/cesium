@@ -31,5 +31,7 @@
   "ignoreRegExpList": [
     "/-W.*/",
     "/-D.*/",
-  ]
+    "/-X.*/",
+  ],
+  "allowCompoundWords": true,
 }

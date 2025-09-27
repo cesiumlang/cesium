@@ -5,6 +5,7 @@
     "MD053": false,
     "MD041": false,
     "MD034": false,
+    "MD036": false,
     "MD033": {
         "allowed_elements": [
             "br"

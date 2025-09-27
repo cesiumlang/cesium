@@ -44,6 +44,16 @@ target_link_libraries(cesium
     tree-sitter-cpp
 )
 
+# # Copy DLL dependencies to bin directory on Windows
+# if(WIN32)
+add_custom_command(TARGET cesium POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "$<TARGET_FILE:tree-sitter-cpp>"
+    "${CMAKE_BINARY_DIR}/bin/"
+  COMMENT "Copying tree-sitter-cpp DLL to bin directory"
+)
+# endif()
+
 # Installation rules
 install(TARGETS cesium
   RUNTIME DESTINATION bin

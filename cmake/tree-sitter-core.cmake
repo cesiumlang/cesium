@@ -13,8 +13,8 @@ add_library(tree-sitter-core STATIC ${tree-sitter-core-repo_SOURCE_DIR}/lib/src/
 target_include_directories(tree-sitter-core
   PRIVATE
     ${tree-sitter-core-repo_SOURCE_DIR}/lib/src
-    ${tree-sitter-core-repo_SOURCE_DIR}/lib/include
   PUBLIC
+    ${tree-sitter-core-repo_SOURCE_DIR}/lib/include
     $<INSTALL_INTERFACE:include>
 )
 

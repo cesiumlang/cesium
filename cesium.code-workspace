@@ -10,13 +10,16 @@
       "*.czm": "cesium"
     },
     "files.watcherExclude": {
-			"buildtools/clang+llvm-*/": true,
-			"buildtools/llvm-*/": true,
-      "buildtools/bin/zig-*/": true,
-			"buildtools/bin/zig-x86_64-windows-*/": true,
-			"buildtools/bin/cmake-*-windows-x86_64/**": true,
-			"buildtools/bin/cmake-*/**": true,
+			// "buildtools/clang+llvm-*/": true,
+			// "buildtools/llvm-*/": true,
+      // "buildtools/bin/zig-*/": true,
+			// "buildtools/bin/zig-x86_64-windows-*/": true,
+			// "buildtools/bin/cmake-*-windows-x86_64/**": true,
+			// "buildtools/bin/cmake-*/**": true,
+			"buildtools/opt/**": true,
 			"build/**": true,
+			"doc/**": true,
+			"tmp/**": true,
       "**/.zig-cache/**": true,
       "**/node_modules/**": true,
       "**/.cache/**": true,
@@ -47,22 +50,26 @@
     // "foam.files.newNotePath": "currentDir",
     // "foam.completion.useAlias": "whenPathDiffersFromTitle",
     // "foam.preview.embedNoteType": "content-inline",
-    // "cmake.environment": {
-    //   "PATH": "${workspaceFolder}/buildtools/bin;${workspaceFolder}/buildtools/llvm-21.1.0/bin;${env:PATH}"
-    // },
-    // "cmake.additionalCompilerSearchDirs": [
-    //   "${workspaceFolder:cesium-src}/buildtools/bin",
-    //   "${workspaceFolder:cesium-src}/buildtools/llvm-21.1.0/bin",
-    // ],
-    "cmake.cmakePath": "${workspaceFolder}/buildtools/bin/cmake-4.1.1/bin/cmake",
-    "clangd.path": "${workspaceFolder}/buildtools/llvm-21.1.0/bin/clangd.exe",
+    "cmake.cmakePath": "${workspaceFolder}/buildtools/opt/cmake-4.1.1/bin/cmake",
+    "clangd.path": "${workspaceFolder}/buildtools/opt/llvm-21.1.0/bin/clangd.exe",
+    "clangd.arguments": [
+      "--compile-commands-dir=${workspaceFolder}/build"
+    ],
     "cmake.configureOnOpen": true,
     "cmake.configureOnEdit": true,
+    "cmake.buildBeforeRun": true,
+    "cmake.launchBehavior": "breakAndReuseTerminal",
     // "cmake.buildTask": true,
     "terminal.integrated.env.windows": {
-      "PATH": "${workspaceFolder}/buildtools/bin/zig-0.15.1;${workspaceFolder}/buildtools/llvm-21.1.0/bin;${env:PATH}"
+      "PATH": "${workspaceFolder}/build/bin;${workspaceFolder}/buildtools/opt/llvm-21.1.0/bin;${env:PATH}"
     },
     "lldb.verboseLogging": true,
+    "zig.path": "${workspaceFolder}/buildtools/opt/zig-0.15.1/zig.exe",
+    "lldb.useNativePDBReader": true,
+    // "lldb.library": "${workspaceFolder}/buildtools/opt/llvm-21.1.0/bin",
+    // "zig.debugAdapter": "${workspaceFolder}/buildtools/opt/llvm-21.1.0/bin/lldb"
+    "zig.debugAdapter": "lldb"
+    // "lldb.executable": "${workspaceFolder}/buildtools/opt/llvm-21.1.0/bin/lldb.exe",
   },
   "extensions": {
     // See http://go.microsoft.com/fwlink/?LinkId=827846
@@ -89,12 +96,11 @@
         "type": "lldb",
         "request": "launch",
         "name": "Launch",
-        // "program": "${workspaceFolder}/build/bin/cesium.exe", //build/clang-21.1.0-x86_64-pc-windows-msvc/bin/cesium.exe
+        // "program": "${workspaceFolder}/build/bin/cesium.exe",
         "program": "${command:cmake.launchTargetPath}",
         "args": [],
         "cwd": "${command:cmake.getLaunchTargetDirectory}",
-        // "cwd": "${workspaceFolder}",
-        // "preLaunchTask": "CMake: build"
+        "console": "integratedTerminal"
       }
     ]
   },

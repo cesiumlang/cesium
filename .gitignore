@@ -10,3 +10,5 @@
 # /buildtools/build/
 /thirdparty/qt/qt/
 /.dep-cache/
+/tmp/
+/doc/

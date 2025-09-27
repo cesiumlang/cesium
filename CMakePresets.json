@@ -9,23 +9,27 @@
       "binaryDir": "${sourceDir}/build",
       "environment": {
         "buildtoolsDir": "${sourceDir}/buildtools",
-        "buildtoolsBin": "${env:buildtoolsDir}/bin",
+        "buildtoolsBin": "$env{buildtoolsDir}/bin",
+        "buildtoolsOpt": "$env{buildtoolsDir}/opt",
         "llvmVersion": "21.1.0",
-        "llvmBin": "${env:buildtoolsDir}/llvm-${env:llvmVersion}/bin",
+        "llvmBin": "$env{buildtoolsOpt}/llvm-$env{llvmVersion}/bin",
         "QtVersion": "6.9.2",
         "QtTarget": "msvc2022_64",
-        "Qt6_ROOT": "C:/Qt/${env:QtVersion}/${env:QtTarget}/lib/cmake/Qt6",
+        "Qt6_ROOT": "C:/Qt/$env{QtVersion}/$env{QtTarget}/lib/cmake/Qt6",
+        "vulkanVersion": "1.4.321.1",
+        "VULKAN_SDK": "$env{buildtoolsOpt}/vulkansdk-$env{vulkanVersion}",
+        "VK_SDK_PATH": "$env{VULKAN_SDK}",
         "WinSdkVersion": "10.0.26100.0",
-        "WinSdkDir": "C:/Program Files (x86)/Windows Kits/10/bin/${env:WinSdkVersion}/x64",
-        "WINSYS32": "${env:SystemRoot}\\System32",
-        "PATH": "${env:buildtoolsBin};${env:WINSYS32};${env:SystemRoot};${env:WINSYS32}\\Wbem;${env:WINSYS32}\\WindowsPowerShell\\v1.0;${env:WINSYS32}\\OpenSSH;${env:ProgramFiles}\\dotnet;${env:LOCALAPPDATA}\\Microsoft\\WindowsApps;${env:LOCALAPPDATA}\\Programs\\Git\\bin;${env:ProgramFiles}\\Git\\cmd"
+        "WinSdkDir": "C:/Program Files (x86)/Windows Kits/10/bin/$env{WinSdkVersion}/x64",
+        "WINSYS32": "$env{SYSTEMROOT}\\System32",
+        "PATH": "$env{VULKAN_SDK}\\bin;$env{buildtoolsBin};$env{WINSYS32};$env{SYSTEMROOT};$env{WINSYS32}\\Wbem;$env{WINSYS32}\\WindowsPowerShell\\v1.0;$env{WINSYS32}\\OpenSSH;$env{PROGRAMFILES}\\dotnet;$env{LOCALAPPDATA}\\Microsoft\\WindowsApps;$env{LOCALAPPDATA}\\Programs\\Git\\bin;$env{PROGRAMFILES}\\Git\\cmd"
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "CMAKE_C_COMPILER": "${env:llvmBin}/clang.exe",
-        "CMAKE_CXX_COMPILER": "${env:llvmBin}/clang++.exe",
-        "CMAKE_RC_COMPILER": "${env:WinSdkDir}/rc.exe"
+        "CMAKE_C_COMPILER": "$env{llvmBin}/clang.exe",
+        "CMAKE_CXX_COMPILER": "$env{llvmBin}/clang++.exe",
+        "CMAKE_RC_COMPILER": "$env{WinSdkDir}/rc.exe"
       }
     },
     {
@@ -40,7 +44,7 @@
         "CMAKE_CXX_COMPILER_TARGET": "x86_64-w64-mingw32",
         "_comment_CMAKE_CXX_COMPILER_TARGET": {
           "value": "This forces clang++ to link with MinGW libraries and not MSVC",
-          "type": "UNINITIALIZED"
+          "type": "STRING"
         }
       }
     }
