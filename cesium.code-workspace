@@ -19,6 +19,7 @@
 			"buildtools/opt/**": true,
 			"build/**": true,
 			"doc/**": true,
+      ".cesium-doc/**": true,
 			"tmp/**": true,
       "**/.zig-cache/**": true,
       "**/node_modules/**": true,
@@ -87,6 +88,8 @@
       "streetsidesoftware.code-spell-checker-scientific-terms",
 			"streetsidesoftware.code-spell-checker-win32",
       "ltex-plus.vscode-ltex-plus",
+
+      "vadimcn.vscode-lldb",
     ]
   },
   "launch": {

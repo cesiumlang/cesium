@@ -1,31 +1,46 @@
 /**
- * @file json.h
- * @brief Modern C++ wrapper for yyjson library providing safe JSON parsing and manipulation
- */
+@brief Main JSON document class supporting both reading and writing
+
+RAII wrapper around yyjson documents that provides safe parsing,
+modification, and serialization of JSON data.
+*/
+
 #pragma once
 
 #include <string>
 #include <vector>
 #include <optional>
 #include <functional>
-#include <iostream>
 #include "yyjson.h"
 
+// Re-export key yyjson types to suppress unused include warnings
+using ::yyjson_val;
+using ::yyjson_doc;
+using ::yyjson_mut_doc;
+using ::yyjson_mut_val;
+#include <functional>
+#include "yyjson.h"
+
+// Re-export key yyjson types to suppress unused include warnings
+using ::yyjson_val;
+using ::yyjson_doc;
+using ::yyjson_mut_doc;
+using ::yyjson_mut_val;
+
 /**
- * @class JsonValue
- * @brief Read-only wrapper for JSON values from parsed documents
- * 
- * Provides type-safe access to JSON values with automatic type checking
- * and sensible default values for missing or mistyped data.
- */
+@brief Read-only wrapper for JSON values from parsed documents
+
+Provides type-safe access to JSON values with automatic type checking
+and sensible default values for missing or mistyped data.
+*/
 class JsonValue {
   private:
     yyjson_val* val_;
 
   public:
     /**
-     * @brief Construct JsonValue from yyjson value pointer
-     */
+    @brief Construct JsonValue from yyjson value pointer
+    */
     explicit JsonValue(yyjson_val* val);
 
     // Type checking methods
@@ -38,28 +53,28 @@ class JsonValue {
     bool isBool() const;    ///< Check if value is boolean
 
     /**
-     * @brief Get value as string with default fallback
-     */
+    @brief Get value as string with default fallback
+    */
     std::string asString(const std::string& default_val = "") const;
-    
+
     /**
-     * @brief Get value as integer with default fallback
-     */
+    @brief Get value as integer with default fallback
+    */
     int asInt(int default_val = 0) const;
-    
+
     /**
-     * @brief Get value as double with default fallback
-     */
+    @brief Get value as double with default fallback
+    */
     double asDouble(double default_val = 0.0) const;
-    
+
     /**
-     * @brief Get value as boolean with default fallback
-     */
+    @brief Get value as boolean with default fallback
+    */
     bool asBool(bool default_val = false) const;
-    
+
     /**
-     * @brief Convert JSON array to vector of strings
-     */
+    @brief Convert JSON array to vector of strings
+    */
     std::vector<std::string> asStringArray() const;
 
     // Explicit conversions for convenience
@@ -83,7 +98,7 @@ class JsonValue {
         }
       }
     }
-    
+
     void forEachArray(std::function<void(size_t, JsonValue)> callback) const {
       if (isArray()) {
         size_t idx, max;
@@ -93,7 +108,7 @@ class JsonValue {
         }
       }
     }
-    
+
     // Legacy template forEach - automatically detects type and calls appropriate method
     template<typename Func> void forEach(Func callback) const {
       if (isObject()) {
@@ -163,12 +178,17 @@ class JsonProxy {
 };
 
 /**
- * @class JsonDoc
- * @brief Main JSON document class supporting both reading and writing
- * 
- * RAII wrapper around yyjson documents that provides safe parsing,
- * modification, and serialization of JSON data.
- */
+@brief Main JSON document class supporting both reading and writing
+
+RAII wrapper around yyjson documents that provides safe parsing,
+modification, and serialization of JSON data.
+*/
+/**
+@brief Main JSON document class supporting both reading and writing
+
+RAII wrapper around yyjson documents that provides safe parsing,
+modification, and serialization of JSON data.
+*/
 class JsonDoc {
   private:
     yyjson_doc* doc_;      ///< Read-only document handle
@@ -176,18 +196,18 @@ class JsonDoc {
 
   public:
     /**
-     * @brief Create empty JSON document
-     */
+    @brief Create empty JSON document
+    */
     JsonDoc();
-    
+
     /**
-     * @brief Construct from existing yyjson document
-     */
+    @brief Construct from existing yyjson document
+    */
     explicit JsonDoc(yyjson_doc* doc);
-    
+
     /**
-     * @brief Destructor - automatically frees document memory
-     */
+    @brief Destructor - automatically frees document memory
+    */
     ~JsonDoc();
 
     // Move semantics for safe transfer
@@ -199,33 +219,33 @@ class JsonDoc {
     JsonDoc& operator=(const JsonDoc&) = delete;
 
     /**
-     * @brief Load JSON document from file
-     * @param path Path to JSON file
-     * @return JsonDoc wrapped in optional, or nullopt on parse error
-     */
+    @brief Load JSON document from file
+    @param path Path to JSON file
+    @return JsonDoc wrapped in optional, or nullopt on parse error
+    */
     static std::optional<JsonDoc> fromFile(const std::string& path);
 
     /**
-     * @brief Access/modify JSON value by key (mutable)
-     */
+    @brief Access/modify JSON value by key (mutable)
+    */
     JsonProxy operator[](const std::string& key);
-    
+
     /**
-     * @brief Access JSON value by key (read-only)
-     */
+    @brief Access JSON value by key (read-only)
+    */
     JsonValue operator[](const std::string& key) const;
 
     /**
-     * @brief Write JSON document to file
-     * @param path Output file path
-     * @param pretty Whether to format with indentation
-     * @return True if write succeeded, false on error
-     */
+    @brief Write JSON document to file
+    @param path Output file path
+    @param pretty Whether to format with indentation
+    @return True if write succeeded, false on error
+    */
     bool writeToFile(const std::string& path, bool pretty = true) const;
-    
+
     /**
-     * @brief Check if document was parsed successfully
-     */
+    @brief Check if document was parsed successfully
+    */
     bool isValid() const;
 
   private:

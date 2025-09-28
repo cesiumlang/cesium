@@ -13,8 +13,8 @@ void teardownMarkdownTest() {
   std::filesystem::remove_all(markdown_test_output_dir);
 }
 
-JavadocBlock createTestBlock(const std::string& name, const std::string& desc, const std::string& type = "function_definition") {
-  JavadocBlock block;
+DocstringBlock createTestBlock(const std::string& name, const std::string& desc, const std::string& type = "function_definition") {
+  DocstringBlock block;
   block.symbol_name = name;
   block.symbol_type = type;
   block.description = desc;
@@ -28,7 +28,7 @@ void test_generate_simple_markdown() {
   MarkdownGenerator generator;
   std::cout << "Created MarkdownGenerator..." << std::endl;
   
-  std::vector<JavadocBlock> blocks;
+  std::vector<DocstringBlock> blocks;
   std::cout << "Created empty blocks vector..." << std::endl;
   auto block = createTestBlock("testFunction", "A simple test function");
   std::cout << "Created test block..." << std::endl;
@@ -59,7 +59,7 @@ void test_generate_simple_markdown() {
 void test_generate_class_markdown() {
   MarkdownGenerator generator;
   
-  std::vector<JavadocBlock> blocks;
+  std::vector<DocstringBlock> blocks;
   auto block = createTestBlock("TestClass", "A test class with documentation", "class_specifier");
   block.namespace_path = "TestNamespace";
   blocks.push_back(block);
@@ -83,7 +83,7 @@ void test_generate_class_markdown() {
 void test_generate_multiple_markdown_files() {
   MarkdownGenerator generator;
   
-  std::vector<JavadocBlock> blocks;
+  std::vector<DocstringBlock> blocks;
   
   // Create multiple blocks
   auto block1 = createTestBlock("function1", "First function");
@@ -115,7 +115,7 @@ void test_generate_multiple_markdown_files() {
 void test_generate_function_with_parameters() {
   MarkdownGenerator generator;
   
-  std::vector<JavadocBlock> blocks;
+  std::vector<DocstringBlock> blocks;
   auto block = createTestBlock("calculateSum", "Calculate sum of numbers");
   block.params["a"] = "First number";
   block.params["b"] = "Second number";
@@ -137,7 +137,7 @@ void test_generate_function_with_parameters() {
 
 void test_generate_empty_blocks() {
   MarkdownGenerator generator;
-  std::vector<JavadocBlock> blocks; // Empty vector
+  std::vector<DocstringBlock> blocks; // Empty vector
   
   generator.generateMarkdownFiles(blocks, markdown_test_output_dir);
   
@@ -159,7 +159,7 @@ void test_markdown_frontmatter() {
   
   MarkdownGenerator generator;
   
-  std::vector<JavadocBlock> blocks;
+  std::vector<DocstringBlock> blocks;
   auto block = createTestBlock("testFunction", "Test function with frontmatter");
   block.symbol_type = "function_definition";
   block.namespace_path = "TestNS";
@@ -182,24 +182,24 @@ void test_markdown_frontmatter() {
 void test_invalid_output_directory() {
   MarkdownGenerator generator;
   
-  std::vector<JavadocBlock> blocks;
+  std::vector<DocstringBlock> blocks;
   auto block = createTestBlock("testFunction", "Test function");
   blocks.push_back(block);
   
-#ifdef _WIN32
-  // On Windows, try to use a truly invalid path (reserved device name)
-  std::string invalid_path = "CON/invalid_path";  // CON is a reserved device name on Windows
-#else
-  // On Unix-like systems, create a read-only directory
-  std::string readonly_base = "readonly_test_dir";
-  std::string invalid_path = readonly_base + "/cannot_write_here";
-  
-  // Create the base directory and make it read-only
-  std::filesystem::create_directory(readonly_base);
-  std::filesystem::permissions(readonly_base, 
-                              std::filesystem::perms::owner_read | std::filesystem::perms::group_read | std::filesystem::perms::others_read,
-                              std::filesystem::perm_options::replace);
-#endif
+  #ifdef _WIN32
+    // On Windows, try to use a truly invalid path (reserved device name)
+    std::string invalid_path = "CON/invalid_path";  // CON is a reserved device name on Windows
+  #else
+    // On Unix-like systems, create a read-only directory
+    std::string readonly_base = "readonly_test_dir";
+    std::string invalid_path = readonly_base + "/cannot_write_here";
+    
+    // Create the base directory and make it read-only
+    std::filesystem::create_directory(readonly_base);
+    std::filesystem::permissions(readonly_base, 
+                                std::filesystem::perms::owner_read | std::filesystem::perms::group_read | std::filesystem::perms::others_read,
+                                std::filesystem::perm_options::replace);
+  #endif
   
   try {
     // Try to write to the invalid directory (should fail)
@@ -213,25 +213,25 @@ void test_invalid_output_directory() {
     // Either it should throw an exception or gracefully handle the error
     TEST_ASSERT_TRUE(caught_exception || !std::filesystem::exists(invalid_path + "/testFunction.md"), "invalid_path_handled_gracefully");
     
-#ifndef _WIN32
-    // Clean up read-only directory on Unix systems
-    std::filesystem::permissions(readonly_base, 
-                                std::filesystem::perms::owner_all | std::filesystem::perms::group_read | std::filesystem::perms::others_read,
-                                std::filesystem::perm_options::replace);
-    std::filesystem::remove_all(readonly_base);
-#endif
-  } catch (const std::exception& e) {
-#ifndef _WIN32
-    // Clean up in case of any error on Unix systems
-    try {
+    #ifndef _WIN32
+      // Clean up read-only directory on Unix systems
       std::filesystem::permissions(readonly_base, 
-                                  std::filesystem::perms::owner_all,
+                                  std::filesystem::perms::owner_all | std::filesystem::perms::group_read | std::filesystem::perms::others_read,
                                   std::filesystem::perm_options::replace);
       std::filesystem::remove_all(readonly_base);
-    } catch (...) {
-      // Ignore cleanup errors
-    }
-#endif
+    #endif
+  } catch (const std::exception& e) {
+    #ifndef _WIN32
+      // Clean up in case of any error on Unix systems
+      try {
+        std::filesystem::permissions(readonly_base, 
+                                    std::filesystem::perms::owner_all,
+                                    std::filesystem::perm_options::replace);
+        std::filesystem::remove_all(readonly_base);
+      } catch (...) {
+        // Ignore cleanup errors
+      }
+    #endif
     TEST_ASSERT_TRUE(true, "invalid_path_throws_exception");
   }
 }

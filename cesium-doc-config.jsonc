@@ -1,0 +1,24 @@
+{
+  "languages": {
+    "cpp": {
+      "library": "tree-sitter-cpp.so",
+      "function": "tree_sitter_cpp",
+      "extensions": [".cpp", ".hpp", ".cc", ".h", ".cxx", ".h.in"],
+      "docstring_style": "/** */"
+    }
+  },
+  "source_directories": ["cesium/src/", "cesium/include/"],
+  "extract_directory": ".cesium-doc/",
+  "output_directory": "doc/api/",
+  "exclude_patterns": ["**/test/**", "**/*_test.*"],
+  "logging": {
+    "level": "debug",
+    "console_level": "debug",
+    "file_level": "debug",
+    "log_file": ".cesium-doc/cesium-doc.log",
+    "max_file_size_mb": 10,
+    "backup_count": 5,
+    "enable_colors": true,
+    "enable_timestamps": true
+  }
+}

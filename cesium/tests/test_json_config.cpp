@@ -16,13 +16,13 @@ void setupTestConfig() {
         "library": "tree-sitter-cpp.so",
         "function": "tree_sitter_cpp",
         "extensions": [".cpp", ".hpp", ".cc", ".h", ".cxx"],
-        "javadoc_style": "/** */"
+        "docstring_style": "/** */"
       },
       "python": {
         "library": "tree-sitter-python.so", 
         "function": "tree_sitter_python",
         "extensions": [".py"],
-        "javadoc_style": "\"\"\" \"\"\""
+        "docstring_style": "\"\"\" \"\"\""
       }
     },
     "source_directories": ["src/", "include/"],
@@ -52,9 +52,9 @@ void test_load_valid_config() {
   std::string library_value = library_proxy;
   TEST_ASSERT_EQ(library_value, "tree-sitter-cpp.so", "library_value");
   
-  auto javadoc_proxy = cpp_proxy[std::string("javadoc_style")];
-  std::string javadoc_value = javadoc_proxy;
-  TEST_ASSERT_EQ(javadoc_value, "/** */", "javadoc_style_value");
+  auto docstring_proxy = cpp_proxy[std::string("docstring_style")];
+  std::string docstring_value = docstring_proxy;
+  TEST_ASSERT_EQ(docstring_value, "/** */", "docstring_style_value");
 }
 
 void test_load_invalid_file() {
@@ -144,9 +144,9 @@ void test_multiple_languages() {
   TEST_ASSERT_TRUE(python_function_val.isString(), "python_function_is_string");
   TEST_ASSERT_EQ(python_function_val.asString(), "tree_sitter_python", "python_function_name");
   
-  auto python_javadoc_val = python_val[std::string("javadoc_style")];
-  TEST_ASSERT_TRUE(python_javadoc_val.isString(), "python_javadoc_style_is_string");
-  TEST_ASSERT_EQ(python_javadoc_val.asString(), "\"\"\" \"\"\"", "python_javadoc_style");
+  auto python_docstring_val = python_val[std::string("docstring_style")];
+  TEST_ASSERT_TRUE(python_docstring_val.isString(), "python_docstring_style_is_string");
+  TEST_ASSERT_EQ(python_docstring_val.asString(), "\"\"\" \"\"\"", "python_docstring_style");
 }
 
 void run_json_config_tests() {

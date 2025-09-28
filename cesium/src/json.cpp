@@ -1,7 +1,6 @@
 /**
- * @file json.cpp
- * @brief Modern C++ wrapper implementation for yyjson library
- */
+@brief Modern C++ wrapper implementation for yyjson library
+*/
 #include "json.h"
 #include <iostream>
 

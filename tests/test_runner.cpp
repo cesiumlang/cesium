@@ -3,7 +3,7 @@
 
 // Include all test functions - we'll need to declare these
 void run_json_config_tests();
-void run_javadoc_parser_tests();  
+void run_docstring_parser_tests();  
 void run_markdown_generator_tests();
 void run_cli_integration_tests();
 
@@ -18,8 +18,8 @@ int main() {
   RUN_TEST_SUITE("JSON Configuration Tests", run_json_config_tests);
   std::cout << "*** JSON tests completed successfully ***" << std::endl;
   
-  RUN_TEST_SUITE("Javadoc Parser Tests", run_javadoc_parser_tests);
-  std::cout << "*** Javadoc parser tests completed successfully ***" << std::endl;
+  RUN_TEST_SUITE("Docstring Parser Tests", run_docstring_parser_tests);
+  std::cout << "*** Docstring parser tests completed successfully ***" << std::endl;
   
   RUN_TEST_SUITE("Markdown Generator Tests", run_markdown_generator_tests);
   std::cout << "*** Markdown generator tests completed successfully ***" << std::endl;

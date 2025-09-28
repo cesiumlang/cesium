@@ -28,6 +28,7 @@ include(qt)
 include(yyjson)
 include(tree-sitter-core)
 include(tree-sitter-cpp)
+# include(utf8)
 
 # Add cesium subdirectory
 add_subdirectory(cesium)

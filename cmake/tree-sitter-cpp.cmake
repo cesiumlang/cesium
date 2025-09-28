@@ -4,7 +4,8 @@ FetchContent_Declare(
   GIT_TAG v0.23.4
   GIT_SHALLOW TRUE
   GIT_PROGRESS TRUE
-  SOURCE_SUBDIR "randy"
+  SOURCE_SUBDIR ""
+  CONFIGURE_COMMAND "echo"
 )
 FetchContent_MakeAvailable(tree-sitter-cpp-repo)
 

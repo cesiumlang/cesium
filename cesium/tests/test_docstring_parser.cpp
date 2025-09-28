@@ -1,22 +1,22 @@
-#include "javadoc.h"
+#include "docstrings.h"
 #include "../../tests/simple_test.h"
 
-JavadocParser parser;
+DocstringParser parser;
 
 void test_parse_block_comment() {
   std::string content = R"(
 /**
- * Calculate the sum of two integers
- * @param a The first integer
- * @param b The second integer  
- * @return The sum of a and b
- */
+Calculate the sum of two integers
+@param a The first integer
+@param b The second integer  
+@return The sum of a and b
+*/
 int add(int a, int b) {
     return a + b;
 }
 )";
   
-  auto blocks = parser.extractJavadocBlocks(content, "/** */");
+  auto blocks = parser.extractDocstrings(content, "/** */");
   
   TEST_ASSERT_EQ(blocks.size(), 1, "parse_block_comment_size");
   
@@ -36,19 +36,19 @@ int add(int a, int b) {
 void test_parse_multiple_block_comments() {
   std::string content = R"(
 /**
- * First function documentation
- * @param x Input parameter
- */
+First function documentation
+@param x Input parameter
+*/
 void function1(int x) {}
 
 /**
- * Second function documentation  
- * @return Return value description
- */
+Second function documentation  
+@return Return value description
+*/
 int function2() { return 0; }
 )";
   
-  auto blocks = parser.extractJavadocBlocks(content, "/** */");
+  auto blocks = parser.extractDocstrings(content, "/** */");
   
   TEST_ASSERT_EQ(blocks.size(), 2, "multiple_blocks_size");
   
@@ -70,12 +70,12 @@ int function2() { return 0; }
 void test_parse_simple_block_comment() {
   std::string content = R"(
 /**
- * Simple description without parameters
- */
+Simple description without parameters
+*/
 void simpleFunction() {}
 )";
   
-  auto blocks = parser.extractJavadocBlocks(content, "/** */");
+  auto blocks = parser.extractDocstrings(content, "/** */");
   
   TEST_ASSERT_EQ(blocks.size(), 1, "simple_block_size");
   
@@ -92,21 +92,21 @@ void simpleFunction() {}
 void test_parse_class_documentation() {
   std::string content = R"(
 /**
- * Cross-platform dynamic library handle wrapper
- * 
- * This class provides a unified interface for loading and managing
- * dynamic libraries across different operating systems.
- * 
- * @author Development Team
- * @since 1.0.0
- */
+Cross-platform dynamic library handle wrapper
+
+This class provides a unified interface for loading and managing
+dynamic libraries across different operating systems.
+
+@author Development Team
+@since 1.0.0
+*/
 class Library {
 public:
     Library();
 };
 )";
   
-  auto blocks = parser.extractJavadocBlocks(content, "/** */");
+  auto blocks = parser.extractDocstrings(content, "/** */");
   
   TEST_ASSERT_EQ(blocks.size(), 1, "class_doc_size");
   TEST_ASSERT_TRUE(blocks[0].description.find("Cross-platform dynamic library handle wrapper") != std::string::npos, "class_desc_contains_wrapper");
@@ -124,7 +124,7 @@ double calculateArea(double width, double height) {
 }
 )";
   
-  auto blocks = parser.extractJavadocBlocks(content, "/// ");
+  auto blocks = parser.extractDocstrings(content, "/// ");
   
   TEST_ASSERT_EQ(blocks.size(), 1, "line_comments_size");
   TEST_ASSERT_EQ(blocks[0].description, "Calculate the area of a rectangle", "line_comments_desc");
@@ -147,7 +147,7 @@ def factorial(n):
     return n * factorial(n - 1)
 )";
   
-  auto blocks = parser.extractJavadocBlocks(content, "\"\"\" \"\"\"");
+  auto blocks = parser.extractDocstrings(content, "\"\"\" \"\"\"");
   
   std::cout << "Python docstring blocks size: " << blocks.size() << std::endl;
   TEST_ASSERT_EQ(blocks.size(), 0, "python_docstring_size");
@@ -167,7 +167,7 @@ def factorial(n):
 
 void test_parse_empty_content() {
   std::string content = "";
-  auto blocks = parser.extractJavadocBlocks(content, "/** */");
+  auto blocks = parser.extractDocstrings(content, "/** */");
   TEST_ASSERT_TRUE(blocks.empty(), "empty_content_no_blocks");
 }
 
@@ -182,29 +182,29 @@ int add(int a, int b) {
 void function() {}
 )";
   
-  auto blocks = parser.extractJavadocBlocks(content, "/** */");
+  auto blocks = parser.extractDocstrings(content, "/** */");
   TEST_ASSERT_TRUE(blocks.empty(), "no_javadoc_no_blocks");
 }
 
 void test_parse_complex_javadoc() {
   std::string content = R"(
 /**
- * Process a list of data items with optional filtering
- * 
- * This function processes each item in the input list and applies
- * the specified transformation while optionally filtering items
- * based on provided criteria.
- * 
- * @param data The input data list to process
- * @param transform The transformation function to apply
- * @param filter Optional filter function (can be null)
- * @param options Configuration options for processing
- * @return A new list containing processed and filtered items
- * @throws ProcessingException If processing fails
- * @see DataProcessor
- * @since 2.1.0
- * @deprecated Use processDataV2 instead
- */
+Process a list of data items with optional filtering
+
+This function processes each item in the input list and applies
+the specified transformation while optionally filtering items
+based on provided criteria.
+
+@param data The input data list to process
+@param transform The transformation function to apply
+@param filter Optional filter function (can be null)
+@param options Configuration options for processing
+@return A new list containing processed and filtered items
+@throws ProcessingException If processing fails
+@see DataProcessor
+@since 2.1.0
+@deprecated Use processDataV2 instead
+*/
 template<typename T>
 std::vector<T> processData(const std::vector<T>& data, 
                           std::function<T(const T&)> transform,
@@ -214,7 +214,7 @@ std::vector<T> processData(const std::vector<T>& data,
 }
 )";
   
-  auto blocks = parser.extractJavadocBlocks(content, "/** */");
+  auto blocks = parser.extractDocstrings(content, "/** */");
   
   TEST_ASSERT_EQ(blocks.size(), 1, "complex_javadoc_size");
   
@@ -239,7 +239,7 @@ std::vector<T> processData(const std::vector<T>& data,
   std::cout << "Tags check completed" << std::endl;
 }
 
-void run_javadoc_parser_tests() {
+void run_docstring_parser_tests() {
   test_parse_block_comment();
   test_parse_multiple_block_comments();
   test_parse_simple_block_comment();

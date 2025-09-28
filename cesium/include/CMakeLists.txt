@@ -6,11 +6,19 @@ target_sources(cesium PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/version.h)
 
 target_sources(cesium PRIVATE
   json.h
-  treesitter.h
   dynlib.h
-  javadoc.h
-  ts_ast_parser.h
-  markdowngen.h
-  docgen.h
-  doc_cli.h
+  cli_utils.h
+  debug_utils.h
+  win32.h
+
+  # Documentation core headers
+  doc/treesitter.h
+  doc/markdowngen.h
+  doc/docgen.h
+  doc/doc_cli.h
+
+  # C++ language-specific headers
+  doc/cpp/docstrings.h
+  doc/cpp/ts_ast_parser.h
+  doc/cpp/ast_extractor.h
 )

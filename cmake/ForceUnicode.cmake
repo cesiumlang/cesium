@@ -1,4 +1,4 @@
-## Force Unicode always
+# Force Unicode always
 add_compile_definitions(_UNICODE UNICODE)
 if(MSVC)
   add_compile_options(/utf-8)

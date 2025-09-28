@@ -42,6 +42,7 @@ target_link_libraries(cesium
     yyjson
     tree-sitter-core
     tree-sitter-cpp
+    # utf8
 )
 
 # # Copy DLL dependencies to bin directory on Windows

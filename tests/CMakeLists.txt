@@ -24,6 +24,7 @@ target_link_libraries(cesium_tests
     yyjson
     tree-sitter-core
     tree-sitter-cpp
+    utf8
 )
 
 # Add include directories so tests can find headers

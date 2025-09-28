@@ -17,21 +17,21 @@ void setupIntegrationTest() {
   std::ofstream cpp_file(integration_test_dir + "/src/calculator.cpp");
   cpp_file << R"(
 /**
- * Add two numbers together
- * @param a First number
- * @param b Second number
- * @return Sum of a and b
- */
+Add two numbers together
+@param a First number
+@param b Second number
+@return Sum of a and b
+*/
 int add(int a, int b) {
     return a + b;
 }
 
 /**
- * Multiply two numbers
- * @param x First number
- * @param y Second number
- * @return Product of x and y
- */
+Multiply two numbers
+@param x First number
+@param y Second number
+@return Product of x and y
+*/
 int multiply(int x, int y) {
     return x * y;
 }
@@ -41,18 +41,18 @@ int multiply(int x, int y) {
   std::ofstream header_file(integration_test_dir + "/include/utils.h");
   header_file << R"(
 /**
- * Utility class for mathematical operations
- *
- * This class provides common mathematical functions
- * that are used throughout the application.
- */
+Utility class for mathematical operations
+
+This class provides common mathematical functions
+that are used throughout the application.
+*/
 class MathUtils {
   public:
     /**
-     * Calculate the square of a number
-     * @param n The input number
-     * @return The square of n
-     */
+    Calculate the square of a number
+    @param n The input number
+    @return The square of n
+    */
     static int square(int n);
 };
 )";
@@ -66,7 +66,7 @@ class MathUtils {
         "library": "tree-sitter-cpp.so",
         "function": "tree_sitter_cpp",
         "extensions": [".cpp", ".hpp", ".cc", ".h", ".cxx"],
-        "javadoc_style": "/** */"
+        "docstring_style": "/** */"
       }
     },
     "source_directories": [")" << integration_test_dir << R"(/src/", ")" << integration_test_dir << R"(/include/"],

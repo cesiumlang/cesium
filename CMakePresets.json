@@ -29,7 +29,9 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_C_COMPILER": "$env{llvmBin}/clang.exe",
         "CMAKE_CXX_COMPILER": "$env{llvmBin}/clang++.exe",
-        "CMAKE_RC_COMPILER": "$env{WinSdkDir}/rc.exe"
+        "CMAKE_RC_COMPILER": "$env{WinSdkDir}/rc.exe",
+        "CMAKE_C_COMPILER_TARGET": "x86_64-pc-windows-msvc",
+        "CMAKE_CXX_COMPILER_TARGET": "x86_64-pc-windows-msvc"
       }
     },
     {

@@ -1,3 +1,7 @@
+# The empty compile_flags.txt in the root directory causes clangd to treat
+# relative paths in compile flags as relative to the root of the project when
+# compile_commands.json is not present.
+
 If:
   PathMatch: .*\.in
 
@@ -18,3 +22,18 @@ CompileFlags:
     - -Wall
     - -Wextra
     - -Wpedantic
+    - -xc++  # Force .h files to be treated as C++
+    - -std=gnu++17
+    # - -std=c++20
+    - --target=x86_64-pc-windows-msvc
+    - -DUNICODE
+    - -D_UNICODE
+    - -D_DEBUG
+    - -D_DLL
+    - -D_MT
+    - -Xclang
+    - --dependent-lib=msvcrtd
+    - -g
+    - -Xclang
+    - -gcodeview
+    - -fno-char8_t

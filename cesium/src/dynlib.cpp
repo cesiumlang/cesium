@@ -1,12 +1,11 @@
 /**
- * @file dynlib.cpp
- * @brief Cross-platform dynamic library loading implementation
- */
+@brief Cross-platform dynamic library loading implementation
+*/
 #include "dynlib.h"
 #include <filesystem>
 
 #ifdef _WIN32
-  #include <windows.h>
+  #include "win32.h"
 #else
   #include <dlfcn.h>
 #endif
@@ -50,7 +49,7 @@ void* Library::getFunctionRaw(const std::string& name) const {
   if (!handle_) return nullptr;
 
   #ifdef _WIN32
-    return reinterpret_cast<void*>(GetProcAddress(handle_, name.c_str()));
+    return reinterpret_cast<void*>(win32::GetProcAddress(handle_, name.c_str()));
   #else
     return dlsym(handle_, name.c_str());
   #endif
@@ -59,7 +58,7 @@ void* Library::getFunctionRaw(const std::string& name) const {
 void Library::close() {
   if (handle_) {
     #ifdef _WIN32
-      FreeLibrary(handle_);
+      win32::FreeLibrary(handle_);
     #else
       dlclose(handle_);
     #endif
@@ -95,7 +94,9 @@ std::string replaceExtension(const std::string& path, const std::string& newExt)
 Library loadLib(const std::string& path) {
   // First, try the exact path as given
   #ifdef _WIN32
-    LibraryHandle handle = LoadLibraryA(path.c_str());
+    // Convert to wide string for Unicode builds
+    std::wstring widePath(path.begin(), path.end());
+    LibraryHandle handle = win32::LoadLibrary(widePath.c_str());
   #else
     LibraryHandle handle = dlopen(path.c_str(), RTLD_LAZY);
   #endif
@@ -111,7 +112,8 @@ Library loadLib(const std::string& path) {
   // Only try the platform path if it's different from the original
   if (platformPath != path) {
     #ifdef _WIN32
-      handle = LoadLibraryA(platformPath.c_str());
+      std::wstring widePlatformPath(platformPath.begin(), platformPath.end());
+      handle = win32::LoadLibrary(widePlatformPath.c_str());
     #else
       handle = dlopen(platformPath.c_str(), RTLD_LAZY);
     #endif
@@ -163,17 +165,29 @@ Library loadLibraryFromPaths(const std::string& baseName, const std::vector<std:
 
 std::string getLastError() {
   #ifdef _WIN32
-    DWORD error = GetLastError();
+    win32::DWORD error = win32::GetLastError();
     if (error == 0) return "";
 
-    LPSTR messageBuffer = nullptr;
-    size_t size = FormatMessageA(
-      FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-      nullptr, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-      (LPSTR)&messageBuffer, 0, nullptr);
+    win32::LPTSTR messageBuffer = nullptr;
+    size_t size = win32::FormatMessage(
+      0x00000100 | 0x00001000 | 0x00000200,  // FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS
+      nullptr, error, 0x0400,  // MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT)
+      (win32::LPTSTR)&messageBuffer, 0, nullptr);
 
-    std::string message(messageBuffer, size);
-    LocalFree(messageBuffer);
+    std::string message;
+    if (messageBuffer) {
+      #ifdef UNICODE
+        // Convert wide string to narrow string
+        int needed = win32::WideCharToMultiByte(65001, 0, messageBuffer, size, nullptr, 0, nullptr, nullptr);  // CP_UTF8 = 65001
+        if (needed > 0) {
+          message.resize(needed);
+          win32::WideCharToMultiByte(65001, 0, messageBuffer, size, &message[0], needed, nullptr, nullptr);  // CP_UTF8 = 65001
+        }
+      #else
+        message.assign(messageBuffer, size);
+      #endif
+      win32::LocalFree(messageBuffer);
+    }
     return message;
   #else
     const char* error = dlerror();
@@ -182,52 +196,52 @@ std::string getLastError() {
 }
 
 std::string resolvePlatformLibraryName(const std::string& baseName) {
-#ifdef _WIN32
-  // On Windows, prefer .dll but also consider .so for compatibility
-  if (baseName.ends_with(".dll") || baseName.ends_with(".so")) {
-    return baseName; // Already has extension
-  }
-  return baseName + ".dll";
-#else
-  // On POSIX, use lib prefix and .so extension if not already present
-  if (baseName.ends_with(".so")) {
-    return baseName; // Already has extension
-  }
-  if (baseName.starts_with("lib")) {
-    return baseName + ".so";
-  }
-  return "lib" + baseName + ".so";
-#endif
+  #ifdef _WIN32
+    // On Windows, prefer .dll but also consider .so for compatibility
+    if (baseName.ends_with(".dll") || baseName.ends_with(".so")) {
+      return baseName; // Already has extension
+    }
+    return baseName + ".dll";
+  #else
+    // On POSIX, use lib prefix and .so extension if not already present
+    if (baseName.ends_with(".so")) {
+      return baseName; // Already has extension
+    }
+    if (baseName.starts_with("lib")) {
+      return baseName + ".so";
+    }
+    return "lib" + baseName + ".so";
+  #endif
 }
 
 std::string findLibraryFile(const std::string& baseName, const std::string& searchDir) {
   std::vector<std::string> candidates;
-  
-#ifdef _WIN32
-  // On Windows, try various combinations
-  candidates = {
-    baseName,
-    baseName + ".dll",
-    "lib" + baseName + ".dll",
-    baseName + ".so",
-    "lib" + baseName + ".so"
-  };
-#else
-  // On POSIX, try standard naming conventions
-  candidates = {
-    baseName,
-    "lib" + baseName + ".so",
-    baseName + ".so"
-  };
-#endif
-  
+
+  #ifdef _WIN32
+    // On Windows, try various combinations
+    candidates = {
+      baseName,
+      baseName + ".dll",
+      "lib" + baseName + ".dll",
+      baseName + ".so",
+      "lib" + baseName + ".so"
+    };
+  #else
+    // On POSIX, try standard naming conventions
+    candidates = {
+      baseName,
+      "lib" + baseName + ".so",
+      baseName + ".so"
+    };
+  #endif
+
   for (const auto& candidate : candidates) {
     std::filesystem::path full_path = std::filesystem::path(searchDir) / candidate;
     if (std::filesystem::exists(full_path)) {
       return candidate;
     }
   }
-  
+
   return baseName; // Return original if nothing found
 }
 

@@ -5,11 +5,13 @@ FetchContent_Declare(
   GIT_SHALLOW    TRUE
   GIT_PROGRESS   TRUE
   SOURCE_SUBDIR  ""  # Prevent any build system from being processed
+  CONFIGURE_COMMAND "echo"
 )
 FetchContent_MakeAvailable(tree-sitter-core-repo)
 
 # Create our own library target from the C source files
 add_library(tree-sitter-core STATIC ${tree-sitter-core-repo_SOURCE_DIR}/lib/src/lib.c)
+# add_dependencies(tree-sitter-core tree-sitter-core-repo)
 target_include_directories(tree-sitter-core
   PRIVATE
     ${tree-sitter-core-repo_SOURCE_DIR}/lib/src
