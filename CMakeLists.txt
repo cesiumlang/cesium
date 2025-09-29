@@ -22,23 +22,21 @@ include(DefaultInstallPath)
 include(ForceUnicode)
 include(HideVSCodeVars)
 include(ConfigFetchContent)
+include(ExeTgtDefaults)
+include(QtExeTgt)
 
 # include dependencies
-include(qt)
+include(utf8)
 include(yyjson)
 include(tree-sitter-core)
 include(tree-sitter-cpp)
-# include(utf8)
-
-# Add cesium subdirectory
-add_subdirectory(cesium)
 
 include(CTest)
 enable_testing()
 
-# Add tests
-add_subdirectory(tests)
-
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
+
+add_subdirectory(src)
+add_subdirectory(include)

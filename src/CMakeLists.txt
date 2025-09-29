@@ -1,0 +1,5 @@
+add_subdirectory(backend)
+add_subdirectory(exe)
+add_subdirectory(gui)
+add_subdirectory(cesium)
+add_subdirectory(tests)

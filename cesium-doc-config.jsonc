@@ -7,7 +7,7 @@
       "docstring_style": "/** */"
     }
   },
-  "source_directories": ["cesium/src/", "cesium/include/"],
+  "source_directories": ["src/", "include/"],
   "extract_directory": ".cesium-doc/",
   "output_directory": "doc/api/",
   "exclude_patterns": ["**/test/**", "**/*_test.*"],
