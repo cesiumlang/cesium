@@ -1,0 +1,296 @@
+// cesium1: core MIR types, and the tables of structs and functions. Written
+// in S0.
+//
+// Every type is made once (pointer types are cached on their element, array
+// types are looked up before one is made), so two types are equal exactly
+// when their numbers are: the structural equality of libcsmir's
+// mir_type_eq.
+
+// type kinds, in the order of libcsmir's MirTypeKind
+const uword MT_VOID = 0;
+const uword MT_U8 = 1;
+const uword MT_U16 = 2;
+const uword MT_U32 = 3;
+const uword MT_U64 = 4;
+const uword MT_I8 = 5;
+const uword MT_I16 = 6;
+const uword MT_I32 = 7;
+const uword MT_I64 = 8;
+const uword MT_UWORD = 9;
+const uword MT_F32 = 10;
+const uword MT_F64 = 11;
+const uword MT_PTR = 12;
+const uword MT_ARRAY = 13;
+const uword MT_STRUCT = 14;
+
+struct Type {
+  uword kind;
+  uword elem;     // MT_PTR: the pointee; MT_ARRAY: the element
+  u64 count;      // MT_ARRAY
+  uword sidx;     // MT_STRUCT: index in g_structs
+  uword ptr;      // the pointer type to this one, 0 until it is made
+}
+
+~Type g_types;
+uword g_ntypes;
+uword g_types_cap;
+
+// A struct of the unit.
+struct StructInfo {
+  uword id;
+  uword decl;
+  uword ty;
+  uword first;    // its fields, in g_field_id and g_field_ty
+  uword nfields;
+  u8 ordered;     // already in g_sorder
+}
+
+~StructInfo g_structs;
+uword g_nstructs;
+// the structs in the order core MIR prints them: by first reference while
+// the struct declarations are checked, as libcsmir's mir_struct_ref lists them
+~uword g_sorder;
+uword g_nsorder;
+~uword g_field_id;
+~uword g_field_ty;
+uword g_nfields;
+
+// A function of the unit, extern or not.
+struct FuncInfo {
+  uword id;
+  uword decl;
+  uword ret;
+  uword first;    // its parameter types, in g_param_ty
+  uword nparams;
+}
+
+~FuncInfo g_funcs;
+uword g_nfuncs;
+~uword g_param_ty;
+uword g_nparam_ty;
+
+uword = ty_new(uword kind) {
+  if (g_ntypes + 1 >= g_types_cap) {
+    fail_internal("too many types");
+  }
+  g_ntypes = g_ntypes + 1;
+  g_types[g_ntypes].kind = kind;
+  return g_ntypes;
+}
+
+// The scalar types and void are the first twelve, in kind order.
+uword = ty_prim(uword kind) {
+  return kind + 1;
+}
+
+// Sets up the tables for a unit of src_len bytes parsed into nnodes nodes.
+// A type is made for a sigil or a node, at most once each.
+void = ty_init(uword src_len, uword nnodes) {
+  uword cap = nnodes + 2;
+  g_types_cap = src_len + nnodes + 64;
+  g_types := alloc(g_types_cap);
+  g_ntypes = 0;
+  uword k = 0;
+  while (k < MT_PTR) {
+    ty_new(k);
+    k = k + 1;
+  }
+  g_structs := alloc(cap);
+  g_sorder := alloc(cap);
+  g_field_id := alloc(cap);
+  g_field_ty := alloc(cap);
+  g_funcs := alloc(cap);
+  g_param_ty := alloc(cap);
+}
+
+uword = ty_kind(uword t) {
+  return g_types[t].kind;
+}
+
+uword = ty_elem(uword t) {
+  return g_types[t].elem;
+}
+
+u8 = ty_is_int(uword t) {
+  return g_types[t].kind >= MT_U8 && g_types[t].kind <= MT_UWORD;
+}
+
+u8 = ty_is_scalar(uword t) {
+  return ty_is_int(t) || g_types[t].kind == MT_PTR;
+}
+
+uword = ty_ptr(uword t) {
+  if (g_types[t].ptr == 0) {
+    uword p = ty_new(MT_PTR);
+    g_types[p].elem = t;
+    g_types[t].ptr = p;
+  }
+  return g_types[t].ptr;
+}
+
+uword = ty_array(uword elem, u64 count) {
+  uword t = 1;
+  while (t <= g_ntypes) {
+    if (g_types[t].kind == MT_ARRAY && g_types[t].elem == elem && g_types[t].count == count) {
+      return t;
+    }
+    t = t + 1;
+  }
+  uword a = ty_new(MT_ARRAY);
+  g_types[a].elem = elem;
+  g_types[a].count = count;
+  return a;
+}
+
+// The number of pointers in front of the type.
+uword = ty_depth(uword t) {
+  uword d = 0;
+  while (g_types[t].kind == MT_PTR) {
+    d = d + 1;
+    t = g_types[t].elem;
+  }
+  return d;
+}
+
+// True when the integer type t holds the literal v.
+u8 = ty_fits(uword t, u64 v) {
+  uword k = g_types[t].kind;
+  if (k == MT_U8) {
+    return v <= 255;
+  }
+  if (k == MT_U16) {
+    return v <= 65535;
+  }
+  if (k == MT_U32) {
+    return v <= 4294967295;
+  }
+  if (k == MT_U64 || k == MT_UWORD) {
+    return TRUE;
+  }
+  if (k == MT_I8) {
+    return v <= 127;
+  }
+  if (k == MT_I16) {
+    return v <= 32767;
+  }
+  if (k == MT_I32) {
+    return v <= 2147483647;
+  }
+  if (k == MT_I64) {
+    return v <= 9223372036854775807;
+  }
+  return FALSE;
+}
+
+#u8 = ty_prim_name(uword k) {
+  if (k == MT_VOID) { return "void"; }
+  if (k == MT_U8) { return "u8"; }
+  if (k == MT_U16) { return "u16"; }
+  if (k == MT_U32) { return "u32"; }
+  if (k == MT_U64) { return "u64"; }
+  if (k == MT_I8) { return "i8"; }
+  if (k == MT_I16) { return "i16"; }
+  if (k == MT_I32) { return "i32"; }
+  if (k == MT_I64) { return "i64"; }
+  if (k == MT_UWORD) { return "uword"; }
+  if (k == MT_F32) { return "f32"; }
+  return "f64";
+}
+
+// The type's core MIR text: u8, ptr<Token>, [4 x i32].
+void = ty_print(~Buf b, uword t) {
+  uword k = g_types[t].kind;
+  if (k == MT_PTR) {
+    buf_puts(b, "ptr<");
+    ty_print(b, g_types[t].elem);
+    buf_putc(b, '>');
+  } else if (k == MT_ARRAY) {
+    buf_putc(b, '[');
+    buf_put_u64(b, g_types[t].count);
+    buf_puts(b, " x ");
+    ty_print(b, g_types[t].elem);
+    buf_putc(b, ']');
+  } else if (k == MT_STRUCT) {
+    name_put(b, g_structs[g_types[t].sidx].id);
+  } else {
+    buf_puts(b, ty_prim_name(k));
+  }
+}
+
+// The type as S0 writes it, for messages: #u8, i32[4].
+void = ty_put(~Buf b, uword t) {
+  uword k = g_types[t].kind;
+  if (k == MT_PTR) {
+    buf_putc(b, '#');
+    ty_put(b, g_types[t].elem);
+  } else if (k == MT_ARRAY) {
+    ty_put(b, g_types[t].elem);
+    buf_putc(b, '[');
+    buf_put_u64(b, g_types[t].count);
+    buf_putc(b, ']');
+  } else {
+    ty_print(b, t);
+  }
+}
+
+void = err_ty(uword t) {
+  ty_put(~g_err, t);
+}
+
+void = err_name(uword id) {
+  name_put(~g_err, id);
+}
+
+// What to use of an aggregate that is not a value.
+void = err_parts(uword t) {
+  if (g_types[t].kind == MT_ARRAY) {
+    err_s("elements");
+  } else {
+    err_s("fields");
+  }
+}
+
+// Lists the struct for core MIR at its first reference.
+void = struct_ref(uword sidx) {
+  if (!g_structs[sidx].ordered) {
+    g_structs[sidx].ordered = TRUE;
+    g_sorder[g_nsorder] = sidx;
+    g_nsorder = g_nsorder + 1;
+  }
+}
+
+// The type written in node n (its tdepth, tbase and tid).
+uword = ty_resolve(uword n) {
+  uword base = g_nodes[n].tbase;
+  uword t = ty_prim(MT_VOID);
+  if (base == BT_U8) {
+    t = ty_prim(MT_U8);
+  } else if (base == BT_I32) {
+    t = ty_prim(MT_I32);
+  } else if (base == BT_U32) {
+    t = ty_prim(MT_U32);
+  } else if (base == BT_I64) {
+    t = ty_prim(MT_I64);
+  } else if (base == BT_U64) {
+    t = ty_prim(MT_U64);
+  } else if (base == BT_UWORD) {
+    t = ty_prim(MT_UWORD);
+  } else if (base == BT_STRUCT) {
+    uword id = g_nodes[n].tid;
+    if (g_name_tab[id].sym != SYM_STRUCT) {
+      err_begin(g_nodes[n].tline, g_nodes[n].tcol);
+      err_s("unknown type '");
+      err_name(id);
+      err_s("'");
+      err_end();
+    }
+    struct_ref(g_name_tab[id].sym_idx);
+    t = g_structs[g_name_tab[id].sym_idx].ty;
+  }
+  uword i = 0;
+  while (i < g_nodes[n].tdepth) {
+    t = ty_ptr(t);
+    i = i + 1;
+  }
+  return t;
+}

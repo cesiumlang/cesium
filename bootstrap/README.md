@@ -20,6 +20,7 @@ The grammar stage 0 accepts is the S0 chapter of the draft specification on cesi
 | `libcsmir/` | Core MIR: data structures, text parser and printer, verifier, layout, QBE lowering, and the coarse C API (`csmir.h`) |
 | `stage0/` | `cesium0`: the S0 lexer, parser and checker, and the driver |
 | `runtime/` | `cs_arena_alloc`, the bump arena behind S0's `alloc(count)` |
+| `stage1/` | `cesium1`, written in S0: a compiler for S0 that emits the same core MIR text as `cesium0` |
 | `tests/` | The test corpus |
 
 ## Building
@@ -72,7 +73,7 @@ S0 source is frozen once stage 1 works, and every later compiler must still acce
 | Unary minus | Not in S0's operator list; no place in the precedence table | [#15](https://github.com/cesiumlang/cesium/issues/15) |
 | Hexadecimal, binary and other literal forms | Only decimal literals are specified | [#56](https://github.com/cesiumlang/cesium/issues/56) |
 | A local that reuses a name already in scope | Whether shadowing is allowed is not recorded | none yet |
-| `null` | Not in S0's list; how a pointer is tested or compared under dereference-by-default is undefined, so S0 has no way to compare two pointers (`p == q` compares what they point at) | [#26](https://github.com/cesiumlang/cesium/issues/26), [#43](https://github.com/cesiumlang/cesium/issues/43) |
+| `null` | Not in S0's list; how a pointer is tested or compared under dereference-by-default is undefined, so `p == q` compares what the pointers point at. A pointer's own value can still be had as a number, `(#p[0]) as uword`, which is the only way S0 source can test or compare one | [#26](https://github.com/cesiumlang/cesium/issues/26), [#43](https://github.com/cesiumlang/cesium/issues/43) |
 | A name that is a keyword of full Cesium | S0 must stay a subset; the keyword list is the reference's | [#50](https://github.com/cesiumlang/cesium/issues/50) |
 | Assigning or initializing a struct or array as a whole | What `=` does to an aggregate is undecided | [#22](https://github.com/cesiumlang/cesium/issues/22) |
 
@@ -114,6 +115,43 @@ These had to be settled to write stage 0, and no issue decides them. Each is iso
 
 - QBE is run through the devkit's `libqbe.a`, which is QBE's own `main` renamed to `qbe_main`. Like the program, it ends the process when it is done, so `cs_compile_mir` does not return on success. That is enough for `cesium0` and for a `cesium1` that compiles and exits; an entry point that returns needs a change in the devkit.
 
+## Stage 1
+
+`stage1/` is `cesium1`, the compiler written in S0 that stage 0 exists to build (#9). It compiles S0, the language it is written in, to exactly the core MIR text `cesium0 --emit-mir` gives for the same unit, byte for byte, and so compiles itself.
+
+```sh
+cat a.csm b.csm | cesium1            # core MIR text on standard output
+cat a.csm b.csm | cesium1 out.s      # assembly, through cs_compile_mir (and out.s.ssa)
+```
+
+Several files make one unit by being given one after another on standard input; MIR text has no line numbers, so this is the same unit `cesium0 a.csm b.csm` compiles. The exit status is 0 on success, 1 on an error in the source and 2 when a limit of `cesium1` is reached. An error is printed as `line:col: error: message` on standard output, with lines counted from the start of the input, and nothing else is printed before the whole unit is checked. Linking `cesium1` needs `libcsmir` and the devkit's `libqbe.a` besides `libcsrt`.
+
+| File | Holds |
+| --- | --- |
+| `util.csm` | `libc` declarations, byte buffers, reading standard input, error messages |
+| `lex.csm` | Interned names and the lexer |
+| `parse.csm` | The syntax tree and the parser |
+| `types.csm` | Core MIR types and the tables of structs and functions |
+| `lower.csm` | Checking expressions and statements, and their MIR text |
+| `decl.csm` | Checking declarations, and the text of the unit |
+| `main.csm` | The driver |
+
+It follows `stage0/` function for function: the same tokens, grammar, checks and messages, and the same order of declarations, string globals and structs in the MIR. It differs in four ways:
+
+- **MIR is built as text.** An expression's MIR is a fragment of a scratch buffer that the enclosing expression copies into its own; there is no MIR tree to print.
+- **The first error ends the program**, through `libc`'s `exit`, so no function passes a failure back up. Stage 0 reports every error it finds.
+- **The two checks of `libcsmir`'s verifier that S0 source can fail**, a function that does not return on every path and a struct that contains itself, are made by `cesium1` itself, with the verifier's message.
+- **Errors go to standard output**: `stderr` is a C global variable, and S0 can declare only functions from C.
+
+What S1 adds to S0 is not decided ("candidate S1 features, to be confirmed when designing stage 1", #9), so nothing beyond S0 is in it. Writing it showed that S0 as implemented is enough for a compiler. The workarounds it needs:
+
+- **No null.** A link in the syntax tree, or to a type, struct or function, is an index into an array, with 0 for none. A buffer starts with no block, which is never read while its length is 0.
+- **No struct assignment, struct results or `realloc`.** Results come back through pointer parameters, structs are copied one field at a time, and a byte buffer grows by allocating a larger block and copying. The arrays of structs are not grown at all: their sizes are bounded by the length of the source (every node has a token of its own), and exceeding one is a limit error.
+- **One namespace for every name of the unit**, locals included, and the keywords of full Cesium are not names (no field can be called `type`, `list` or `error`). Every function, global and constant has a prefix per file.
+- **No initialized arrays of strings.** Keyword lists are a sequence of calls and token names a chain of `if`.
+- **A function that ends in a call that never returns** (`exit`) still needs a `return` after it, and so does one whose last statement is `while (TRUE)`: the verifier counts neither as returning.
+- **Text streams.** `cesium1` writes through `putchar`, so on Windows every `'\n'` of its MIR becomes `"\r\n"`; S0 has no portable way to switch standard output to binary. The tests compare with that in mind. `cs_compile_mir` takes the text from memory and is not affected.
+
 ## Tests
 
 `zig build test` runs `tests/` (see `build-src/tests.zig`):
@@ -122,3 +160,4 @@ These had to be settled to write stage 0, and no issue decides them. Each is iso
 - `s0/errors/`: programs stage 0 must reject, each with the message it must give.
 - `mir/<name>.mir` with `<name>.expected`: MIR text printed back unchanged, then compiled and run. `integers.mir` covers the sub-word integer types S0 does not have; `layout.mir` checks sizes, alignments and field offsets.
 - `mir/errors/`: MIR the verifier or parser must reject.
+- `cesium1`, built by `cesium0`, on the same corpus: for every `s0/<name>.csm` run test its core MIR must be what `cesium0 --emit-mir` prints for the same files, and it must reject every program in `s0/errors/` with the same message. On its own source its MIR must be `cesium0`'s too, and the `cesium1` it builds from that source with `cesium1 out.s` must print that MIR again: the fixed point. `build-src/stage1_tool.c` joins the files of a unit and compares the outputs.

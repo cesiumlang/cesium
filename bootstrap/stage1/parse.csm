@@ -1,0 +1,685 @@
+// cesium1: the S0 parser. Written in S0.
+//
+// Recursive descent for declarations and statements, precedence climbing
+// for expressions, the same grammar and choices as stage 0
+// (bootstrap/stage0/s0_parse.c). The syntax tree lives in one array of
+// nodes; a link is a node number, and 0 means none, since S0 has no null.
+
+// node kinds: expressions
+const uword EX_INT = 1;
+const uword EX_STRING = 2;
+const uword EX_NAME = 3;
+const uword EX_INDEX = 4;
+const uword EX_FIELD = 5;
+const uword EX_CALL = 6;
+const uword EX_ADDROF = 7;
+const uword EX_NOT = 8;
+const uword EX_BINARY = 9;
+const uword EX_AS = 10;
+const uword EX_SIZEOF = 11;
+// statements; a struct field is an ST_DECL without initializer
+const uword ST_DECL = 20;
+const uword ST_ASSIGN = 21;
+const uword ST_EXPR = 22;
+const uword ST_IF = 23;
+const uword ST_WHILE = 24;
+const uword ST_BREAK = 25;
+const uword ST_CONTINUE = 26;
+const uword ST_RETURN = 27;
+// declarations, and a function's parameter
+const uword DK_STRUCT = 30;
+const uword DK_CONST = 31;
+const uword DK_GLOBAL = 32;
+const uword DK_FUNC = 33;
+const uword DK_EXTERN_FUNC = 34;
+const uword NK_PARAM = 35;
+
+// base types as written
+const uword BT_VOID = 0;
+const uword BT_U8 = 1;
+const uword BT_I32 = 2;
+const uword BT_U32 = 3;
+const uword BT_I64 = 4;
+const uword BT_U64 = 5;
+const uword BT_UWORD = 6;
+const uword BT_STRUCT = 7;
+
+// stage 0's limits on arguments and parameters
+const uword MAX_ARGS = 64;
+
+struct Node {
+  uword kind;
+  u64 line;
+  u64 col;
+  uword op;        // EX_BINARY; ST_DECL, ST_ASSIGN, DK_GLOBAL, DK_CONST: the
+                   // assignment operator, TK_EOF for none
+  uword a;         // operand, place, condition or returned value
+  uword b;         // second operand, index, initializer or assigned value
+  uword body;      // first statement of a block
+  uword els;
+  uword next;      // the next statement, argument, parameter, field or declaration
+  uword items;     // the first argument, parameter or field
+  uword count;     // the number of arguments or parameters
+  u64 ival;        // EX_INT: the value; a declaration: the array length
+  uword id;        // the name
+  uword sstart;    // EX_STRING: the bytes, in g_strs
+  uword slen;
+  u8 is_array;
+  // a type as written: sigils, then a base type
+  uword tdepth;
+  uword tbase;
+  uword tid;       // BT_STRUCT: the struct's name
+  u64 tline;
+  u64 tcol;
+}
+
+Token g_tok;
+Token g_peek;
+~Node g_nodes;
+uword g_nnodes;
+uword g_nodes_cap;
+uword g_decls;
+uword g_decls_tail;
+
+// Every node but the first comes with a token of its own, so a source of
+// src_len bytes needs fewer than src_len + 64 nodes.
+void = parse_init(uword src_len) {
+  g_nodes_cap = src_len + 64;
+  g_nodes := alloc(g_nodes_cap);
+  g_nnodes = 0;
+}
+
+uword = node_new(uword kind, u64 line, u64 col) {
+  if (g_nnodes + 1 >= g_nodes_cap) {
+    fail_internal("too many syntax tree nodes");
+  }
+  g_nnodes = g_nnodes + 1;
+  g_nodes[g_nnodes].kind = kind;
+  g_nodes[g_nnodes].line = line;
+  g_nodes[g_nnodes].col = col;
+  return g_nnodes;
+}
+
+// A node at the current token.
+uword = node_here(uword kind) {
+  return node_new(kind, g_tok.line, g_tok.col);
+}
+
+void = err_at(uword n) {
+  err_begin(g_nodes[n].line, g_nodes[n].col);
+}
+
+void = tok_copy(~Token to, #Token from) {
+  to.kind = from.kind;
+  to.line = from.line;
+  to.col = from.col;
+  to.id = from.id;
+  to.ival = from.ival;
+  to.sstart = from.sstart;
+  to.slen = from.slen;
+}
+
+void = parse_advance() {
+  tok_copy(~g_tok, #g_peek);
+  lex_next(~g_peek);
+}
+
+u8 = parse_at(uword kind) {
+  return g_tok.kind == kind;
+}
+
+u8 = parse_accept(uword kind) {
+  if (parse_at(kind)) {
+    parse_advance();
+    return TRUE;
+  }
+  return FALSE;
+}
+
+// Starts an error message at the current token.
+void = parse_err() {
+  err_begin(g_tok.line, g_tok.col);
+}
+
+void = parse_fail(#u8 msg) {
+  parse_err();
+  err_s(msg);
+  err_end();
+}
+
+void = parse_fail_found(#u8 what) {
+  parse_err();
+  err_s(what);
+  err_s(", found ");
+  err_tok(g_tok.kind);
+  err_end();
+}
+
+void = parse_expect(uword kind) {
+  if (!parse_accept(kind)) {
+    parse_err();
+    err_s("expected ");
+    err_tok(kind);
+    err_s(", found ");
+    err_tok(g_tok.kind);
+    err_end();
+  }
+}
+
+uword = parse_expect_ident() {
+  if (!parse_at(TK_IDENT)) {
+    parse_fail_found("expected a name");
+  }
+  uword id = g_tok.id;
+  parse_advance();
+  return id;
+}
+
+// ---- types ----------------------------------------------------------------
+
+u8 = parse_is_base_type(uword id) {
+  return id >= ID_U8 && id <= ID_UWORD;
+}
+
+// type = [":"] { "#" | "~" } base_type, into node n. The ":" (an owned
+// parameter, return value or field) is accepted where allow_owned is set.
+void = parse_type(uword n, u8 allow_owned, u8 allow_void) {
+  g_nodes[n].tline = g_tok.line;
+  g_nodes[n].tcol = g_tok.col;
+  if (parse_at(TK_COLON)) {
+    if (!allow_owned) {
+      parse_fail("':' marks an owned parameter, return value or field; it cannot be used here");
+    }
+    parse_advance();
+    if (!parse_at(TK_HASH) && !parse_at(TK_TILDE)) {
+      parse_fail("':' must be followed by a pointer type");
+    }
+  }
+  while (parse_at(TK_HASH) || parse_at(TK_TILDE)) {
+    g_nodes[n].tdepth = g_nodes[n].tdepth + 1;
+    parse_advance();
+  }
+  if (parse_at(TK_VOID)) {
+    if (!allow_void || g_nodes[n].tdepth != 0) {
+      parse_fail("'void' is only a return type in S0");
+    }
+    parse_advance();
+    g_nodes[n].tbase = BT_VOID;
+    return;
+  }
+  if (!parse_at(TK_IDENT)) {
+    parse_fail_found("expected a type");
+  }
+  if (parse_is_base_type(g_tok.id)) {
+    // the primitive names are interned in the order of BT_U8 ... BT_UWORD
+    g_nodes[n].tbase = g_tok.id - ID_U8 + BT_U8;
+  } else {
+    g_nodes[n].tbase = BT_STRUCT;
+    g_nodes[n].tid = g_tok.id;
+  }
+  parse_advance();
+}
+
+// ---- expressions ----------------------------------------------------------
+
+// name "(" args ")": the name is already consumed.
+uword = parse_call(uword id, u64 line, u64 col) {
+  uword head = 0;
+  uword tail = 0;
+  uword n = 0;
+  parse_advance();
+  while (!parse_at(TK_RPAREN)) {
+    if (n == MAX_ARGS) {
+      parse_fail("too many arguments");
+    }
+    uword arg = parse_expr();
+    if (tail != 0) {
+      g_nodes[tail].next = arg;
+    } else {
+      head = arg;
+    }
+    tail = arg;
+    n = n + 1;
+    if (!parse_at(TK_RPAREN)) {
+      parse_expect(TK_COMMA);
+    }
+  }
+  parse_expect(TK_RPAREN);
+  uword e = node_new(EX_CALL, line, col);
+  g_nodes[e].id = id;
+  g_nodes[e].items = head;
+  g_nodes[e].count = n;
+  return e;
+}
+
+uword = parse_primary() {
+  u64 line = g_tok.line;
+  u64 col = g_tok.col;
+  uword e = 0;
+  if (parse_at(TK_INT) || parse_at(TK_CHAR)) {
+    e = node_here(EX_INT);
+    g_nodes[e].ival = g_tok.ival;
+    parse_advance();
+    return e;
+  }
+  if (parse_at(TK_STRING)) {
+    e = node_here(EX_STRING);
+    g_nodes[e].sstart = g_tok.sstart;
+    g_nodes[e].slen = g_tok.slen;
+    parse_advance();
+    return e;
+  }
+  if (parse_at(TK_SIZEOF)) {
+    parse_advance();
+    e = node_new(EX_SIZEOF, line, col);
+    parse_expect(TK_LPAREN);
+    parse_type(e, FALSE, FALSE);
+    parse_expect(TK_RPAREN);
+    return e;
+  }
+  if (parse_at(TK_LPAREN)) {
+    parse_advance();
+    e = parse_expr();
+    parse_expect(TK_RPAREN);
+    return e;
+  }
+  if (parse_at(TK_IDENT)) {
+    uword id = g_tok.id;
+    parse_advance();
+    if (parse_at(TK_LPAREN)) {
+      return parse_call(id, line, col);
+    }
+    e = node_new(EX_NAME, line, col);
+    g_nodes[e].id = id;
+    return e;
+  }
+  if (parse_at(TK_MINUS)) {
+    parse_fail("S0 has no unary minus; write 0 - x");
+  }
+  parse_fail_found("expected an expression");
+  return e;
+}
+
+uword = parse_postfix() {
+  uword e = parse_primary();
+  while (TRUE) {
+    uword n = 0;
+    if (parse_at(TK_LBRACKET)) {
+      n = node_here(EX_INDEX);
+      parse_advance();
+      g_nodes[n].a = e;
+      g_nodes[n].b = parse_expr();
+      parse_expect(TK_RBRACKET);
+      e = n;
+    } else if (parse_at(TK_DOT)) {
+      n = node_here(EX_FIELD);
+      parse_advance();
+      g_nodes[n].a = e;
+      g_nodes[n].id = parse_expect_ident();
+      e = n;
+    } else if (parse_at(TK_LPAREN)) {
+      parse_fail("only a function name can be called in S0");
+    } else {
+      return e;
+    }
+  }
+  return e;
+}
+
+uword = parse_prefix() {
+  uword e = 0;
+  if (parse_at(TK_HASH) || parse_at(TK_TILDE)) {
+    e = node_here(EX_ADDROF);
+    parse_advance();
+    g_nodes[e].a = parse_prefix();
+    return e;
+  }
+  if (parse_at(TK_BANG)) {
+    e = node_here(EX_NOT);
+    parse_advance();
+    g_nodes[e].a = parse_prefix();
+    return e;
+  }
+  return parse_postfix();
+}
+
+uword = parse_cast() {
+  uword e = parse_prefix();
+  while (parse_at(TK_AS)) {
+    uword n = node_here(EX_AS);
+    parse_advance();
+    g_nodes[n].a = e;
+    parse_type(n, FALSE, FALSE);
+    e = n;
+  }
+  return e;
+}
+
+// The reference's precedence levels, lowest binding first; 0 for a token
+// that is not a binary operator. All group left to right.
+uword = parse_level(uword kind) {
+  if (kind == TK_OROR) {
+    return 1;
+  }
+  if (kind == TK_ANDAND) {
+    return 2;
+  }
+  if (kind == TK_PIPE) {
+    return 3;
+  }
+  if (kind == TK_XOR) {
+    return 4;
+  }
+  if (kind == TK_AMP) {
+    return 5;
+  }
+  if (kind == TK_EQ || kind == TK_NE) {
+    return 6;
+  }
+  if (kind == TK_LT || kind == TK_LE || kind == TK_GT || kind == TK_GE) {
+    return 7;
+  }
+  if (kind == TK_SHL || kind == TK_SHR) {
+    return 8;
+  }
+  if (kind == TK_PLUS || kind == TK_MINUS) {
+    return 9;
+  }
+  if (kind == TK_STAR || kind == TK_SLASH || kind == TK_PERCENT) {
+    return 10;
+  }
+  return 0;
+}
+
+uword = parse_binary(uword min_level) {
+  uword lhs = parse_cast();
+  while (TRUE) {
+    uword level = parse_level(g_tok.kind);
+    if (level == 0 || level < min_level) {
+      return lhs;
+    }
+    uword n = node_here(EX_BINARY);
+    g_nodes[n].op = g_tok.kind;
+    parse_advance();
+    g_nodes[n].a = lhs;
+    g_nodes[n].b = parse_binary(level + 1);
+    lhs = n;
+  }
+  return lhs;
+}
+
+uword = parse_expr() {
+  return parse_binary(1);
+}
+
+// ---- statements -----------------------------------------------------------
+
+u8 = parse_is_assign_op(uword kind) {
+  return kind == TK_ASSIGN || kind == TK_OWN || kind == TK_BORROW || kind == TK_BORROW_MUT;
+}
+
+// declarator [ initializer ] ";" after the type, into node s. Shared by
+// locals, globals and struct fields (which take no initializer).
+void = parse_declarator(uword s, u8 allow_init) {
+  g_nodes[s].id = parse_expect_ident();
+  if (parse_accept(TK_LBRACKET)) {
+    if (!parse_at(TK_INT)) {
+      parse_fail("an array length is an integer literal in S0");
+    }
+    g_nodes[s].is_array = TRUE;
+    g_nodes[s].ival = g_tok.ival;
+    parse_advance();
+    parse_expect(TK_RBRACKET);
+  }
+  g_nodes[s].op = TK_EOF;
+  if (parse_is_assign_op(g_tok.kind)) {
+    if (!allow_init) {
+      parse_fail("a struct field has no initializer");
+    }
+    g_nodes[s].op = g_tok.kind;
+    parse_advance();
+    g_nodes[s].b = parse_expr();
+  }
+  parse_expect(TK_SEMI);
+}
+
+// A statement is a declaration when, after any sigils, it continues with a
+// primitive type name or with two names in a row. No expression has that
+// shape, so no symbol table is needed.
+u8 = parse_at_declaration() {
+  if (parse_at(TK_HASH) || parse_at(TK_TILDE)) {
+    return TRUE;
+  }
+  if (!parse_at(TK_IDENT)) {
+    return FALSE;
+  }
+  return parse_is_base_type(g_tok.id) || g_peek.kind == TK_IDENT;
+}
+
+// "if" "(" expr ")" block [ "else" ( if | block ) ], after "if".
+void = parse_if(uword s) {
+  parse_expect(TK_LPAREN);
+  g_nodes[s].a = parse_expr();
+  parse_expect(TK_RPAREN);
+  g_nodes[s].body = parse_block();
+  if (parse_accept(TK_ELSE)) {
+    if (parse_at(TK_IF)) {
+      g_nodes[s].els = parse_stmt();
+    } else {
+      g_nodes[s].els = parse_block();
+    }
+  }
+}
+
+uword = parse_stmt() {
+  u64 line = g_tok.line;
+  u64 col = g_tok.col;
+  uword s = 0;
+  if (parse_accept(TK_IF)) {
+    s = node_new(ST_IF, line, col);
+    parse_if(s);
+    return s;
+  }
+  if (parse_accept(TK_WHILE)) {
+    s = node_new(ST_WHILE, line, col);
+    parse_expect(TK_LPAREN);
+    g_nodes[s].a = parse_expr();
+    parse_expect(TK_RPAREN);
+    g_nodes[s].body = parse_block();
+    return s;
+  }
+  if (parse_accept(TK_BREAK)) {
+    parse_expect(TK_SEMI);
+    return node_new(ST_BREAK, line, col);
+  }
+  if (parse_accept(TK_CONTINUE)) {
+    parse_expect(TK_SEMI);
+    return node_new(ST_CONTINUE, line, col);
+  }
+  if (parse_accept(TK_RETURN)) {
+    s = node_new(ST_RETURN, line, col);
+    if (!parse_at(TK_SEMI)) {
+      g_nodes[s].a = parse_expr();
+    }
+    parse_expect(TK_SEMI);
+    return s;
+  }
+  if (parse_at(TK_LBRACE)) {
+    parse_fail("a block is not a statement by itself in S0");
+  }
+  if (parse_at_declaration()) {
+    s = node_new(ST_DECL, line, col);
+    parse_type(s, FALSE, FALSE);
+    parse_declarator(s, TRUE);
+    return s;
+  }
+  uword e = parse_expr();
+  if (parse_is_assign_op(g_tok.kind)) {
+    s = node_new(ST_ASSIGN, line, col);
+    g_nodes[s].a = e;
+    g_nodes[s].op = g_tok.kind;
+    parse_advance();
+    g_nodes[s].b = parse_expr();
+  } else {
+    s = node_new(ST_EXPR, line, col);
+    g_nodes[s].a = e;
+  }
+  parse_expect(TK_SEMI);
+  return s;
+}
+
+// "{" stmt* "}": the first statement, or 0 for none.
+uword = parse_block() {
+  uword head = 0;
+  uword tail = 0;
+  parse_expect(TK_LBRACE);
+  while (!parse_at(TK_RBRACE) && !parse_at(TK_EOF)) {
+    uword s = parse_stmt();
+    if (tail != 0) {
+      g_nodes[tail].next = s;
+    } else {
+      head = s;
+    }
+    tail = s;
+  }
+  parse_expect(TK_RBRACE);
+  return head;
+}
+
+// ---- declarations ---------------------------------------------------------
+
+void = parse_append(uword d) {
+  if (g_decls_tail != 0) {
+    g_nodes[g_decls_tail].next = d;
+  } else {
+    g_decls = d;
+  }
+  g_decls_tail = d;
+}
+
+void = parse_params(uword d) {
+  uword head = 0;
+  uword tail = 0;
+  uword n = 0;
+  parse_expect(TK_LPAREN);
+  while (!parse_at(TK_RPAREN)) {
+    if (n == MAX_ARGS) {
+      parse_fail("too many parameters");
+    }
+    uword p = node_here(NK_PARAM);
+    parse_type(p, TRUE, FALSE);
+    g_nodes[p].id = parse_expect_ident();
+    if (tail != 0) {
+      g_nodes[tail].next = p;
+    } else {
+      head = p;
+    }
+    tail = p;
+    n = n + 1;
+    if (!parse_at(TK_RPAREN)) {
+      parse_expect(TK_COMMA);
+    }
+  }
+  parse_expect(TK_RPAREN);
+  g_nodes[d].items = head;
+  g_nodes[d].count = n;
+}
+
+void = parse_struct() {
+  uword d = node_here(DK_STRUCT);
+  uword tail = 0;
+  parse_advance();
+  g_nodes[d].id = parse_expect_ident();
+  parse_expect(TK_LBRACE);
+  while (!parse_at(TK_RBRACE) && !parse_at(TK_EOF)) {
+    uword f = node_here(ST_DECL);
+    parse_type(f, TRUE, FALSE);
+    parse_declarator(f, FALSE);
+    if (tail != 0) {
+      g_nodes[tail].next = f;
+    } else {
+      g_nodes[d].items = f;
+    }
+    tail = f;
+  }
+  parse_expect(TK_RBRACE);
+  parse_append(d);
+}
+
+// extern name = import('lib') { ret = name(params); ... }. The block's
+// name and the library are not used: extern functions are called by their
+// bare name.
+void = parse_extern() {
+  parse_advance();
+  parse_expect_ident();
+  parse_expect(TK_ASSIGN);
+  parse_expect(TK_IMPORT);
+  parse_expect(TK_LPAREN);
+  if (parse_at(TK_LIBNAME) || parse_at(TK_CHAR) || parse_at(TK_STRING)) {
+    parse_advance();
+  } else {
+    parse_fail("expected a library name such as 'c'");
+  }
+  parse_expect(TK_RPAREN);
+  parse_expect(TK_LBRACE);
+  while (!parse_at(TK_RBRACE) && !parse_at(TK_EOF)) {
+    uword d = node_here(DK_EXTERN_FUNC);
+    parse_type(d, TRUE, TRUE);
+    parse_expect(TK_ASSIGN);
+    g_nodes[d].id = parse_expect_ident();
+    parse_params(d);
+    parse_expect(TK_SEMI);
+    parse_append(d);
+  }
+  parse_expect(TK_RBRACE);
+}
+
+void = parse_const() {
+  uword d = node_here(DK_CONST);
+  parse_advance();
+  parse_type(d, FALSE, FALSE);
+  g_nodes[d].id = parse_expect_ident();
+  parse_expect(TK_ASSIGN);
+  g_nodes[d].op = TK_ASSIGN;
+  g_nodes[d].b = parse_expr();
+  parse_expect(TK_SEMI);
+  parse_append(d);
+}
+
+// A function `ret = name(params) { ... }` or a global `type name ...;`:
+// after the type, "=" means a function.
+void = parse_func_or_global() {
+  uword d = node_here(DK_GLOBAL);
+  parse_type(d, TRUE, TRUE);
+  if (parse_accept(TK_ASSIGN)) {
+    g_nodes[d].kind = DK_FUNC;
+    g_nodes[d].id = parse_expect_ident();
+    parse_params(d);
+    g_nodes[d].body = parse_block();
+  } else {
+    if (g_nodes[d].tbase == BT_VOID) {
+      err_at(d);
+      err_s("'void' is only a return type in S0");
+      err_end();
+    }
+    parse_declarator(d, TRUE);
+  }
+  parse_append(d);
+}
+
+// Parses the whole source given to lex_init into the list at g_decls.
+void = parse_unit() {
+  lex_next(~g_tok);
+  lex_next(~g_peek);
+  while (!parse_at(TK_EOF)) {
+    if (parse_at(TK_STRUCT)) {
+      parse_struct();
+    } else if (parse_at(TK_EXTERN)) {
+      parse_extern();
+    } else if (parse_at(TK_CONST)) {
+      parse_const();
+    } else {
+      parse_func_or_global();
+    }
+  }
+}

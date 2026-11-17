@@ -69,7 +69,7 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run the stage 0 test corpus");
     test_step.dependOn(&c11.cesium0.step);
-    tests.add(b, test_step, target, c99.cesium0, c99.csrt);
+    tests.add(b, test_step, target, c99.cesium0, c99.csrt, c99.csmir, devkit);
 }
 
 fn addStage0(

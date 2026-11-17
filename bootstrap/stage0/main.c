@@ -122,9 +122,10 @@ int main(int argc, char *argv[]) {
   }
 
   if (!mir_verify(m)) {
-    /* MIR from the S0 frontend that does not verify is a bug in stage 0 */
-    fprintf(stderr, "%s: error: %s%s\n", mir_path != NULL ? mir_path : "cesium0",
-            mir_path != NULL ? "" : "internal: the MIR built from the S0 source does not verify: ", m->err);
+    /* A few errors in S0 source are left to the verifier: a function that
+     * does not return on every path, a struct that contains itself, and a
+     * name that collides with the runtime's. */
+    fprintf(stderr, "%s: error: %s\n", mir_path != NULL ? mir_path : "cesium0", m->err);
     return 1;
   }
 
