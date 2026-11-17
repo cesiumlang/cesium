@@ -49,10 +49,58 @@ jobs:
       - name: Build and test stage 0
         run: .devkit/zig/zig build test -Dtarget="${{ matrix.host }}" --summary all
 
+  # The stage 0 C dialect (cesiumlang/cesium#10) beyond what `zig cc` checks
+  # in the job above: the source check, other compilers, and the sanitizers.
+  dialect:
+    name: C dialect
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Source check (banned identifiers, common header)
+        run: python3 tools/check-c-dialect.py
+
+      - name: Install TinyCC
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tcc
+
+      - name: GCC, as C99 and as C11
+        run: |
+          gcc --version | head -1
+          bash tools/portable-c.sh compile gnu gcc
+
+      - name: Clang, as C99 and as C11
+        run: |
+          clang --version | head -1
+          bash tools/portable-c.sh compile gnu clang
+
+      # the canary for accidental extensions
+      - name: TinyCC, as C99 and as C11
+        run: |
+          tcc -v
+          bash tools/portable-c.sh compile tcc tcc
+
+      - name: Test corpus under ASan and UBSan
+        run: bash tools/portable-c.sh sanitize clang
+
+  msvc:
+    name: C dialect (MSVC)
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: MSVC, as C11
+        run: bash tools/portable-c.sh compile msvc cl
+
   # the one check the rulesets require
   ci:
     name: CI
-    needs: [stage0]
+    needs: [stage0, dialect, msvc]
     if: always()
     runs-on: ubuntu-24.04
     steps:

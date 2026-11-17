@@ -31,7 +31,7 @@ size_t cs_add_size(size_t a, size_t b) {
 typedef union CsMaxAlign {
   long long ll;
   void *p;
-  double d;
+  double d; /* cs-dialect: allow (alignment only; no floating-point arithmetic) */
   void (*fn)(void);
 } CsMaxAlign;
 
