@@ -54,8 +54,9 @@ compile_all () { # <kind> <compiler> <std>
         ;;
       msvc)
         # C4996 is MSVC's own deprecation of ISO C functions such as fopen
-        # Windows paths and dash options, so that an MSYS shell rewrites nothing
-        "$cc" -nologo -std:c11 -W4 -WX -wd4996 -I"$(cygpath -m "$B/include")" -I"$(cygpath -m "$B/libcsmir")"           -c "$(cygpath -m "$B/$src")" -Fo"$(cygpath -m "$obj")"
+        # Windows paths and dash options, and the object named relative to
+        # its directory, so that an MSYS shell rewrites none of the arguments
+        (cd "$dir" && "$cc" -nologo -std:c11 -W4 -WX -wd4996           -I"$(cygpath -m "$B/include")" -I"$(cygpath -m "$B/libcsmir")"           -c "$(cygpath -m "$B/$src")" -Fo"$(basename "$obj")")
         ;;
       *) usage ;;
     esac
