@@ -109,7 +109,8 @@ These had to be settled to write stage 0, and no issue decides them. Each is iso
 **C dialect**
 
 - **`-Wformat-nonliteral` and the ban on attributes conflict** for the project's own printf-style functions. All forwarding of format strings is confined to `libcsmir/cs_format.c`, the one file built without that warning, and `-Wno-missing-format-attribute` is added everywhere. This follows #10's rule for third-party headers: relax one translation unit, not the rules.
-- **Not yet enforced** from #10: the source check for banned identifiers, the GCC, MSVC and TinyCC builds, ASan, and fuzzing. Debug builds do run under Zig's default UBSan.
+- **Enforced in CI beyond `zig build`** (#10, "Enforcement in CI"): `tools/check-c-dialect.py` is the source check (banned functions, compiler extensions and optional features, headers outside the allowed list, `%p`, and every `.c` file including the common header). `tools/portable-c.sh compile` compiles every translation unit with GCC and Clang under the dialect's flags as C99 and as C11, with TinyCC as the canary, and with MSVC (`/std:c11 /W4 /WX`, minus C4996, MSVC's own deprecation of ISO C functions such as `fopen`). `tools/portable-c.sh sanitize` builds `cesium0` with ASan and UBSan and runs the corpus through it up to QBE IL, with QBE replaced by a stub. A line that must name a banned word carries the comment `cs-dialect: allow` and a reason.
+- **Not done** from #10: fuzzing the MIR text parser, which #10 lists as something to consider. The other compilers compile but do not link: the devkit's `libqbe.a` is built by `zig cc` for its own targets.
 
 **In-process QBE**
 
