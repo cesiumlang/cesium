@@ -49,11 +49,28 @@ Open design questions carry the [`design`](https://github.com/cesiumlang/cesium/
 
 ## Repository layout
 
-[`bootstrap/`](bootstrap/README.md) is stage 0: the S0 compiler `cesium0`, the core MIR library `libcsmir` and a small runtime, in portable C, with their tests. `build.zig` builds and tests it with the Zig of the devkit:
+[`bootstrap/`](bootstrap/README.md) holds the bootstrap compilers: stage 0 (the S0 compiler `cesium0`, the core MIR library `libcsmir` and a small runtime, in portable C) and stage 1 (`cesium1`, a compiler for S0 written in S0), with their tests. `build.zig` builds and tests them with the Zig of the devkit:
 
 ```sh
 python tools/fetch-devkit.py
 .devkit/zig/zig build test
 ```
 
-`src/`, `include/`, `cmake/` and `CMakeLists.txt` hold a C++ prototype from September 2025: a documentation generator with a CLI and a Qt GUI, built with CMake and the tools from [buildtools](https://github.com/cesiumlang/cesium-buildtools). It predates the decisions above and is not the compiler. What becomes of it is an open question ([#2](https://github.com/cesiumlang/cesium/issues/2)).
+| Path | What |
+| --- | --- |
+| [`bootstrap/`](bootstrap/README.md) | Stage 0 and stage 1: sources, runtime and tests |
+| `build.zig`, `build-src/` | The build |
+| `devkit-version`, `tools/fetch-devkit.py` | Which devkit the build uses, and the script that downloads it to `.devkit/` |
+| `buildtools/` | Submodule: [cesium-buildtools](https://github.com/cesiumlang/cesium-buildtools), Windows scripts for tools the devkit does not contain. Not needed to build the compiler. |
+| `.cspell/cesium/` | Submodule: the spelling dictionary of Cesium terms |
+
+## Development setup
+
+- **Build:** Python 3 to fetch the devkit; nothing else. The devkit's Zig is the C compiler and the build system.
+- **direnv:** `.envrc` puts the devkit's Zig and QBE and the build outputs on `PATH`. Run `direnv allow` once.
+- **VS Code:** open `cesium.code-workspace`. It points the Zig extension at the devkit and recommends the extensions used here.
+- **clangd:** `zig cc` is Clang, so clangd is the language server for the C sources (`.clangd`, `bootstrap/compile_flags.txt`). The devkit does not contain clangd. The VS Code clangd extension offers to download it when none is on `PATH`.
+
+## History
+
+Until November 2026 this repository held a C++ prototype from September 2025: a documentation generator with a command-line interface, built with CMake. It was removed because the compiler is written in Cesium ([ADR 0002](https://github.com/cesiumlang/cesium/issues/5)). What it did is recorded as requirements for the new toolchain in [#64](https://github.com/cesiumlang/cesium/issues/64); its last state is commit `d7a72d9`.
