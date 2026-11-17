@@ -1,261 +1,692 @@
-// cesium1: the lexer. Written in S0.
+// cesium1: names and the lexer. Written in S0.
 //
-// It reads the token set of S0, which every later language level contains.
-// Tokens for S1's additions are added when S1 is designed
-// (cesiumlang/cesium#9, "Stage 1 goals").
+// The lexer reads the token set of S0 exactly as stage 0 does
+// (bootstrap/stage0/s0_lex.c): the same kinds, escapes, keywords and
+// reserved words, and the same errors. Every identifier is interned, so a
+// name is a number from here on.
 
-// token kinds
-const i32 TK_EOF = 0;
-const i32 TK_ERROR = 1;
-const i32 TK_IDENT = 2;
-const i32 TK_INT = 3;
-const i32 TK_CHAR = 4;
-const i32 TK_STRING = 5;
-const i32 TK_KEYWORD = 6;
-const i32 TK_PUNCT = 7;
+// token kinds, in the order of stage 0's S0Tok
+const uword TK_EOF = 0;
+const uword TK_IDENT = 1;
+const uword TK_INT = 2;
+const uword TK_CHAR = 3;
+const uword TK_STRING = 4;
+const uword TK_LIBNAME = 5;
+const uword TK_STRUCT = 6;
+const uword TK_EXTERN = 7;
+const uword TK_IMPORT = 8;
+const uword TK_CONST = 9;
+const uword TK_IF = 10;
+const uword TK_ELSE = 11;
+const uword TK_WHILE = 12;
+const uword TK_BREAK = 13;
+const uword TK_CONTINUE = 14;
+const uword TK_RETURN = 15;
+const uword TK_SIZEOF = 16;
+const uword TK_AS = 17;
+const uword TK_VOID = 18;
+const uword TK_LPAREN = 19;
+const uword TK_RPAREN = 20;
+const uword TK_LBRACE = 21;
+const uword TK_RBRACE = 22;
+const uword TK_LBRACKET = 23;
+const uword TK_RBRACKET = 24;
+const uword TK_COMMA = 25;
+const uword TK_SEMI = 26;
+const uword TK_DOT = 27;
+const uword TK_COLON = 28;
+const uword TK_HASH = 29;
+const uword TK_TILDE = 30;
+const uword TK_ASSIGN = 31;
+const uword TK_OWN = 32;
+const uword TK_BORROW = 33;
+const uword TK_BORROW_MUT = 34;
+const uword TK_EQ = 35;
+const uword TK_NE = 36;
+const uword TK_LT = 37;
+const uword TK_LE = 38;
+const uword TK_GT = 39;
+const uword TK_GE = 40;
+const uword TK_PLUS = 41;
+const uword TK_MINUS = 42;
+const uword TK_STAR = 43;
+const uword TK_SLASH = 44;
+const uword TK_PERCENT = 45;
+const uword TK_AMP = 46;
+const uword TK_PIPE = 47;
+const uword TK_XOR = 48;
+const uword TK_SHL = 49;
+const uword TK_SHR = 50;
+const uword TK_ANDAND = 51;
+const uword TK_OROR = 52;
+const uword TK_BANG = 53;
 
-struct Token {
-  i32 kind;
-  uword start;  // offset of the first byte in the source
+// Names interned before the source, so that their numbers are fixed:
+// S0's keywords in the order of their token kinds (TK_STRUCT + id - 1),
+// then full Cesium's other keywords, the primitive type names and the names
+// the checker treats specially.
+const uword ID_LAST_KEYWORD = 13;
+const uword ID_LAST_RESERVED = 57;
+const uword ID_U8 = 58;
+const uword ID_I32 = 59;
+const uword ID_U32 = 60;
+const uword ID_I64 = 61;
+const uword ID_U64 = 62;
+const uword ID_UWORD = 63;
+const uword ID_ALLOC = 64;
+const uword ID_MAIN = 65;
+const uword ID_ARENA = 66;
+
+// what a name means at the top level of the unit
+const uword SYM_NONE = 0;
+const uword SYM_CONST = 1;
+const uword SYM_GLOBAL = 2;
+const uword SYM_FUNC = 3;
+const uword SYM_STRUCT = 4;
+
+// An interned name and what it means. No two top-level declarations and no
+// two locals in scope may share a name in S0, so one entry per name holds
+// everything the checker needs to look it up.
+struct Name {
+  uword start;     // the bytes, in g_names
   uword len;
-  u64 line;
-  u64 col;
-  u64 value;    // TK_INT and TK_CHAR
+  uword sym;       // SYM_*
+  uword sym_ty;    // a constant's or global's type
+  u64 sym_val;     // a constant's value
+  uword sym_idx;   // index in g_funcs or g_structs
+  u8 local_on;     // a local or parameter in scope has this name
+  uword local_ty;
 }
 
-struct Lexer {
-  #u8 src;
-  uword len;
-  uword pos;
-  u64 line;
-  u64 col;
-}
+Buf g_names;
+~Name g_name_tab;
+uword g_nnames;
+uword g_name_cap;
+// open addressing: slot -> name number, 0 for an empty slot
+~uword g_hash;
+uword g_hash_mask;
 
-void = lex_init(~Lexer lx, #u8 src, uword len) {
-  lx.src #= src;
-  lx.len = len;
-  lx.pos = 0;
-  lx.line = 1;
-  lx.col = 1;
-}
-
-u8 = is_digit(u8 c) {
-  return c >= '0' && c <= '9';
-}
-
-u8 = is_ident_start(u8 c) {
-  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
-}
-
-u8 = is_ident_char(u8 c) {
-  return is_ident_start(c) || is_digit(c);
-}
-
-// The byte at pos + ahead, or 0 past the end.
-u8 = peek(#Lexer lx, uword ahead) {
-  uword at = lx.pos + ahead;
-  if (at < lx.len) {
-    return lx.src[at];
+// FNV-1a, wrapping as unsigned arithmetic does.
+uword = name_hash(#u8 s, uword n) {
+  u64 h = 14695981039346656037;
+  uword i = 0;
+  while (i < n) {
+    h = (h >< (s[i] as u64)) * 1099511628211;
+    i = i + 1;
   }
-  return 0;
+  return h as uword;
 }
 
-void = advance(~Lexer lx) {
-  if (lx.pos < lx.len) {
-    if (lx.src[lx.pos] == '\n') {
-      lx.line = lx.line + 1;
-      lx.col = 1;
-    } else {
-      lx.col = lx.col + 1;
-    }
-    lx.pos = lx.pos + 1;
+u8 = name_is(uword id, #u8 s, uword n) {
+  if (g_name_tab[id].len != n) {
+    return FALSE;
   }
-}
-
-u8 = is_keyword(#u8 text, uword len) {
-  if (text_is(text, len, "struct")) { return TRUE; }
-  if (text_is(text, len, "extern")) { return TRUE; }
-  if (text_is(text, len, "import")) { return TRUE; }
-  if (text_is(text, len, "const")) { return TRUE; }
-  if (text_is(text, len, "if")) { return TRUE; }
-  if (text_is(text, len, "else")) { return TRUE; }
-  if (text_is(text, len, "while")) { return TRUE; }
-  if (text_is(text, len, "break")) { return TRUE; }
-  if (text_is(text, len, "continue")) { return TRUE; }
-  if (text_is(text, len, "return")) { return TRUE; }
-  if (text_is(text, len, "sizeof")) { return TRUE; }
-  if (text_is(text, len, "as")) { return TRUE; }
-  if (text_is(text, len, "void")) { return TRUE; }
-  return FALSE;
-}
-
-// Skips spaces and comments. Returns FALSE when a block comment never ends.
-u8 = skip_blank(~Lexer lx) {
-  while (TRUE) {
-    u8 c = peek(lx, 0);
-    if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
-      advance(lx);
-    } else if (c == '/' && peek(lx, 1) == '/') {
-      while (lx.pos < lx.len && peek(lx, 0) != '\n') {
-        advance(lx);
-      }
-    } else if (c == '/' && peek(lx, 1) == '*') {
-      advance(lx);
-      advance(lx);
-      while (TRUE) {
-        if (lx.pos >= lx.len) {
-          return FALSE;
-        }
-        if (peek(lx, 0) == '*' && peek(lx, 1) == '/') {
-          advance(lx);
-          advance(lx);
-          break;
-        }
-        advance(lx);
-      }
-    } else {
-      return TRUE;
+  uword start = g_name_tab[id].start;
+  uword i = 0;
+  while (i < n) {
+    if (g_names.data[start + i] != s[i]) {
+      return FALSE;
     }
+    i = i + 1;
   }
   return TRUE;
 }
 
-// The length of the punctuation token starting with c, followed by d and
-// then e, or 0 when c starts none.
-uword = punct_len(u8 c, u8 d, u8 e) {
-  if (c == ':' && d == '=') { return 2; }
-  // "#=" and "~=" are the borrow operators, except in front of another "="
-  if ((c == '#' || c == '~') && d == '=' && e != '=') { return 2; }
-  if (c == '=' && d == '=') { return 2; }
-  if (c == '!' && d == '=') { return 2; }
-  if (c == '<' && (d == '=' || d == '<')) { return 2; }
-  if (c == '>' && (d == '=' || d == '>' || d == '<')) { return 2; }
-  if (c == '&' && d == '&') { return 2; }
-  if (c == '|' && d == '|') { return 2; }
-  if (c == '(' || c == ')' || c == '{' || c == '}' || c == '[' || c == ']') { return 1; }
-  if (c == ',' || c == ';' || c == '.' || c == ':' || c == '#' || c == '~') { return 1; }
-  if (c == '=' || c == '!' || c == '<' || c == '>' || c == '&' || c == '|') { return 1; }
-  if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%') { return 1; }
+// The number of the name s[0..n), made on first sight.
+uword = name_intern(#u8 s, uword n) {
+  uword slot = name_hash(s, n) & g_hash_mask;
+  while (g_hash[slot] != 0) {
+    if (name_is(g_hash[slot], s, n)) {
+      return g_hash[slot];
+    }
+    slot = (slot + 1) & g_hash_mask;
+  }
+  if (g_nnames + 1 >= g_name_cap) {
+    fail_internal("too many names");
+  }
+  g_nnames = g_nnames + 1;
+  g_name_tab[g_nnames].start = g_names.len;
+  g_name_tab[g_nnames].len = n;
+  buf_putn(~g_names, s, n);
+  g_hash[slot] = g_nnames;
+  return g_nnames;
+}
+
+void = name_add(#u8 s) {
+  name_intern(s, text_len(s));
+}
+
+// Appends the name's bytes.
+void = name_put(~Buf b, uword id) {
+  buf_putn(b, #g_names.data[g_name_tab[id].start], g_name_tab[id].len);
+}
+
+// Sets up the name table for a source of src_len bytes: every name is at
+// least one byte of it, so it cannot hold more names than that.
+void = name_init(uword src_len) {
+  g_name_cap = src_len + 128;
+  g_name_tab := alloc(g_name_cap);
+  uword size = 1;
+  while (size < g_name_cap * 2) {
+    size = size * 2;
+  }
+  g_hash := alloc(size);
+  g_hash_mask = size - 1;
+
+  name_add("struct");
+  name_add("extern");
+  name_add("import");
+  name_add("const");
+  name_add("if");
+  name_add("else");
+  name_add("while");
+  name_add("break");
+  name_add("continue");
+  name_add("return");
+  name_add("sizeof");
+  name_add("as");
+  name_add("void");
+
+  // keywords of full Cesium that S0 does not use (the keyword list of the
+  // language reference): an S0 program must stay a valid Cesium program
+  name_add("file");
+  name_add("str");
+  name_add("list");
+  name_add("dict");
+  name_add("slice");
+  name_add("path");
+  name_add("alias");
+  name_add("catch");
+  name_add("comptime");
+  name_add("generic");
+  name_add("typeof");
+  name_add("asm");
+  name_add("enum");
+  name_add("error");
+  name_add("null");
+  name_add("undefined");
+  name_add("union");
+  name_add("for");
+  name_add("do");
+  name_add("with");
+  name_add("defer");
+  name_add("switch");
+  name_add("case");
+  name_add("fallthrough");
+  name_add("throw");
+  name_add("operator");
+  name_add("context");
+  name_add("property");
+  name_add("private");
+  name_add("secret");
+  name_add("static");
+  name_add("destruct");
+  name_add("volatile");
+  name_add("atomic");
+  name_add("register");
+  name_add("simd");
+  name_add("export");
+  name_add("trait");
+  name_add("impl");
+  name_add("type");
+  name_add("this");
+  name_add("super");
+  name_add("std");
+  name_add("namespace");
+
+  name_add("u8");
+  name_add("i32");
+  name_add("u32");
+  name_add("i64");
+  name_add("u64");
+  name_add("uword");
+  name_add("alloc");
+  name_add("main");
+  name_add("cs_arena_alloc");
+  if (g_nnames != ID_ARENA) {
+    fail_internal("the predefined names are out of order");
+  }
+}
+
+// ---- the lexer ------------------------------------------------------------
+
+struct Token {
+  uword kind;
+  u64 line;
+  u64 col;
+  uword id;       // TK_IDENT
+  u64 ival;       // TK_INT, TK_CHAR
+  uword sstart;   // TK_STRING, TK_LIBNAME: the unescaped bytes, in g_strs
+  uword slen;
+}
+
+#u8 g_src;
+uword g_src_len;
+uword g_pos;
+u64 g_line;
+u64 g_col;
+// the bytes of every string literal, escapes resolved
+Buf g_strs;
+
+void = lex_init(#u8 src, uword len) {
+  g_src #= src;
+  g_src_len = len;
+  g_pos = 0;
+  g_line = 1;
+  g_col = 1;
+}
+
+u8 = lex_is_digit(u8 c) {
+  return c >= '0' && c <= '9';
+}
+
+u8 = lex_is_ident_start(u8 c) {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+}
+
+u8 = lex_is_ident_char(u8 c) {
+  return lex_is_ident_start(c) || lex_is_digit(c);
+}
+
+// The byte at pos + ahead, or 0 past the end. Wherever stage 0 sees -1 at
+// the end, 0 leads to the same decision.
+u8 = lex_peek(uword ahead) {
+  if (g_pos + ahead < g_src_len) {
+    return g_src[g_pos + ahead];
+  }
   return 0;
 }
 
-// Reads one character of a literal at the lexer's position, handling the
-// escapes stage 0 accepts. Returns 256 for an unknown escape.
-u64 = lex_char(~Lexer lx) {
-  u8 c = peek(lx, 0);
-  advance(lx);
+u8 = lex_at_end() {
+  return g_pos >= g_src_len;
+}
+
+void = lex_advance() {
+  if (g_pos < g_src_len) {
+    if (g_src[g_pos] == '\n') {
+      g_line = g_line + 1;
+      g_col = 1;
+    } else {
+      g_col = g_col + 1;
+    }
+    g_pos = g_pos + 1;
+  }
+}
+
+void = lex_fail(u64 line, u64 col, #u8 msg) {
+  err_begin(line, col);
+  err_s(msg);
+  err_end();
+}
+
+void = lex_skip_blank() {
+  while (TRUE) {
+    u8 c = lex_peek(0);
+    if (lex_at_end()) {
+      return;
+    }
+    if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+      lex_advance();
+    } else if (c == '/' && lex_peek(1) == '/') {
+      while (!lex_at_end() && lex_peek(0) != '\n') {
+        lex_advance();
+      }
+    } else if (c == '/' && lex_peek(1) == '*') {
+      u64 line = g_line;
+      u64 col = g_col;
+      lex_advance();
+      lex_advance();
+      while (TRUE) {
+        if (lex_at_end()) {
+          lex_fail(line, col, "unterminated comment");
+        }
+        if (lex_peek(0) == '*' && lex_peek(1) == '/') {
+          lex_advance();
+          lex_advance();
+          break;
+        }
+        lex_advance();
+      }
+    } else {
+      return;
+    }
+  }
+}
+
+void = lex_word(~Token t) {
+  uword start = g_pos;
+  while (lex_is_ident_char(lex_peek(0))) {
+    lex_advance();
+  }
+  uword id = name_intern(#g_src[start], g_pos - start);
+  if (id <= ID_LAST_KEYWORD) {
+    t.kind = TK_STRUCT + id - 1;
+    return;
+  }
+  if (id <= ID_LAST_RESERVED) {
+    err_begin(t.line, t.col);
+    err_s("'");
+    name_put(~g_err, id);
+    err_s("' is a Cesium keyword that S0 does not have");
+    err_end();
+  }
+  t.kind = TK_IDENT;
+  t.id = id;
+}
+
+void = lex_number(~Token t) {
+  u64 most = 18446744073709551615;
+  u64 v = 0;
+  u8 overflow = FALSE;
+  while (lex_is_digit(lex_peek(0))) {
+    u64 d = (lex_peek(0) - '0') as u64;
+    if (v > (most - d) / 10) {
+      overflow = TRUE;
+    }
+    v = v * 10 + d;
+    lex_advance();
+  }
+  if (lex_is_ident_start(lex_peek(0))) {
+    lex_fail(t.line, t.col, "S0 has decimal integer literals only");
+  }
+  if (overflow) {
+    lex_fail(t.line, t.col, "integer literal is too large");
+  }
+  t.kind = TK_INT;
+  t.ival = v;
+}
+
+// Reads one character of a literal, handling an escape. Returns 256 for an
+// escape stage 0 does not accept.
+u64 = lex_char() {
+  u8 c = lex_peek(0);
+  lex_advance();
   if (c != '\\') {
     return c as u64;
   }
-  c = peek(lx, 0);
-  advance(lx);
-  if (c == 'n') { return 10; }
-  if (c == 't') { return 9; }
-  if (c == 'r') { return 13; }
-  if (c == '0') { return 0; }
-  if (c == '\\') { return 92; }
-  if (c == '\'') { return 39; }
-  if (c == '"') { return 34; }
+  c = lex_peek(0);
+  lex_advance();
+  if (c == 'n') {
+    return 10;
+  }
+  if (c == 't') {
+    return 9;
+  }
+  if (c == 'r') {
+    return 13;
+  }
+  if (c == '0') {
+    return 0;
+  }
+  if (c == '\\') {
+    return 92;
+  }
+  if (c == '\'') {
+    return 39;
+  }
+  if (c == '"') {
+    return 34;
+  }
   return 256;
 }
 
-// Reads the next token into t.
-void = lex_next(~Lexer lx, ~Token t) {
-  t.value = 0;
-  t.len = 0;
-  if (!skip_blank(lx)) {
-    t.kind = TK_ERROR;
-    t.start = lx.pos;
-    t.line = lx.line;
-    t.col = lx.col;
-    return;
+// "..." is a string; '.' with exactly one character is a character, and
+// with any other number a library name, as in import('c').
+void = lex_quoted(~Token t, u8 quote) {
+  uword nchars = 0;
+  t.sstart = g_strs.len;
+  lex_advance();
+  while (TRUE) {
+    u8 ch = lex_peek(0);
+    if (lex_at_end() || ch == '\n') {
+      lex_fail(t.line, t.col, "unterminated literal");
+    }
+    if (ch == quote) {
+      lex_advance();
+      break;
+    }
+    u64 v = lex_char();
+    if (v == 256) {
+      lex_fail(t.line, t.col, "unknown escape: stage 0 accepts \\n \\t \\r \\0 \\\\ \\' \\\"");
+    }
+    buf_putc(~g_strs, v as u8);
+    nchars = nchars + 1;
   }
-  t.start = lx.pos;
-  t.line = lx.line;
-  t.col = lx.col;
-  if (lx.pos >= lx.len) {
-    t.kind = TK_EOF;
-    return;
+  t.slen = g_strs.len - t.sstart;
+  if (quote == '"') {
+    t.kind = TK_STRING;
+  } else if (nchars == 1) {
+    t.kind = TK_CHAR;
+    t.ival = g_strs.data[t.sstart] as u64;
+  } else {
+    t.kind = TK_LIBNAME;
   }
-  u8 c = peek(lx, 0);
+}
 
-  if (is_ident_start(c)) {
-    while (is_ident_char(peek(lx, 0))) {
-      advance(lx);
+// The punctuation token that starts with c (already consumed), consuming
+// its second character if it has one; TK_EOF when c starts none.
+uword = lex_punct(u8 c) {
+  u8 d = lex_peek(0);
+  if (c == '(') {
+    return TK_LPAREN;
+  }
+  if (c == ')') {
+    return TK_RPAREN;
+  }
+  if (c == '{') {
+    return TK_LBRACE;
+  }
+  if (c == '}') {
+    return TK_RBRACE;
+  }
+  if (c == '[') {
+    return TK_LBRACKET;
+  }
+  if (c == ']') {
+    return TK_RBRACKET;
+  }
+  if (c == ',') {
+    return TK_COMMA;
+  }
+  if (c == ';') {
+    return TK_SEMI;
+  }
+  if (c == '.') {
+    return TK_DOT;
+  }
+  if (c == '+') {
+    return TK_PLUS;
+  }
+  if (c == '-') {
+    return TK_MINUS;
+  }
+  if (c == '*') {
+    return TK_STAR;
+  }
+  if (c == '/') {
+    return TK_SLASH;
+  }
+  if (c == '%') {
+    return TK_PERCENT;
+  }
+  return lex_punct2(c, d);
+}
+
+// The tokens that may take a second character d.
+uword = lex_punct2(u8 c, u8 d) {
+  if (c == ':') {
+    if (d == '=') {
+      lex_advance();
+      return TK_OWN;
     }
-    t.len = lx.pos - t.start;
-    if (is_keyword(#lx.src[t.start], t.len)) {
-      t.kind = TK_KEYWORD;
-    } else {
-      t.kind = TK_IDENT;
+    return TK_COLON;
+  }
+  // "#=" and "~=" are the borrow operators, except in front of another "=":
+  // no S0 expression starts with "=", so that mistake is left to the parser
+  if (c == '#') {
+    if (d == '=' && lex_peek(1) != '=') {
+      lex_advance();
+      return TK_BORROW;
     }
+    return TK_HASH;
+  }
+  if (c == '~') {
+    if (d == '=' && lex_peek(1) != '=') {
+      lex_advance();
+      return TK_BORROW_MUT;
+    }
+    return TK_TILDE;
+  }
+  if (c == '=') {
+    if (d == '=') {
+      lex_advance();
+      return TK_EQ;
+    }
+    return TK_ASSIGN;
+  }
+  if (c == '!') {
+    if (d == '=') {
+      lex_advance();
+      return TK_NE;
+    }
+    return TK_BANG;
+  }
+  if (c == '<') {
+    if (d == '=') {
+      lex_advance();
+      return TK_LE;
+    }
+    if (d == '<') {
+      lex_advance();
+      return TK_SHL;
+    }
+    return TK_LT;
+  }
+  if (c == '>') {
+    if (d == '=') {
+      lex_advance();
+      return TK_GE;
+    }
+    if (d == '>') {
+      lex_advance();
+      return TK_SHR;
+    }
+    if (d == '<') {
+      lex_advance();
+      return TK_XOR;
+    }
+    return TK_GT;
+  }
+  if (c == '&') {
+    if (d == '&') {
+      lex_advance();
+      return TK_ANDAND;
+    }
+    return TK_AMP;
+  }
+  if (c == '|') {
+    if (d == '|') {
+      lex_advance();
+      return TK_OROR;
+    }
+    return TK_PIPE;
+  }
+  return TK_EOF;
+}
+
+// Reads the next token into t. An error in the source ends the program.
+void = lex_next(~Token t) {
+  t.kind = TK_EOF;
+  t.id = 0;
+  t.ival = 0;
+  t.sstart = 0;
+  t.slen = 0;
+  lex_skip_blank();
+  t.line = g_line;
+  t.col = g_col;
+  if (lex_at_end()) {
     return;
   }
-
-  if (is_digit(c)) {
-    u64 v = 0;
-    while (is_digit(peek(lx, 0))) {
-      v = v * 10 + ((peek(lx, 0) - '0') as u64);
-      advance(lx);
-    }
-    t.len = lx.pos - t.start;
-    t.value = v;
-    if (is_ident_start(peek(lx, 0))) {
-      t.kind = TK_ERROR;
-    } else {
-      t.kind = TK_INT;
-    }
+  u8 c = lex_peek(0);
+  if (lex_is_ident_start(c)) {
+    lex_word(t);
     return;
   }
-
+  if (lex_is_digit(c)) {
+    lex_number(t);
+    return;
+  }
   if (c == '"' || c == '\'') {
-    u64 count = 0;
-    u8 ok = TRUE;
-    advance(lx);
-    while (TRUE) {
-      u8 d = peek(lx, 0);
-      if (lx.pos >= lx.len || d == '\n') {
-        ok = FALSE;
-        break;
-      }
-      if (d == c) {
-        advance(lx);
-        break;
-      }
-      u64 ch = lex_char(lx);
-      if (ch == 256) {
-        ok = FALSE;
-      }
-      t.value = ch;
-      count = count + 1;
-    }
-    t.len = lx.pos - t.start;
-    if (!ok) {
-      t.kind = TK_ERROR;
-    } else if (c == '"') {
-      t.kind = TK_STRING;
-      t.value = count;
-    } else if (count == 1) {
-      t.kind = TK_CHAR;
-    } else {
-      // a library name, as in import('c'): text, not a character
-      t.kind = TK_STRING;
-      t.value = count;
-    }
+    lex_quoted(t, c);
     return;
   }
+  lex_advance();
+  t.kind = lex_punct(c);
+  if (t.kind == TK_EOF) {
+    lex_fail(t.line, t.col, "unexpected character");
+  }
+}
 
-  uword n = punct_len(c, peek(lx, 1), peek(lx, 2));
-  if (n == 0) {
-    advance(lx);
-    t.len = 1;
-    t.kind = TK_ERROR;
-    return;
+// A description of a token kind for messages, as stage 0 words it.
+void = err_tok(uword kind) {
+  if (kind == TK_EOF) {
+    err_s("end of file");
+  } else if (kind == TK_IDENT) {
+    err_s("a name");
+  } else if (kind == TK_INT) {
+    err_s("an integer");
+  } else if (kind == TK_CHAR) {
+    err_s("a character");
+  } else if (kind == TK_STRING) {
+    err_s("a string");
+  } else if (kind == TK_LIBNAME) {
+    err_s("a library name");
+  } else {
+    err_s("'");
+    if (kind <= TK_VOID) {
+      name_put(~g_err, kind - TK_STRUCT + 1);
+    } else {
+      err_s(tok_text(kind));
+    }
+    err_s("'");
   }
-  while (n != 0) {
-    advance(lx);
-    n = n - 1;
-  }
-  t.len = lx.pos - t.start;
-  t.kind = TK_PUNCT;
+}
+
+// The text of a punctuation token.
+#u8 = tok_text(uword kind) {
+  if (kind == TK_LPAREN) { return "("; }
+  if (kind == TK_RPAREN) { return ")"; }
+  if (kind == TK_LBRACE) { return "{"; }
+  if (kind == TK_RBRACE) { return "}"; }
+  if (kind == TK_LBRACKET) { return "["; }
+  if (kind == TK_RBRACKET) { return "]"; }
+  if (kind == TK_COMMA) { return ","; }
+  if (kind == TK_SEMI) { return ";"; }
+  if (kind == TK_DOT) { return "."; }
+  if (kind == TK_COLON) { return ":"; }
+  if (kind == TK_HASH) { return "#"; }
+  if (kind == TK_TILDE) { return "~"; }
+  if (kind == TK_ASSIGN) { return "="; }
+  if (kind == TK_OWN) { return ":="; }
+  if (kind == TK_BORROW) { return "#="; }
+  if (kind == TK_BORROW_MUT) { return "~="; }
+  if (kind == TK_EQ) { return "=="; }
+  if (kind == TK_NE) { return "!="; }
+  if (kind == TK_LT) { return "<"; }
+  if (kind == TK_LE) { return "<="; }
+  if (kind == TK_GT) { return ">"; }
+  if (kind == TK_GE) { return ">="; }
+  if (kind == TK_PLUS) { return "+"; }
+  if (kind == TK_MINUS) { return "-"; }
+  if (kind == TK_STAR) { return "*"; }
+  if (kind == TK_SLASH) { return "/"; }
+  if (kind == TK_PERCENT) { return "%"; }
+  if (kind == TK_AMP) { return "&"; }
+  if (kind == TK_PIPE) { return "|"; }
+  if (kind == TK_XOR) { return "><"; }
+  if (kind == TK_SHL) { return "<<"; }
+  if (kind == TK_SHR) { return ">>"; }
+  if (kind == TK_ANDAND) { return "&&"; }
+  if (kind == TK_OROR) { return "||"; }
+  return "!";
 }

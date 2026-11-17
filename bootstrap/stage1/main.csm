@@ -1,64 +1,47 @@
 // cesium1: the driver. Written in S0.
 //
-// So far cesium1 only has its lexer: it reads source text from standard
-// input and prints one line per token,
+//   cesium1           S0 source on standard input -> core MIR text on
+//                     standard output
+//   cesium1 <out.s>   S0 source on standard input -> assembly in <out.s>,
+//                     through libcsmir (and "<out.s>.ssa", the QBE IL)
 //
-//   <line>:<col> <kind> <text>
+// Several files are compiled as one unit by giving them one after another
+// on standard input. The core MIR is the text cesium0 --emit-mir prints for
+// the same unit, byte for byte.
 //
-// followed by the value of a number or character. The parser, the checker
-// and the core MIR emitter come next.
+// Exit status: 0 on success; 1 on an error in the source, reported as
+// "line:col: error: message" on standard output (lines count from the start
+// of the input), or when libcsmir fails; 2 when a limit of cesium1 is
+// reached. Nothing else is printed before the whole unit has been checked.
 
-void = print_kind(i32 kind) {
-  if (kind == TK_IDENT) {
-    print("ident");
-  } else if (kind == TK_INT) {
-    print("int");
-  } else if (kind == TK_CHAR) {
-    print("char");
-  } else if (kind == TK_STRING) {
-    print("string");
-  } else if (kind == TK_KEYWORD) {
-    print("keyword");
-  } else if (kind == TK_PUNCT) {
-    print("punct");
-  } else {
-    print("error");
-  }
+// libcsmir's coarse C API (bootstrap/libcsmir/csmir.h). With the QBE
+// backend a successful cs_compile_mir does not return: QBE ends the process.
+extern csmir = import('csmir') {
+  i32 = cs_compile_mir(#u8 mir, uword len, i32 backend, #u8 triple, #u8 cpu, #u8 features, i32 opt_level,
+                       #u8 out_path);
+  #u8 = cs_last_error();
 }
+
+const i32 CS_BACKEND_QBE = 0;
 
 i32 = main(i32 argc, ##u8 argv) {
   #u8 src;
   uword len = read_all(~src);
-  Lexer lx;
-  lex_init(~lx, src, len);
+  name_init(len);
+  lex_init(src, len);
+  parse_init(len);
+  parse_unit();
+  ty_init(len, g_nnodes);
+  low_init(g_nnodes);
+  decl_unit();
 
-  Token t;
-  u64 count = 0;
-  i32 status = 0;
-  while (TRUE) {
-    lex_next(~lx, ~t);
-    if (t.kind == TK_EOF) {
-      break;
-    }
-    print_u64(t.line);
-    putchar(':');
-    print_u64(t.col);
-    putchar(' ');
-    print_kind(t.kind);
-    putchar(' ');
-    print_n(#src[t.start], t.len);
-    if (t.kind == TK_INT || t.kind == TK_CHAR) {
-      print(" = ");
-      print_u64(t.value);
-    }
+  if (argc > 1) {
+    cs_compile_mir(g_out.data, g_out.len, CS_BACKEND_QBE, "", "", "", 0, argv[1]);
+    print("error: ");
+    print(cs_last_error());
     putchar('\n');
-    count = count + 1;
-    if (t.kind == TK_ERROR) {
-      status = 1;
-      break;
-    }
+    return 1;
   }
-  print_u64(count);
-  print(" tokens\n");
-  return status;
+  print_n(g_out.data, g_out.len);
+  return 0;
 }

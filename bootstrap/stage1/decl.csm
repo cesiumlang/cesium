@@ -1,0 +1,441 @@
+// cesium1: checking declarations, and the core MIR text of the unit.
+// Written in S0.
+//
+// The passes are stage 0's (s0_lower in bootstrap/stage0/s0_lower.c):
+// structs, constants, globals, function signatures, then function bodies,
+// each over the declarations in source order. libcsmir's verifier runs on
+// what stage 0 builds; the two of its checks that S0 source can fail (a
+// struct containing itself, a missing return) are made here too.
+
+// the text of the whole unit, once it is checked
+Buf g_out;
+
+void = decl_name_twice(uword d, #u8 what, uword id) {
+  err_at(d);
+  err_s(what);
+  err_name(id);
+  err_s("' is declared twice");
+  err_end();
+}
+
+// True when a value of type t holds the struct target, directly or in an
+// array or a nested struct. Deeper than 64 levels counts as true, as in
+// libcsmir's verifier.
+u8 = decl_contains(uword t, uword target, uword depth) {
+  if (depth > 64) {
+    return TRUE;
+  }
+  if (ty_kind(t) == MT_ARRAY) {
+    return decl_contains(ty_elem(t), target, depth + 1);
+  }
+  if (ty_kind(t) != MT_STRUCT) {
+    return FALSE;
+  }
+  uword sidx = g_types[t].sidx;
+  if (sidx == target) {
+    return TRUE;
+  }
+  uword i = 0;
+  while (i < g_structs[sidx].nfields) {
+    if (decl_contains(g_field_ty[g_structs[sidx].first + i], target, depth + 1)) {
+      return TRUE;
+    }
+    i = i + 1;
+  }
+  return FALSE;
+}
+
+// The fields of struct sidx. A field's type may name a struct declared
+// later, which is why every struct name is known first.
+void = decl_fields(uword sidx) {
+  uword d = g_structs[sidx].decl;
+  uword f = g_nodes[d].items;
+  if (f == 0) {
+    err_at(d);
+    err_s("struct '");
+    err_name(g_nodes[d].id);
+    err_s("' has no fields");
+    err_end();
+  }
+  g_structs[sidx].first = g_nfields;
+  while (f != 0) {
+    uword t = ty_resolve(f);
+    if (g_nodes[f].is_array) {
+      if (g_nodes[f].ival == 0) {
+        err_node(f, "an array has at least one element");
+      }
+      t = ty_array(t, g_nodes[f].ival);
+    }
+    uword j = g_structs[sidx].first;
+    while (j < g_nfields) {
+      if (g_field_id[j] == g_nodes[f].id) {
+        err_at(f);
+        err_s("struct '");
+        err_name(g_nodes[d].id);
+        err_s("' has two fields named '");
+        err_name(g_nodes[f].id);
+        err_s("'");
+        err_end();
+      }
+      j = j + 1;
+    }
+    g_field_id[g_nfields] = g_nodes[f].id;
+    g_field_ty[g_nfields] = t;
+    g_nfields = g_nfields + 1;
+    f = g_nodes[f].next;
+  }
+  g_structs[sidx].nfields = g_nfields - g_structs[sidx].first;
+  struct_ref(sidx);
+}
+
+void = decl_structs() {
+  uword d = g_decls;
+  // names first, so fields can point at structs declared later
+  while (d != 0) {
+    if (g_nodes[d].kind == DK_STRUCT) {
+      uword id = g_nodes[d].id;
+      if (g_name_tab[id].sym == SYM_STRUCT) {
+        decl_name_twice(d, "struct '", id);
+      }
+      uword sidx = g_nstructs;
+      g_nstructs = g_nstructs + 1;
+      g_structs[sidx].id = id;
+      g_structs[sidx].decl = d;
+      g_structs[sidx].ty = ty_new(MT_STRUCT);
+      g_types[g_structs[sidx].ty].sidx = sidx;
+      g_name_tab[id].sym = SYM_STRUCT;
+      g_name_tab[id].sym_idx = sidx;
+    }
+    d = g_nodes[d].next;
+  }
+  uword s = 0;
+  while (s < g_nstructs) {
+    decl_fields(s);
+    s = s + 1;
+  }
+  // libcsmir's verifier: no struct contains itself by value
+  uword k = 0;
+  while (k < g_nsorder) {
+    uword sk = g_sorder[k];
+    uword i = 0;
+    while (i < g_structs[sk].nfields) {
+      uword fi = g_structs[sk].first + i;
+      if (decl_contains(g_field_ty[fi], sk, 0)) {
+        err_at(g_structs[sk].decl);
+        err_s("struct ");
+        err_name(g_structs[sk].id);
+        err_s(" contains itself through field ");
+        err_name(g_field_id[fi]);
+        err_end();
+      }
+      i = i + 1;
+    }
+    k = k + 1;
+  }
+}
+
+void = decl_const(uword d) {
+  uword t = ty_resolve(d);
+  uword init = g_nodes[d].b;
+  u64 value = 0;
+  if (!ty_is_int(t)) {
+    err_at(d);
+    err_s("a constant is a number in S0, not a ");
+    err_ty(t);
+    err_end();
+  }
+  uword iid = g_nodes[init].id;
+  if (g_nodes[init].kind == EX_INT) {
+    value = g_nodes[init].ival;
+    if (!ty_fits(t, value)) {
+      err_at(init);
+      err_u64(value);
+      err_s(" does not fit ");
+      err_ty(t);
+      err_end();
+    }
+  } else if (g_nodes[init].kind == EX_NAME && g_name_tab[iid].sym == SYM_CONST) {
+    if (g_name_tab[iid].sym_ty != t) {
+      err_at(init);
+      err_s("'");
+      err_name(iid);
+      err_s("' is a ");
+      err_ty(g_name_tab[iid].sym_ty);
+      err_s(", not a ");
+      err_ty(t);
+      err_end();
+    }
+    value = g_name_tab[iid].sym_val;
+  } else {
+    err_node(init, "a constant is initialized with a literal or another constant in S0");
+  }
+  uword id = g_nodes[d].id;
+  low_name_free(id, d, FALSE);
+  g_name_tab[id].sym = SYM_CONST;
+  g_name_tab[id].sym_ty = t;
+  g_name_tab[id].sym_val = value;
+}
+
+void = decl_global(uword d) {
+  uword t = ty_resolve(d);
+  uword id = g_nodes[d].id;
+  uword op = g_nodes[d].op;
+  uword init = g_nodes[d].b;
+  if (g_nodes[d].is_array) {
+    if (g_nodes[d].ival == 0) {
+      err_node(d, "an array has at least one element");
+    }
+    t = ty_array(t, g_nodes[d].ival);
+  }
+  low_name_free(id, d, FALSE);
+  g_name_tab[id].sym = SYM_GLOBAL;
+  g_name_tab[id].sym_ty = t;
+  buf_puts(~g_out_globals, "global @");
+  name_put(~g_out_globals, id);
+  buf_puts(~g_out_globals, ": ");
+  ty_print(~g_out_globals, t);
+  if (op == TK_EOF) {
+    buf_putc(~g_out_globals, '\n');
+    return;
+  }
+  if (ty_is_int(t)) {
+    uword iid = g_nodes[init].id;
+    if (op != TK_ASSIGN) {
+      err_at(d);
+      err_tok(op);
+      err_s(" is only for pointers; a plain value is initialized with '='");
+      err_end();
+    }
+    buf_puts(~g_out_globals, " = ");
+    if (g_nodes[init].kind == EX_INT && ty_fits(t, g_nodes[init].ival)) {
+      buf_put_u64(~g_out_globals, g_nodes[init].ival);
+    } else if (g_nodes[init].kind == EX_NAME && g_name_tab[iid].sym == SYM_CONST && g_name_tab[iid].sym_ty == t) {
+      buf_put_u64(~g_out_globals, g_name_tab[iid].sym_val);
+    } else {
+      err_node(init, "a global is initialized with a literal or a constant of its type in S0");
+    }
+    buf_putc(~g_out_globals, ':');
+    ty_print(~g_out_globals, t);
+    buf_putc(~g_out_globals, '\n');
+  } else if (ty_kind(t) == MT_PTR) {
+    if (op == TK_ASSIGN) {
+      err_node(d, "a pointer is initialized with ':=', '#=' or '~='; plain '=' assigns through it");
+    }
+    if (g_nodes[init].kind != EX_STRING || ty_kind(ty_elem(t)) != MT_U8) {
+      err_node(init, "a global pointer is initialized with a string in S0, or not at all");
+    }
+    // the global comes first, then the string's bytes it points at
+    buf_puts(~g_out_globals, " = @str.");
+    buf_put_u64(~g_out_globals, g_nstrings as u64);
+    buf_putc(~g_out_globals, '\n');
+    Val v;
+    low_string(init, ~v);
+  } else {
+    err_at(d);
+    err_s("a ");
+    err_ty(t);
+    err_s(" has no initializer in S0");
+    err_end();
+  }
+}
+
+void = decl_func(uword d) {
+  uword ret = ty_resolve(d);
+  if (ty_kind(ret) != MT_VOID && !ty_is_scalar(ret)) {
+    err_at(d);
+    err_s("'");
+    err_name(g_nodes[d].id);
+    err_s("' returns a ");
+    err_ty(ret);
+    err_s("; S0 functions return a number, a pointer or nothing");
+    err_end();
+  }
+  uword first = g_nparam_ty;
+  uword p = g_nodes[d].items;
+  while (p != 0) {
+    uword t = ty_resolve(p);
+    if (!ty_is_scalar(t)) {
+      err_at(p);
+      err_s("parameter '");
+      err_name(g_nodes[p].id);
+      err_s("' is a ");
+      err_ty(t);
+      err_s("; S0 parameters are numbers and pointers");
+      err_end();
+    }
+    uword q = g_nodes[d].items;
+    while (q != p) {
+      if (g_nodes[q].id == g_nodes[p].id) {
+        err_at(p);
+        err_s("two parameters are named '");
+        err_name(g_nodes[p].id);
+        err_s("'");
+        err_end();
+      }
+      q = g_nodes[q].next;
+    }
+    g_param_ty[g_nparam_ty] = t;
+    g_nparam_ty = g_nparam_ty + 1;
+    p = g_nodes[p].next;
+  }
+  uword id = g_nodes[d].id;
+  low_name_free(id, d, FALSE);
+  uword f = g_nfuncs;
+  g_nfuncs = g_nfuncs + 1;
+  g_funcs[f].id = id;
+  g_funcs[f].decl = d;
+  g_funcs[f].ret = ret;
+  g_funcs[f].first = first;
+  g_funcs[f].nparams = g_nodes[d].count;
+  g_name_tab[id].sym = SYM_FUNC;
+  g_name_tab[id].sym_idx = f;
+}
+
+void = decl_extern_text(uword f) {
+  buf_puts(~g_out_funcs, "\nextern func @");
+  name_put(~g_out_funcs, g_funcs[f].id);
+  buf_puts(~g_out_funcs, "(");
+  uword i = 0;
+  while (i < g_funcs[f].nparams) {
+    if (i != 0) {
+      buf_puts(~g_out_funcs, ", ");
+    }
+    ty_print(~g_out_funcs, g_param_ty[g_funcs[f].first + i]);
+    i = i + 1;
+  }
+  buf_puts(~g_out_funcs, ") -> ");
+  ty_print(~g_out_funcs, g_funcs[f].ret);
+  buf_puts(~g_out_funcs, " callconv(c)\n");
+}
+
+// A function's header, body and closing brace.
+void = decl_body(uword f) {
+  uword d = g_funcs[f].decl;
+  uword id = g_funcs[f].id;
+  g_fn = f;
+  g_loops = 0;
+  buf_puts(~g_out_funcs, "\n");
+  // the entry point is the one symbol the C runtime must see
+  if (id == ID_MAIN) {
+    buf_puts(~g_out_funcs, "export ");
+  }
+  buf_puts(~g_out_funcs, "func @");
+  name_put(~g_out_funcs, id);
+  buf_puts(~g_out_funcs, "(");
+  uword p = g_nodes[d].items;
+  uword i = 0;
+  while (p != 0) {
+    uword pid = g_nodes[p].id;
+    uword t = g_param_ty[g_funcs[f].first + i];
+    low_name_free(pid, p, FALSE);
+    low_local_add(pid, t);
+    if (i != 0) {
+      buf_puts(~g_out_funcs, ", ");
+    }
+    buf_puts(~g_out_funcs, "%");
+    name_put(~g_out_funcs, pid);
+    buf_puts(~g_out_funcs, ": ");
+    ty_print(~g_out_funcs, t);
+    p = g_nodes[p].next;
+    i = i + 1;
+  }
+  buf_puts(~g_out_funcs, ") -> ");
+  ty_print(~g_out_funcs, g_funcs[f].ret);
+  buf_puts(~g_out_funcs, " {\n");
+  low_block(g_nodes[d].body, 1);
+  low_locals_drop(0);
+  buf_puts(~g_out_funcs, "}\n");
+  if (ty_kind(g_funcs[f].ret) != MT_VOID && !low_block_returns(g_nodes[d].body)) {
+    err_at(d);
+    err_s("@");
+    err_name(id);
+    err_s(" does not return a value on every path");
+    err_end();
+  }
+}
+
+void = decl_struct_text(uword sidx) {
+  buf_puts(~g_out, "\nstruct ");
+  name_put(~g_out, g_structs[sidx].id);
+  buf_puts(~g_out, " {");
+  uword i = 0;
+  while (i < g_structs[sidx].nfields) {
+    uword f = g_structs[sidx].first + i;
+    if (i == 0) {
+      buf_puts(~g_out, " ");
+    } else {
+      buf_puts(~g_out, ", ");
+    }
+    name_put(~g_out, g_field_id[f]);
+    buf_puts(~g_out, ": ");
+    ty_print(~g_out, g_field_ty[f]);
+    i = i + 1;
+  }
+  buf_puts(~g_out, " }\n");
+}
+
+// Checks the unit parsed into g_decls and leaves its core MIR text in
+// g_out, exactly as libcsmir's mir_print prints what stage 0 builds.
+void = decl_unit() {
+  uword d = 0;
+  decl_structs();
+  d = g_decls;
+  while (d != 0) {
+    if (g_nodes[d].kind == DK_CONST) {
+      decl_const(d);
+    }
+    d = g_nodes[d].next;
+  }
+  d = g_decls;
+  while (d != 0) {
+    if (g_nodes[d].kind == DK_GLOBAL) {
+      decl_global(d);
+    }
+    d = g_nodes[d].next;
+  }
+  d = g_decls;
+  while (d != 0) {
+    if (g_nodes[d].kind == DK_FUNC || g_nodes[d].kind == DK_EXTERN_FUNC) {
+      decl_func(d);
+    }
+    d = g_nodes[d].next;
+  }
+  // bodies, in the order the functions were declared: the order MIR lists
+  // them in, extern declarations included
+  uword f = 0;
+  while (f < g_nfuncs) {
+    if (g_nodes[g_funcs[f].decl].kind == DK_EXTERN_FUNC) {
+      decl_extern_text(f);
+    } else {
+      decl_body(f);
+    }
+    f = f + 1;
+  }
+  if (g_uses_alloc) {
+    uword sym = g_name_tab[ID_ARENA].sym;
+    if (sym == SYM_FUNC) {
+      err_begin(g_nodes[g_decls].line, g_nodes[g_decls].col);
+      err_s("'cs_arena_alloc' is the runtime function behind alloc and cannot be declared");
+      err_end();
+    }
+    if (sym == SYM_GLOBAL) {
+      // libcsmir's verifier: one name for a function and a global
+      err_begin(g_nodes[g_decls].line, g_nodes[g_decls].col);
+      err_s("@cs_arena_alloc names both a function and a global");
+      err_end();
+    }
+    buf_puts(~g_out_funcs, "\nextern func @cs_arena_alloc(uword, uword) -> ptr<u8> callconv(c)\n");
+  }
+
+  buf_puts(~g_out, "cesium-mir 0\n");
+  uword k = 0;
+  while (k < g_nsorder) {
+    decl_struct_text(g_sorder[k]);
+    k = k + 1;
+  }
+  if (g_out_globals.len != 0) {
+    buf_putc(~g_out, '\n');
+    buf_putn(~g_out, g_out_globals.data, g_out_globals.len);
+  }
+  buf_putn(~g_out, g_out_funcs.data, g_out_funcs.len);
+}
