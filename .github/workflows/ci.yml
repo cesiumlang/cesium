@@ -3,8 +3,6 @@ name: CI
 # Builds stage 0 (bootstrap/) with the devkit's Zig and runs its test corpus,
 # on every host the devkit supports that QBE can target. Pull requests and
 # pushes to main and dev are built.
-#
-# The C++ prototype (src/, include/, CMakeLists.txt) is not built here.
 
 on:
   push:
