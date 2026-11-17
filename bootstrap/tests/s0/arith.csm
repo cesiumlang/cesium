@@ -1,0 +1,86 @@
+// Integer arithmetic with core MIR's defined semantics (cesiumlang/cesium#8):
+// wrapping, shifts modulo the width, conversions.
+u8 calls = 0;
+
+u8 = touch(u8 result) {
+  calls = calls + 1;
+  return result;
+}
+
+i32 = main(i32 argc, ##u8 argv) {
+  // wrapping
+  u8 a = 250;
+  a = a + 10;
+  show("u8 250 + 10", a as i64);
+  i32 big = 2147483647;
+  big = big + 1;
+  show("i32 max + 1", big as i64);
+  u64 zero = 0;
+  show_u("u64 0 - 1", zero - 1);
+  u8 m = 16;
+  show("u8 16 * 16", (m * m) as i64);
+
+  // signed and unsigned division and remainder
+  i32 seven = 0 - 7;
+  show("-7 / 2", (seven / 2) as i64);
+  show("-7 % 2", (seven % 2) as i64);
+  u32 useven = seven as u32;
+  show_u("4294967289 / 2", (useven / 2) as u64);
+
+  // shifts: the amount is reduced modulo the width
+  u64 one = 1;
+  u64 amount = 65;
+  show_u("1 << 65 (u64)", one << amount);
+  u8 bit = 1;
+  u8 nine = 9;
+  show("1 << 9 (u8)", (bit << nine) as i64);
+  i32 neg = 0 - 16;
+  show("-16 >> 2", (neg >> 2) as i64);
+  u32 uneg = neg as u32;
+  show_u("4294967280 >> 2", (uneg >> 2) as u64);
+
+  // bitwise
+  u32 x = 12;
+  u32 y = 10;
+  show_u("12 & 10", (x & y) as u64);
+  show_u("12 | 10", (x | y) as u64);
+  show_u("12 >< 10", (x >< y) as u64);
+
+  // comparisons give 0 or 1 and follow the type's signedness
+  show("-7 < 2 (i32)", (seven < 2) as i64);
+  show("4294967289 < 2 (u32)", (useven < 2) as i64);
+  show("12 == 12", (x == 12) as i64);
+  show("12 != 12", (x != 12) as i64);
+
+  // logical operators short-circuit
+  u8 r = touch(0) && touch(1);
+  show("0 && 1", r as i64);
+  show("calls after &&", calls as i64);
+  r = touch(1) || touch(0);
+  show("1 || 0", r as i64);
+  show("calls after ||", calls as i64);
+  show("!0", (!zero) as i64);
+  show("!12", (!x) as i64);
+
+  // conversions: widening by the source's signedness, narrowing truncates
+  i32 minus1 = 0 - 1;
+  show("i32 -1 as i64", minus1 as i64);
+  show_u("i32 -1 as u64", minus1 as u64);
+  u8 b200 = 200;
+  show("u8 200 as i32", (b200 as i32) as i64);
+  i32 n300 = 300;
+  show("i32 300 as u8", (n300 as u8) as i64);
+  u64 wide = 4294967298;
+  show("u64 2^32+2 as i32", (wide as i32) as i64);
+
+  // precedence
+  i64 p = 2 + 3 * 4;
+  show("2 + 3 * 4", p);
+  p = (2 + 3) * 4;
+  show("(2 + 3) * 4", p);
+  p = 20 - 6 - 4;
+  show("20 - 6 - 4", p);
+  p = 1 << 2 + 1;
+  show("1 << 2 + 1", p);
+  return 0;
+}

@@ -1,0 +1,66 @@
+// The sample program of cesiumlang/cesium#9, with its amendment applied:
+// owners are initialized with :=, and a pointer field is set with #=.
+extern libc = import('c') {
+  i32 = putchar(i32 c);
+}
+
+const i64 TOK_IDENT = 1;
+const i64 TOK_NUMBER = 2;
+
+struct Token {
+  i64 kind;
+  #u8 start;
+  uword len;
+}
+
+uword = cstr_len(#u8 s) {
+  uword n = 0;
+  while (s[n] != 0) {
+    n = n + 1;
+  }
+  return n;
+}
+
+void = print(#u8 s) {
+  uword i = 0;
+  while (s[i] != 0) {
+    putchar(s[i] as i32);
+    i = i + 1;
+  }
+}
+
+// Write an unsigned integer as decimal text into buf; returns the length.
+uword = fmt_u64(u64 v, ~u8 buf) {
+  u8 tmp[20];
+  uword n = 0;
+  if (v == 0) {
+    buf[0] = '0';
+    return 1;
+  }
+  while (v != 0) {
+    tmp[n] = ('0' + (v % 10)) as u8;
+    v = v / 10;
+    n = n + 1;
+  }
+  uword i = 0;
+  while (i < n) {
+    buf[i] = tmp[n - 1 - i];
+    i = i + 1;
+  }
+  return n;
+}
+
+i32 = main(i32 argc, ##u8 argv) {
+  ~Token t := alloc(1);
+  t.kind = TOK_IDENT;
+  t.start #= "hello";
+  t.len = cstr_len(t.start);
+
+  ~u8 buf := alloc(32);
+  uword n = fmt_u64(t.len as u64, buf);
+  buf[n] = '\n';
+  buf[n + 1] = 0;
+  print("token length: ");
+  print(buf);
+  return 0;
+}

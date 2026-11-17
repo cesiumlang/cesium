@@ -1,0 +1,95 @@
+// Structs: fields only, assigned one at a time; nested structs, array fields,
+// pointer fields, and a linked list built from alloc.
+struct Point {
+  i32 x;
+  i32 y;
+}
+
+struct Shape {
+  u8 kind;
+  Point origin;
+  Point corners[3];
+  #u8 name;
+  u64 area;
+}
+
+struct Node {
+  i64 value;
+  ~Node next;
+  u8 has_next;
+}
+
+i64 = manhattan(#Point p) {
+  return (p.x + p.y) as i64;
+}
+
+void = move(~Point p, i32 dx, i32 dy) {
+  p.x = p.x + dx;
+  p.y = p.y + dy;
+}
+
+// pushes a value in front of the list and returns the new head
+:~Node = push(~Node head, u8 has_head, i64 value) {
+  ~Node n := alloc(1);
+  n.value = value;
+  n.has_next = has_head;
+  n.next ~= head;
+  return n;
+}
+
+i64 = total(#Node head) {
+  i64 sum = 0;
+  #Node n #= head;
+  u8 more = 1;
+  while (more) {
+    sum = sum + n.value;
+    more = n.has_next;
+    n #= n.next;
+  }
+  return sum;
+}
+
+i32 = main(i32 argc, ##u8 argv) {
+  Point p;
+  p.x = 3;
+  p.y = 4;
+  show("manhattan", manhattan(#p));
+  move(~p, 10, 20);
+  show("p.x after move", p.x as i64);
+  show("p.y after move", p.y as i64);
+
+  Shape s;
+  s.kind = 2;
+  s.origin.x = 1;
+  s.origin.y = 2;
+  s.corners[0].x = 5;
+  s.corners[2].y = 9;
+  s.name #= "triangle";
+  s.area = 12;
+  show("kind", s.kind as i64);
+  show("origin", manhattan(#s.origin));
+  show("corner 0 x", s.corners[0].x as i64);
+  show("corner 2 y", s.corners[2].y as i64);
+  show("corner 1 is zero", manhattan(#s.corners[1]));
+  print(s.name);
+  putchar('\n');
+  show("name[3]", s.name[3] as i64);
+
+  // through a pointer, fields are reached the same way
+  ~Shape ps ~= ~s;
+  ps.area = ps.area * 2;
+  ps.corners[1].x = 7;
+  show_u("area through pointer", s.area);
+  show("corner 1 x", s.corners[1].x as i64);
+
+  show_u("sizeof(Point)", sizeof(Point) as u64);
+  show_u("sizeof(Shape)", sizeof(Shape) as u64);
+  show_u("sizeof(Node)", sizeof(Node) as u64);
+
+  ~Node chain;
+  chain := push(chain, 0, 1);
+  chain := push(chain, 1, 20);
+  chain := push(chain, 1, 300);
+  show("chain total", total(chain));
+  return 0;
+}

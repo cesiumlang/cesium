@@ -1,0 +1,5 @@
+// Integer literal forms other than decimal are not specified.
+i32 = main(i32 argc, ##u8 argv) {
+  i32 x = 0x10;
+  return x;
+}

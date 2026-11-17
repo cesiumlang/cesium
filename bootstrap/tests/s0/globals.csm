@@ -1,0 +1,63 @@
+// Globals and constants: shared by every file of the unit; globals without
+// an initializer start as zero.
+const i64 LIMIT = 3;
+const i64 SAME = LIMIT;
+const u8 NEWLINE = '\n';
+
+struct Counter {
+  u64 hits;
+  u64 misses;
+}
+
+i64 next_id = 100;
+i64 start = LIMIT;
+u64 table[8];
+Counter counter;
+#u8 greeting #= "hello from a global";
+#u8 unset;
+u8 flag;
+
+i64 = new_id() {
+  next_id = next_id + 1;
+  return next_id;
+}
+
+void = record(u8 hit) {
+  if (hit) {
+    counter.hits = counter.hits + 1;
+  } else {
+    counter.misses = counter.misses + 1;
+  }
+}
+
+i32 = main(i32 argc, ##u8 argv) {
+  show("LIMIT", LIMIT);
+  show("SAME", SAME);
+  show("start", start);
+  show("first id", new_id());
+  show("second id", new_id());
+
+  uword i = 0;
+  while (i < 8) {
+    table[i] = (i * i) as u64;
+    i = i + 1;
+  }
+  show_u("table[7]", table[7]);
+
+  record(1);
+  record(1);
+  record(0);
+  show_u("hits", counter.hits);
+  show_u("misses", counter.misses);
+
+  print(greeting);
+  putchar(NEWLINE as i32);
+  greeting #= "re-pointed";
+  print(greeting);
+  putchar(NEWLINE as i32);
+
+  show("flag starts as", flag as i64);
+  flag = 1;
+  show("flag is now", flag as i64);
+  return 0;
+}

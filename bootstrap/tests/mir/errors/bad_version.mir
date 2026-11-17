@@ -1,0 +1,4 @@
+cesium-mir 1
+
+func @f() -> void {
+}

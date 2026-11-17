@@ -1,0 +1,55 @@
+// Output helpers shared by the S0 tests. Each test is compiled together with
+// this file as one unit.
+extern libc = import('c') {
+  i32 = putchar(i32 c);
+}
+
+void = print(#u8 s) {
+  uword i = 0;
+  while (s[i] != 0) {
+    putchar(s[i] as i32);
+    i = i + 1;
+  }
+}
+
+void = print_u64(u64 v) {
+  u8 digits[20];
+  uword n = 0;
+  if (v == 0) {
+    putchar('0');
+    return;
+  }
+  while (v != 0) {
+    digits[n] = ('0' + (v % 10)) as u8;
+    v = v / 10;
+    n = n + 1;
+  }
+  while (n != 0) {
+    n = n - 1;
+    putchar(digits[n] as i32);
+  }
+}
+
+void = print_i64(i64 v) {
+  if (v < 0) {
+    putchar('-');
+    print_u64((0 - v) as u64);
+  } else {
+    print_u64(v as u64);
+  }
+}
+
+// "label: value\n"
+void = show(#u8 label, i64 v) {
+  print(label);
+  print(": ");
+  print_i64(v);
+  putchar('\n');
+}
+
+void = show_u(#u8 label, u64 v) {
+  print(label);
+  print(": ");
+  print_u64(v);
+  putchar('\n');
+}
