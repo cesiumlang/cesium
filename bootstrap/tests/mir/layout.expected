@@ -1,0 +1,19 @@
+sizeof(Mixed): 32
+alignof(Mixed): 8
+Mixed.a: 0
+Mixed.b: 4
+Mixed.c: 8
+Mixed.d: 16
+Mixed.e: 24
+sizeof(Inner): 4
+alignof(Inner): 2
+sizeof(Outer): 32
+alignof(Outer): 8
+Outer.tag: 0
+Outer.inner: 2
+Outer.arr: 6
+Outer.next: 24
+Outer.arr[2].y: 16
+sizeof([5 x u32]): 20
+sizeof(ptr<u8>): 8
+fresh local is zero: 0

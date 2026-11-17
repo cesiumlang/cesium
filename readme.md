@@ -49,4 +49,11 @@ Open design questions carry the [`design`](https://github.com/cesiumlang/cesium/
 
 ## Repository layout
 
+[`bootstrap/`](bootstrap/README.md) is stage 0: the S0 compiler `cesium0`, the core MIR library `libcsmir` and a small runtime, in portable C, with their tests. `build.zig` builds and tests it with the Zig of the devkit:
+
+```sh
+python tools/fetch-devkit.py
+.devkit/zig/zig build test
+```
+
 `src/`, `include/`, `cmake/` and `CMakeLists.txt` hold a C++ prototype from September 2025: a documentation generator with a CLI and a Qt GUI, built with CMake and the tools from [buildtools](https://github.com/cesiumlang/cesium-buildtools). It predates the decisions above and is not the compiler. What becomes of it is an open question ([#2](https://github.com/cesiumlang/cesium/issues/2)).

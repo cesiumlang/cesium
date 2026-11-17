@@ -22,6 +22,10 @@
       ".cesium-doc/**": true,
 			"tmp/**": true,
       "**/.zig-cache/**": true,
+      "**/zig-pkg/**": true,
+      "zig-out/**": true,
+      ".devkit/**": true,
+      ".devkit-downloads/**": true,
       "**/node_modules/**": true,
       "**/.cache/**": true,
       "**/.git/**": true,
@@ -32,6 +36,10 @@
       "**/node_modules/**": true,
       ".cache/**": true,
       ".zig-cache/**": true,
+      ".devkit-downloads/**": true,
+    },
+    "search.exclude": {
+      ".devkit/**": true,
     },
 		"editor.wrappingIndent": "indent",
     // "markdown.styles": ["custom-tag-style.css"]
@@ -65,7 +73,20 @@
       "PATH": "${workspaceFolder}/build/bin;${workspaceFolder}/buildtools/opt/llvm-21.1.0/bin;${env:PATH}"
     },
     "lldb.verboseLogging": true,
-    "zig.path": "${workspaceFolder}/buildtools/opt/zig-0.15.1/zig.exe",
+    // the Zig of the Cesium devkit: python tools/fetch-devkit.py
+    "zig.path": "${workspaceFolder}/.devkit/zig/zig",
+    "zig.zls.enabled": "on",
+    "zig.zls.inlayHintsShowParameterName": false,
+    "zig.zls.inlayHintsExcludeSingleArgument": false,
+    "zig.zls.inlayHintsShowBuiltin": false,
+    "zig.zls.inlayHintsShowStructLiteralFieldType": false,
+    "zig.zls.inlayHintsShowVariableTypeHints": false,
+    "zig.zls.warnStyle": true,
+    "zig.zls.enableArgumentPlaceholders": false,
+    "debug.onTaskErrors": "abort",  // will switch to problems pane otherwise
+    "terminal.integrated.automationProfile.windows": {
+      "path": "C:\windows\system32\cmd.exe",
+    },
     "lldb.useNativePDBReader": true,
     // "lldb.library": "${workspaceFolder}/buildtools/opt/llvm-21.1.0/bin",
     // "zig.debugAdapter": "${workspaceFolder}/buildtools/opt/llvm-21.1.0/bin/lldb"
@@ -90,6 +111,53 @@
       "ltex-plus.vscode-ltex-plus",
 
       "vadimcn.vscode-lldb",
+      "ziglang.vscode-zig",
+      "ms-vscode.cpptools",  // windows debug
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "zig build",
+        "type": "shell",
+        "command": "${config:zig.path}",
+        "args": [
+          "build",
+        ],
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        },
+        "problemMatcher": [],
+        "presentation": {
+          "clear": true,
+          "reveal": "always",
+          "panel": "shared",
+          "focus": true,
+          "revealProblems": "never",
+        },
+      },
+      {
+        "label": "zig build test",
+        "type": "shell",
+        "command": "${config:zig.path}",
+        "args": [
+          "build",
+          "test",
+          "--summary",
+          "all",
+        ],
+        "group": "test",
+        "problemMatcher": [],
+        "presentation": {
+          "clear": true,
+          "reveal": "always",
+          "panel": "shared",
+          "focus": true,
+          "revealProblems": "never",
+        },
+      },
     ]
   },
   "launch": {
@@ -104,7 +172,22 @@
         "args": [],
         "cwd": "${command:cmake.getLaunchTargetDirectory}",
         "console": "integratedTerminal"
-      }
+      },
+      {
+        "name": "cesium0 (cppvsdbg)",
+        "type": "cppvsdbg",
+        "request": "launch",
+        "program": "${workspaceFolder}/zig-out/bin/cesium0.exe",
+        "args": [
+          "--emit-mir",
+          "-o",
+          "${workspaceFolder}/tmp/out.mir",
+          "${workspaceFolder}/bootstrap/tests/s0/tokens.csm",
+        ],
+        "cwd": "${workspaceFolder}",
+        "preLaunchTask": "zig build",
+        "console": "integratedTerminal",
+      },
     ]
   },
 }

@@ -1,0 +1,12 @@
+fib(20): 6765
+is_even(10): 1
+is_odd(10): 0
+classify(-5): -1
+classify(0): 0
+classify(7): 1
+classify(70): 2
+stopped at: 5
+sum of evens to 10: 30
+triangle cells: 10
+first block: 1
+second block: 2

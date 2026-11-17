@@ -1,0 +1,17 @@
+x after increment: 42
+a after swap: 2
+b after swap: 1
+p reads x: 42
+p reads y: 7
+p + x: 49
+x through ##: 100
+q after repoint: 7
+sum of 4: 100
+sum of last 2: 70
+cesium
+s[1]: 101
+sum of heap: 18
+heap[0] - 5: 0
+low byte of heap[1]: 6
+round trip through uword: 20
+element size: 8

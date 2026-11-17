@@ -1,0 +1,5 @@
+// Unary minus is not in the S0 operator list.
+i32 = main(i32 argc, ##u8 argv) {
+  i32 x = -1;
+  return x;
+}

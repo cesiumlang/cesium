@@ -1,0 +1,16 @@
+manhattan: 7
+p.x after move: 13
+p.y after move: 24
+kind: 2
+origin: 3
+corner 0 x: 5
+corner 2 y: 9
+corner 1 is zero: 0
+triangle
+name[3]: 97
+area through pointer: 24
+corner 1 x: 7
+sizeof(Point): 8
+sizeof(Shape): 56
+sizeof(Node): 24
+chain total: 321

@@ -1,0 +1,11 @@
+// Caught by the MIR verifier: a function that returns a value must do so
+// on every path.
+i32 = pick(i32 x) {
+  if (x == 1) {
+    return 2;
+  }
+}
+
+i32 = main(i32 argc, ##u8 argv) {
+  return pick(1);
+}

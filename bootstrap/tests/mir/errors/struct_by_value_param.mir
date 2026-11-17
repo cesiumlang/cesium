@@ -1,0 +1,6 @@
+cesium-mir 0
+
+struct P { x: i32, y: i32 }
+
+func @f(%p: P) -> void {
+}

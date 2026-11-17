@@ -1,0 +1,5 @@
+// alloc returns ownership, which is received with ":=".
+i32 = main(i32 argc, ##u8 argv) {
+  #u8 p #= alloc(4);
+  return 0;
+}

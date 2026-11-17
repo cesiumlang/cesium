@@ -1,0 +1,8 @@
+// The default type of a literal is an open question (cesiumlang/cesium#9),
+// so a literal with no typed context is rejected.
+i32 = main(i32 argc, ##u8 argv) {
+  if (1) {
+    return 1;
+  }
+  return 0;
+}
