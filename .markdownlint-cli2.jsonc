@@ -1,0 +1,11 @@
+{
+  "ignores": [
+    "buildtools/**",
+    "node_modules/**",
+    // toolchain caches, not repository content
+    "zig-pkg/**",
+    ".zig-cache/**",
+    "zig-out/**",
+    ".devkit/**"
+  ]
+}

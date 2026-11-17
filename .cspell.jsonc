@@ -2,14 +2,15 @@
   "version": "0.2",
   "import": [
     ".cspell/cesium/cspell-ext.json",
-    ".cspell/zig/cspell-ext.json",
   ],
   "ignorePaths": [
-    ".cspell.jsonc",
+    ".cspell.json*",
     ".cspell/**",
     ".git/**",
     "*.code-workspace",
-    ".local-gitignore"
+    ".gitignore",
+    ".local-gitignore",
+    ".env",
   ],
   "dictionaryDefinitions": [
     {
@@ -32,6 +33,9 @@
     "/-W.*/",
     "/-D.*/",
     "/-X.*/",
+    "/-i.*/",
+    "/-I.*/",
+    "/-f.*/",
   ],
   "allowCompoundWords": true,
 }
