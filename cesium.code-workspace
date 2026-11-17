@@ -6,8 +6,8 @@
 	],
 	"settings": {
     "files.associations": {
-      "*.cs": "cesium",
-      "*.czm": "cesium"
+      "*.csm": "cesium",
+      "*.csi": "cesium"
     },
     "files.watcherExclude": {
 			// "buildtools/clang+llvm-*/": true,

@@ -30,13 +30,23 @@ The language strikes a balance between safety and performance, providing develop
 ### Basic Program Structure
 
 ```cesium
-// hello.cs
+// hello.csm
 void = main() {
   printf("Hello, Cesium!\n");
 }
 ```
 
-## Building
+## Status
 
-<!-- To build on Windows, you will need to install the [Windows SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/).   -->
-The current default builds use Zig and Clang, which can be installed via the script in [buildtools](https://github.com/cesiumlang/cesium-buildtools).
+The language design and the compiler's architecture are recorded as issues in this repository; they are the knowledge base. The decisions so far (label [`decision`](https://github.com/cesiumlang/cesium/issues?q=is%3Aissue+label%3Adecision)):
+
+- The compiler is written in Cesium. A small stage 0 compiler in portable C compiles a tiny subset, S0, in which the first Cesium-written compiler (`cesium1`) is written ([ADR 0002](https://github.com/cesiumlang/cesium/issues/5), [stage 0 and S0](https://github.com/cesiumlang/cesium/issues/9), [stage 0 C dialect](https://github.com/cesiumlang/cesium/issues/10)).
+- Every frontend lowers to a middle IR ([MIR](https://github.com/cesiumlang/cesium/issues/8)) with two backends behind it: QBE first, LLVM as the primary release backend ([ADR 0001](https://github.com/cesiumlang/cesium/issues/4), [ADR 0004](https://github.com/cesiumlang/cesium/issues/7)).
+- `build.zig` is the build system and runs in CI; the toolchain (pinned Zig, LLVM and LLD libraries, QBE) comes prebuilt from [cesiumlang/devkits](https://github.com/cesiumlang/devkits).
+- Source files end in `.csm`, module interface files in `.csi` ([#14](https://github.com/cesiumlang/cesium/issues/14)).
+
+Open design questions carry the [`design`](https://github.com/cesiumlang/cesium/issues?q=is%3Aissue+is%3Aopen+label%3Adesign) label.
+
+## Repository layout
+
+`src/`, `include/`, `cmake/` and `CMakeLists.txt` hold a C++ prototype from September 2025: a documentation generator with a CLI and a Qt GUI, built with CMake and the tools from [buildtools](https://github.com/cesiumlang/cesium-buildtools). It predates the decisions above and is not the compiler. What becomes of it is an open question ([#2](https://github.com/cesiumlang/cesium/issues/2)).

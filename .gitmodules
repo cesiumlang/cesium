@@ -4,6 +4,3 @@
 [submodule ".cspell/cesium"]
 	path = .cspell/cesium
 	url = https://github.com/cesiumlang/cspell-cesium.git
-[submodule ".cspell/cspell-zig"]
-	path = .cspell/zig
-	url = https://github.com/emanspeaks/cspell-zig.git
