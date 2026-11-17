@@ -20,6 +20,7 @@ The grammar stage 0 accepts is the S0 chapter of the draft specification on cesi
 | `libcsmir/` | Core MIR: data structures, text parser and printer, verifier, layout, QBE lowering, and the coarse C API (`csmir.h`) |
 | `stage0/` | `cesium0`: the S0 lexer, parser and checker, and the driver |
 | `runtime/` | `cs_arena_alloc`, the bump arena behind S0's `alloc(count)` |
+| `stage1/` | The beginning of `cesium1`, written in S0: so far its lexer and a driver that prints tokens |
 | `tests/` | The test corpus |
 
 ## Building
@@ -114,6 +115,12 @@ These had to be settled to write stage 0, and no issue decides them. Each is iso
 
 - QBE is run through the devkit's `libqbe.a`, which is QBE's own `main` renamed to `qbe_main`. Like the program, it ends the process when it is done, so `cs_compile_mir` does not return on success. That is enough for `cesium0` and for a `cesium1` that compiles and exits; an entry point that returns needs a change in the devkit.
 
+## Stage 1
+
+`stage1/` is the start of `cesium1`, the compiler written in S0 that stage 0 exists to build (#9). It has a lexer for the S0 token set, which every later language level contains, and a driver that reads source on standard input and prints one line per token. `zig build test` compiles it with `cesium0`, links it, and checks its output on two source files, one of them its own lexer.
+
+What S1 adds to S0 is not decided ("candidate S1 features, to be confirmed when designing stage 1", #9), so nothing beyond S0's tokens is in it. Writing it showed that S0 as implemented is enough for this kind of code. It reads input with `getchar`, which returns an `i32`: S0 cannot test a pointer, so functions that report failure through a null pointer are out of reach.
+
 ## Tests
 
 `zig build test` runs `tests/` (see `build-src/tests.zig`):
@@ -122,3 +129,4 @@ These had to be settled to write stage 0, and no issue decides them. Each is iso
 - `s0/errors/`: programs stage 0 must reject, each with the message it must give.
 - `mir/<name>.mir` with `<name>.expected`: MIR text printed back unchanged, then compiled and run. `integers.mir` covers the sub-word integer types S0 does not have; `layout.mir` checks sizes, alignments and field offsets.
 - `mir/errors/`: MIR the verifier or parser must reject.
+- `stage1/<name>.tok`: the tokens `cesium1` must print for a source file.

@@ -8,6 +8,9 @@
 //!   mir/<name>.mir + <name>.expected  core MIR text: print it back unchanged,
 //!                                     compile it, run, compare stdout
 //!   mir/errors/<name>.mir             libcsmir must reject it with the message
+//!   stage1/<name>.tok                 cesium1 (bootstrap/stage1, written in S0
+//!                                     and built by cesium0) must print these
+//!                                     tokens for the named source file
 
 const std = @import("std");
 
@@ -21,6 +24,8 @@ const Run = struct {
     lib: bool = false,
 };
 const Reject = struct { name: []const u8, message: []const u8 };
+/// A source file cesium1 reads on standard input, and the output it must give.
+const Stage1 = struct { name: []const u8, source: []const u8, expected: []const u8 };
 
 const s0_dir = "bootstrap/tests/s0/";
 const mir_dir = "bootstrap/tests/mir/";
@@ -82,6 +87,22 @@ const mir_rejects = [_]Reject{
     .{ .name = "unknown_local", .message = "unknown local %x" },
     .{ .name = "bad_version", .message = "expected MIR version 0" },
     .{ .name = "struct_by_value_param", .message = "only integers and pointers" },
+};
+
+const stage1_sources = [_][]const u8{ "util.csm", "lex.csm", "main.csm" };
+
+const stage1_runs = [_]Stage1{
+    .{
+        .name = "tokens",
+        .source = s0_dir ++ "tokens.csm",
+        .expected = @embedFile("../bootstrap/tests/stage1/tokens.tok"),
+    },
+    // cesium1 reads its own lexer
+    .{
+        .name = "lex",
+        .source = "bootstrap/stage1/lex.csm",
+        .expected = @embedFile("../bootstrap/tests/stage1/lex.tok"),
+    },
 };
 
 pub fn add(
@@ -146,10 +167,46 @@ pub fn add(
         run.addCheck(.{ .expect_stderr_match = t.message });
         step.dependOn(&run.step);
     }
+
+    // stage 1: cesium1, written in S0, compiled by cesium0
+    const compile1 = b.addRunArtifact(cesium0);
+    compile1.addArg("-o");
+    const cesium1_asm = compile1.addOutputFileArg("cesium1.s");
+    for (stage1_sources) |file| compile1.addFileArg(b.path(b.fmt("bootstrap/stage1/{s}", .{file})));
+    const cesium1 = linkProgram(b, target, csrt, "cesium1", cesium1_asm);
+    for (stage1_runs) |t| {
+        const run = b.addRunArtifact(cesium1);
+        run.setStdIn(.{ .lazy_path = b.path(t.source) });
+        run.expectStdOutEqual(hostText(b, target, t.expected));
+        step.dependOn(&run.step);
+    }
 }
 
-/// Assembles and links what cesium0 wrote, with libcsrt and libc, runs it and
-/// compares its output.
+/// Assembles and links what cesium0 wrote, with libcsrt and libc.
+fn linkProgram(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    csrt: *std.Build.Step.Compile,
+    name: []const u8,
+    assembly: std.Build.LazyPath,
+) *std.Build.Step.Compile {
+    const exe = b.addExecutable(.{
+        .name = name,
+        .root_module = b.createModule(.{ .target = target, .optimize = .Debug, .link_libc = true }),
+    });
+    exe.root_module.addAssemblyFile(assembly);
+    exe.root_module.linkLibrary(csrt);
+    return exe;
+}
+
+/// Expected output as the target's C library writes it: on Windows a text
+/// stream gets "\r\n" for every '\n'.
+fn hostText(b: *std.Build, target: std.Build.ResolvedTarget, text: []const u8) []const u8 {
+    if (target.result.os.tag != .windows) return text;
+    return std.mem.replaceOwned(u8, b.allocator, text, "\n", "\r\n") catch @panic("OOM");
+}
+
+/// Links what cesium0 wrote, runs it and compares its output.
 fn runProgram(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
@@ -158,18 +215,7 @@ fn runProgram(
     assembly: std.Build.LazyPath,
     expected: []const u8,
 ) *std.Build.Step {
-    const exe = b.addExecutable(.{
-        .name = name,
-        .root_module = b.createModule(.{ .target = target, .optimize = .Debug, .link_libc = true }),
-    });
-    exe.root_module.addAssemblyFile(assembly);
-    exe.root_module.linkLibrary(csrt);
-    const run = b.addRunArtifact(exe);
-    // the C library of Windows writes "\r\n" for '\n' to a text stream
-    const want = if (target.result.os.tag == .windows)
-        std.mem.replaceOwned(u8, b.allocator, expected, "\n", "\r\n") catch @panic("OOM")
-    else
-        expected;
-    run.expectStdOutEqual(want);
+    const run = b.addRunArtifact(linkProgram(b, target, csrt, name, assembly));
+    run.expectStdOutEqual(hostText(b, target, expected));
     return &run.step;
 }

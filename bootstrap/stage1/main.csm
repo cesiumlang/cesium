@@ -1,0 +1,64 @@
+// cesium1: the driver. Written in S0.
+//
+// So far cesium1 only has its lexer: it reads source text from standard
+// input and prints one line per token,
+//
+//   <line>:<col> <kind> <text>
+//
+// followed by the value of a number or character. The parser, the checker
+// and the core MIR emitter come next.
+
+void = print_kind(i32 kind) {
+  if (kind == TK_IDENT) {
+    print("ident");
+  } else if (kind == TK_INT) {
+    print("int");
+  } else if (kind == TK_CHAR) {
+    print("char");
+  } else if (kind == TK_STRING) {
+    print("string");
+  } else if (kind == TK_KEYWORD) {
+    print("keyword");
+  } else if (kind == TK_PUNCT) {
+    print("punct");
+  } else {
+    print("error");
+  }
+}
+
+i32 = main(i32 argc, ##u8 argv) {
+  #u8 src;
+  uword len = read_all(~src);
+  Lexer lx;
+  lex_init(~lx, src, len);
+
+  Token t;
+  u64 count = 0;
+  i32 status = 0;
+  while (TRUE) {
+    lex_next(~lx, ~t);
+    if (t.kind == TK_EOF) {
+      break;
+    }
+    print_u64(t.line);
+    putchar(':');
+    print_u64(t.col);
+    putchar(' ');
+    print_kind(t.kind);
+    putchar(' ');
+    print_n(#src[t.start], t.len);
+    if (t.kind == TK_INT || t.kind == TK_CHAR) {
+      print(" = ");
+      print_u64(t.value);
+    }
+    putchar('\n');
+    count = count + 1;
+    if (t.kind == TK_ERROR) {
+      status = 1;
+      break;
+    }
+  }
+  print_u64(count);
+  print(" tokens\n");
+  return status;
+}

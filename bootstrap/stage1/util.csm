@@ -1,0 +1,93 @@
+// cesium1: small helpers every file of the unit uses. Written in S0.
+//
+// Input and output go through ISO C's getchar and putchar. They return and
+// take an i32, so no pointer has to be tested: S0 has no null and no way to
+// compare pointers (cesiumlang/cesium#9).
+extern libc = import('c') {
+  i32 = getchar();
+  i32 = putchar(i32 c);
+}
+
+const u8 TRUE = 1;
+const u8 FALSE = 0;
+
+void = print(#u8 s) {
+  uword i = 0;
+  while (s[i] != 0) {
+    putchar(s[i] as i32);
+    i = i + 1;
+  }
+}
+
+// Prints len bytes starting at s.
+void = print_n(#u8 s, uword len) {
+  uword i = 0;
+  while (i < len) {
+    putchar(s[i] as i32);
+    i = i + 1;
+  }
+}
+
+void = print_u64(u64 v) {
+  u8 digits[20];
+  uword n = 0;
+  if (v == 0) {
+    putchar('0');
+    return;
+  }
+  while (v != 0) {
+    digits[n] = ('0' + (v % 10)) as u8;
+    v = v / 10;
+    n = n + 1;
+  }
+  while (n != 0) {
+    n = n - 1;
+    putchar(digits[n] as i32);
+  }
+}
+
+// True when the len bytes at a are the NUL-terminated string b.
+u8 = text_is(#u8 a, uword len, #u8 b) {
+  uword i = 0;
+  while (i < len) {
+    if (b[i] == 0) {
+      return FALSE;
+    }
+    if (a[i] != b[i]) {
+      return FALSE;
+    }
+    i = i + 1;
+  }
+  return b[len] == 0;
+}
+
+// The whole of standard input, in memory that is never freed. The bytes are
+// followed by a NUL. Returns the length without the NUL.
+uword = read_all(~#u8 out) {
+  uword cap = 4096;
+  uword len = 0;
+  ~u8 buf := alloc(cap);
+  while (TRUE) {
+    i32 c = getchar();
+    if (c < 0) {
+      break;
+    }
+    if (len + 1 == cap) {
+      // S0 has no realloc: take a larger block and copy
+      uword bigger = cap * 2;
+      ~u8 grown := alloc(bigger);
+      uword i = 0;
+      while (i < len) {
+        grown[i] = buf[i];
+        i = i + 1;
+      }
+      buf := grown;
+      cap = bigger;
+    }
+    buf[len] = c as u8;
+    len = len + 1;
+  }
+  buf[len] = 0;
+  out[0] #= buf;
+  return len;
+}
