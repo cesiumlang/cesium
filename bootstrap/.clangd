@@ -1,4 +1,0 @@
-# Stage 0 is C: undo the C++ settings of the repository's .clangd
-CompileFlags:
-  Remove:
-    - -xc++
