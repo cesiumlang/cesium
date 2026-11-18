@@ -1,2 +1,11 @@
-*.cs linguist-language=cesium
-*.czm linguist-language=cesium
+*.csm linguist-language=cesium
+*.csi linguist-language=cesium
+
+# sh reads a CR at a line's end as part of the line
+*.sh text eol=lf
+
+# the test corpus is compared byte for byte
+*.csm text eol=lf
+*.csi text eol=lf
+*.mir text eol=lf
+*.expected text eol=lf

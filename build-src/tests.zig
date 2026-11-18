@@ -1,0 +1,341 @@
+//! The stage 0 test corpus (bootstrap/tests), as build steps.
+//!
+//!   s0/<name>.csm + <name>.expected   compile with cesium0 (most together with
+//!                                     s0/lib.csm), assemble and link with
+//!                                     `zig cc`, run, compare stdout
+//!   s0/<name>.mir                     golden: the core MIR cesium0 builds
+//!   s0/errors/<name>.csm              cesium0 must reject it with the message
+//!   mir/<name>.mir + <name>.expected  core MIR text: print it back unchanged,
+//!                                     compile it, run, compare stdout
+//!   mir/errors/<name>.mir             libcsmir must reject it with the message
+//!
+//! and cesium1 (bootstrap/stage1, written in S0 and built by cesium0), which
+//! reads a unit on standard input:
+//!
+//!   for every s0/<name>.csm run test  its core MIR must be cesium0's
+//!                                     --emit-mir output for the same files
+//!   for every s0/errors/<name>.csm    it must reject it with the message
+//!   its own source                    its core MIR must be cesium0's, and a
+//!                                     second cesium1, built by cesium1 from
+//!                                     that source, must give it again
+
+const std = @import("std");
+
+const Run = struct {
+    name: []const u8,
+    expected: []const u8,
+    /// The core MIR text to compare with: what cesium0 builds from an S0
+    /// test, or the MIR test itself.
+    mir: ?[]const u8 = null,
+    /// An S0 test compiled together with lib.csm, as one unit.
+    lib: bool = false,
+};
+const Reject = struct { name: []const u8, message: []const u8 };
+
+const s0_dir = "bootstrap/tests/s0/";
+const mir_dir = "bootstrap/tests/mir/";
+
+/// An S0 test that uses the output helpers of lib.csm.
+fn s0(comptime name: []const u8) Run {
+    return .{ .name = name, .expected = @embedFile("../" ++ s0_dir ++ name ++ ".expected"), .lib = true };
+}
+
+/// A self-contained S0 test whose core MIR is checked too.
+fn s0Golden(comptime name: []const u8) Run {
+    return .{
+        .name = name,
+        .expected = @embedFile("../" ++ s0_dir ++ name ++ ".expected"),
+        .mir = @embedFile("../" ++ s0_dir ++ name ++ ".mir"),
+    };
+}
+
+fn mir(comptime name: []const u8) Run {
+    return .{
+        .name = name,
+        .expected = @embedFile("../" ++ mir_dir ++ name ++ ".expected"),
+        .mir = @embedFile("../" ++ mir_dir ++ name ++ ".mir"),
+    };
+}
+
+const s0_runs = [_]Run{
+    s0Golden("tokens"),
+    s0("arith"),
+    s0("pointers"),
+    s0("structs"),
+    s0("control"),
+    s0("globals"),
+};
+
+const s0_rejects = [_]Reject{
+    .{ .name = "literal_no_context", .message = "the type of this literal is not determined by its context" },
+    .{ .name = "pointer_plain_init", .message = "a pointer is initialized with ':=', '#=' or '~='" },
+    .{ .name = "mixed_types", .message = "convert one with 'as'" },
+    .{ .name = "plain_to_pointer_param", .message = "expected #i32, found i32" },
+    .{ .name = "reserved_word", .message = "is a Cesium keyword that S0 does not have" },
+    .{ .name = "unary_minus", .message = "S0 has no unary minus" },
+    .{ .name = "shadow", .message = "is already the name of" },
+    .{ .name = "hex_literal", .message = "S0 has decimal integer literals only" },
+    .{ .name = "alloc_borrow", .message = "alloc returns ownership" },
+    .{ .name = "missing_return", .message = "does not return a value on every path" },
+    .{ .name = "deep_expression", .message = "nested too deeply (the limit is 128 levels)" },
+    .{ .name = "deep_blocks", .message = "nested too deeply (the limit is 128 levels)" },
+};
+
+const mir_runs = [_]Run{
+    mir("cstr_len"),
+    mir("integers"),
+    mir("layout"),
+};
+
+const mir_rejects = [_]Reject{
+    .{ .name = "type_mismatch", .message = "the operands must have the same type" },
+    .{ .name = "break_outside_loop", .message = "break outside a loop" },
+    .{ .name = "no_return", .message = "does not return a value on every path" },
+    .{ .name = "unknown_local", .message = "unknown local %x" },
+    .{ .name = "bad_version", .message = "expected MIR version 0" },
+    .{ .name = "struct_by_value_param", .message = "only integers and pointers" },
+    .{ .name = "deep_nesting", .message = "nested too deeply (the limit is 1024 levels)" },
+};
+
+/// cesium1's files, in the order they make one unit.
+const stage1_sources = [_][]const u8{ "util.csm", "lex.csm", "parse.csm", "types.csm", "lower.csm", "decl.csm", "main.csm" };
+
+pub fn add(
+    b: *std.Build,
+    step: *std.Build.Step,
+    target: std.Build.ResolvedTarget,
+    cesium0: *std.Build.Step.Compile,
+    csrt: *std.Build.Step.Compile,
+    csmir: *std.Build.Step.Compile,
+    devkit: []const u8,
+) void {
+    for (s0_runs) |t| {
+        const source = b.path(b.fmt(s0_dir ++ "{s}.csm", .{t.name}));
+        if (t.mir) |golden| {
+            const emit = b.addRunArtifact(cesium0);
+            emit.addArg("--emit-mir");
+            emit.addArg("-o");
+            const mir_out = emit.addOutputFileArg(b.fmt("{s}.mir", .{t.name}));
+            emit.addFileArg(source);
+            step.dependOn(&b.addCheckFile(mir_out, .{ .expected_exact = golden }).step);
+        }
+        // compile, link, run
+        const compile = b.addRunArtifact(cesium0);
+        compile.addArg("-o");
+        const asm_out = compile.addOutputFileArg(b.fmt("{s}.s", .{t.name}));
+        compile.addFileArg(source);
+        if (t.lib) compile.addFileArg(b.path(s0_dir ++ "lib.csm"));
+        step.dependOn(runProgram(b, target, csrt, b.fmt("s0-{s}", .{t.name}), asm_out, t.expected));
+    }
+    for (s0_rejects) |t| {
+        const run = b.addRunArtifact(cesium0);
+        run.addArg("-o");
+        _ = run.addOutputFileArg(b.fmt("{s}.s", .{t.name}));
+        run.addFileArg(b.path(b.fmt(s0_dir ++ "errors/{s}.csm", .{t.name})));
+        run.expectExitCode(1);
+        run.addCheck(.{ .expect_stderr_match = t.message });
+        step.dependOn(&run.step);
+    }
+    for (mir_runs) |t| {
+        const source = b.path(b.fmt(mir_dir ++ "{s}.mir", .{t.name}));
+        // printing what was parsed gives the file back
+        const print = b.addRunArtifact(cesium0);
+        print.addArg("--emit-mir");
+        print.addArg("-o");
+        const mir_out = print.addOutputFileArg(b.fmt("{s}.mir", .{t.name}));
+        print.addArg("--mir");
+        print.addFileArg(source);
+        step.dependOn(&b.addCheckFile(mir_out, .{ .expected_exact = t.mir.? }).step);
+        // compile, link, run
+        const compile = b.addRunArtifact(cesium0);
+        compile.addArg("-o");
+        const asm_out = compile.addOutputFileArg(b.fmt("{s}.s", .{t.name}));
+        compile.addArg("--mir");
+        compile.addFileArg(source);
+        step.dependOn(runProgram(b, target, csrt, b.fmt("mir-{s}", .{t.name}), asm_out, t.expected));
+    }
+    for (mir_rejects) |t| {
+        const run = b.addRunArtifact(cesium0);
+        run.addArg("-o");
+        _ = run.addOutputFileArg(b.fmt("{s}.s", .{t.name}));
+        run.addArg("--mir");
+        run.addFileArg(b.path(b.fmt(mir_dir ++ "errors/{s}.mir", .{t.name})));
+        run.expectExitCode(1);
+        run.addCheck(.{ .expect_stderr_match = t.message });
+        step.dependOn(&run.step);
+    }
+
+    addStage1(b, step, target, cesium0, csrt, csmir, devkit);
+}
+
+/// cesium1, written in S0: compiled by cesium0, then checked against it.
+fn addStage1(
+    b: *std.Build,
+    step: *std.Build.Step,
+    target: std.Build.ResolvedTarget,
+    cesium0: *std.Build.Step.Compile,
+    csrt: *std.Build.Step.Compile,
+    csmir: *std.Build.Step.Compile,
+    devkit: []const u8,
+) void {
+    const tool = b.addExecutable(.{
+        .name = "stage1_tool",
+        .root_module = b.createModule(.{ .target = b.graph.host, .optimize = .Debug, .link_libc = true }),
+    });
+    tool.root_module.addCSourceFile(.{
+        .file = b.path("build-src/stage1_tool.c"),
+        .flags = &.{ "-std=c99", "-Wall", "-Wextra", "-Werror" },
+    });
+    // cesium1 writes its MIR through a C text stream
+    const crlf = target.result.os.tag == .windows;
+
+    var sources: [stage1_sources.len]std.Build.LazyPath = undefined;
+    for (stage1_sources, 0..) |file, i| sources[i] = b.path(b.fmt("bootstrap/stage1/{s}", .{file}));
+    const compile1 = b.addRunArtifact(cesium0);
+    compile1.addArg("-o");
+    const cesium1_asm = compile1.addOutputFileArg("cesium1.s");
+    for (sources) |source| compile1.addFileArg(source);
+    const cesium1 = linkCompiler(b, target, csrt, csmir, devkit, "cesium1", cesium1_asm);
+
+    // the S0 run tests, their files in the order cesium0 is given them above
+    for (s0_runs) |t| {
+        const source = b.path(b.fmt(s0_dir ++ "{s}.csm", .{t.name}));
+        const lib = b.path(s0_dir ++ "lib.csm");
+        const files: []const std.Build.LazyPath = if (t.lib) &.{ source, lib } else &.{source};
+        _ = checkMir(b, step, tool, crlf, cesium0, cesium1, b.fmt("s1-{s}", .{t.name}), files);
+    }
+    for (s0_rejects) |t| {
+        const run = b.addRunArtifact(cesium1);
+        run.setName(b.fmt("cesium1 rejects {s}", .{t.name}));
+        run.setStdIn(.{ .lazy_path = b.path(b.fmt(s0_dir ++ "errors/{s}.csm", .{t.name})) });
+        run.expectExitCode(1);
+        run.addCheck(.{ .expect_stdout_match = t.message });
+        step.dependOn(&run.step);
+    }
+
+    // the fixed point: cesium1 compiles itself to cesium0's MIR, and the
+    // cesium1 it builds from its own source does the same
+    const self = checkMir(b, step, tool, crlf, cesium0, cesium1, "s1-self", &sources);
+    const compile2 = b.addRunArtifact(cesium1);
+    compile2.setName("cesium1 compiles cesium1");
+    const cesium2_asm = compile2.addOutputFileArg("cesium1-gen2.s");
+    compile2.setStdIn(.{ .lazy_path = self.unit });
+    compile2.expectExitCode(0);
+    const cesium2 = linkCompiler(b, target, csrt, csmir, devkit, "cesium1-gen2", cesium2_asm);
+    _ = checkMirOf(b, step, tool, crlf, cesium2, "s1-gen2-self", self.unit, self.reference);
+}
+
+const Unit = struct {
+    /// The files one after another: cesium1's standard input.
+    unit: std.Build.LazyPath,
+    /// cesium0's core MIR for the files.
+    reference: std.Build.LazyPath,
+};
+
+/// Checks that cesium1 gives cesium0's core MIR for the files, as one unit.
+fn checkMir(
+    b: *std.Build,
+    step: *std.Build.Step,
+    tool: *std.Build.Step.Compile,
+    crlf: bool,
+    cesium0: *std.Build.Step.Compile,
+    cesium1: *std.Build.Step.Compile,
+    name: []const u8,
+    files: []const std.Build.LazyPath,
+) Unit {
+    const emit = b.addRunArtifact(cesium0);
+    emit.addArg("--emit-mir");
+    emit.addArg("-o");
+    const reference = emit.addOutputFileArg(b.fmt("{s}.mir", .{name}));
+    for (files) |file| emit.addFileArg(file);
+
+    const cat = b.addRunArtifact(tool);
+    cat.addArg("cat");
+    const unit = cat.addOutputFileArg(b.fmt("{s}.csm", .{name}));
+    for (files) |file| cat.addFileArg(file);
+
+    return checkMirOf(b, step, tool, crlf, cesium1, name, unit, reference);
+}
+
+/// Runs a cesium1 on a unit and compares its output with the reference MIR.
+fn checkMirOf(
+    b: *std.Build,
+    step: *std.Build.Step,
+    tool: *std.Build.Step.Compile,
+    crlf: bool,
+    cesium1: *std.Build.Step.Compile,
+    name: []const u8,
+    unit: std.Build.LazyPath,
+    reference: std.Build.LazyPath,
+) Unit {
+    const run = b.addRunArtifact(cesium1);
+    run.setName(b.fmt("{s} {s}", .{ cesium1.name, name }));
+    run.setStdIn(.{ .lazy_path = unit });
+    run.expectExitCode(0);
+    const output = run.captureStdOut(.{ .basename = b.fmt("{s}.out.mir", .{name}) });
+
+    const same = b.addRunArtifact(tool);
+    same.setName(b.fmt("compare {s} with cesium0", .{name}));
+    same.addArg("same");
+    same.addFileArg(reference);
+    same.addFileArg(output);
+    if (crlf) same.addArg("crlf");
+    same.expectExitCode(0);
+    step.dependOn(&same.step);
+    return .{ .unit = unit, .reference = reference };
+}
+
+/// Links cesium1 from assembly: it calls libcsmir, which runs QBE in-process.
+fn linkCompiler(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    csrt: *std.Build.Step.Compile,
+    csmir: *std.Build.Step.Compile,
+    devkit: []const u8,
+    name: []const u8,
+    assembly: std.Build.LazyPath,
+) *std.Build.Step.Compile {
+    const exe = linkProgram(b, target, csrt, name, assembly);
+    exe.root_module.linkLibrary(csmir);
+    // QBE, as cesium0 links it (build-src/__root__.zig)
+    exe.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ devkit, "qbe", "lib", "libqbe.a" }) });
+    return exe;
+}
+
+/// Assembles and links what cesium0 wrote, with libcsrt and libc.
+fn linkProgram(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    csrt: *std.Build.Step.Compile,
+    name: []const u8,
+    assembly: std.Build.LazyPath,
+) *std.Build.Step.Compile {
+    const exe = b.addExecutable(.{
+        .name = name,
+        .root_module = b.createModule(.{ .target = target, .optimize = .Debug, .link_libc = true }),
+    });
+    exe.root_module.addAssemblyFile(assembly);
+    exe.root_module.linkLibrary(csrt);
+    return exe;
+}
+
+/// Expected output as the target's C library writes it: on Windows a text
+/// stream gets "\r\n" for every '\n'.
+fn hostText(b: *std.Build, target: std.Build.ResolvedTarget, text: []const u8) []const u8 {
+    if (target.result.os.tag != .windows) return text;
+    return std.mem.replaceOwned(u8, b.allocator, text, "\n", "\r\n") catch @panic("OOM");
+}
+
+/// Links what cesium0 wrote, runs it and compares its output.
+fn runProgram(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    csrt: *std.Build.Step.Compile,
+    name: []const u8,
+    assembly: std.Build.LazyPath,
+    expected: []const u8,
+) *std.Build.Step {
+    const run = b.addRunArtifact(linkProgram(b, target, csrt, name, assembly));
+    run.expectStdOutEqual(hostText(b, target, expected));
+    return &run.step;
+}

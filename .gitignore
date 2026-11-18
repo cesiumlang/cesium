@@ -1,15 +1,16 @@
 /.claude/
+.local-gitignore
+
+# clangd index
 /.cache/
-/build/
+
+# Zig
 /.zig-cache/
 /zig-out/
-# /buildtools/bin/
-# /buildtools/downloads/
-# /buildtools/llvm-*/
-# /buildtools/clang+llvm-*-x86_64-pc-windows-msvc/
-# /buildtools/build/
-/thirdparty/qt/qt/
-/.dep-cache/
+/zig-pkg/
+
+# the Cesium devkit: python tools/fetch-devkit.py
+/.devkit/
+/.devkit-downloads/
+
 /tmp/
-/doc/
-/.cesium-doc/

@@ -1,0 +1,98 @@
+// Pointers under the ownership design (cesiumlang/cesium#11): dereference by
+// default, address-context operators, explicit addresses for plain values.
+// Stage 0 parses these forms and enforces none of the ownership rules.
+
+// p is read through and assigned through (rules 5 and 29)
+void = increment(~i32 p) {
+  p = p + 1;
+}
+
+void = swap(~i64 a, ~i64 b) {
+  i64 t = a;
+  a = b;
+  b = t;
+}
+
+// writes n through the pointer that pp points at
+void = set_through(##i32 pp, i32 n) {
+  pp = n;
+}
+
+// re-points the caller's pointer
+void = repoint(##i32 pp, #i32 target) {
+  pp[0] #= target;
+}
+
+u64 = sum(#u64 values, uword count) {
+  u64 total = 0;
+  uword i = 0;
+  while (i < count) {
+    total = total + values[i];
+    i = i + 1;
+  }
+  return total;
+}
+
+// returns a borrow derived from its parameter (rule 23)
+#u8 = skip(#u8 s, uword n) {
+  return #s[n];
+}
+
+i32 = main(i32 argc, ##u8 argv) {
+  i32 x = 41;
+  increment(~x);
+  show("x after increment", x as i64);
+
+  i64 a = 1;
+  i64 b = 2;
+  swap(~a, ~b);
+  show("a after swap", a);
+  show("b after swap", b);
+
+  // a borrow, re-pointed with a later #=
+  #i32 p #= #x;
+  show("p reads x", p as i64);
+  i32 y = 7;
+  p #= #y;
+  show("p reads y", p as i64);
+  show("p + x", (p + x) as i64);
+
+  // pointer to pointer
+  ~i32 q ~= ~x;
+  set_through(~q, 100);
+  show("x through ##", x as i64);
+  repoint(~q, #y);
+  show("q after repoint", q as i64);
+
+  // arrays: an element's address is a pointer to the rest
+  u64 values[4];
+  values[0] = 10;
+  values[1] = 20;
+  values[2] = 30;
+  values[3] = 40;
+  show_u("sum of 4", sum(#values[0], 4));
+  show_u("sum of last 2", sum(#values[2], 2));
+
+  // strings are #u8
+  #u8 s #= "hello, cesium";
+  print(skip(s, 7));
+  putchar('\n');
+  show("s[1]", s[1] as i64);
+
+  // owned memory from alloc, received with :=
+  ~u64 heap := alloc(3);
+  heap[0] = 5;
+  heap[1] = 6;
+  heap[2] = 7;
+  show_u("sum of heap", sum(heap, 3));
+  show_u("heap[0] - 5", heap[0] - 5);
+
+  // pointer conversions
+  #u8 bytes #= heap as #u8;
+  show("low byte of heap[1]", bytes[8] as i64);
+  uword address = (#values[1]) as uword;
+  #u64 back #= address as #u64;
+  show_u("round trip through uword", back);
+  show_u("element size", (((#values[1]) as uword) - ((#values[0]) as uword)) as u64);
+  return 0;
+}

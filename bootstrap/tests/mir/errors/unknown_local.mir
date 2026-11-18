@@ -1,0 +1,5 @@
+cesium-mir 0
+
+func @f() -> i32 {
+  return %x
+}

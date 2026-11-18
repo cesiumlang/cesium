@@ -1,0 +1,192 @@
+// cesium1: helpers every file of the unit uses. Written in S0.
+//
+// Input and output go through ISO C's getchar and putchar. They return and
+// take an i32, so no pointer has to be tested: S0 has no null and no way to
+// compare pointers (cesiumlang/cesium#9). Errors are reported on standard
+// output, since S0 cannot name stderr (a macro in C); exit ends the program
+// at the first error, so no function has to pass a failure back up.
+extern libc = import('c') {
+  i32 = getchar();
+  i32 = putchar(i32 c);
+  void = exit(i32 status);
+}
+
+const u8 TRUE = 1;
+const u8 FALSE = 0;
+
+void = print(#u8 s) {
+  uword i = 0;
+  while (s[i] != 0) {
+    putchar(s[i] as i32);
+    i = i + 1;
+  }
+}
+
+// Prints len bytes starting at s.
+void = print_n(#u8 s, uword len) {
+  uword i = 0;
+  while (i < len) {
+    putchar(s[i] as i32);
+    i = i + 1;
+  }
+}
+
+// The length of a NUL-terminated string.
+uword = text_len(#u8 s) {
+  uword i = 0;
+  while (s[i] != 0) {
+    i = i + 1;
+  }
+  return i;
+}
+
+// The whole of standard input, in memory that is never freed. The bytes are
+// followed by a NUL. Returns the length without the NUL.
+uword = read_all(~#u8 out) {
+  uword cap = 4096;
+  uword len = 0;
+  ~u8 buf := alloc(cap);
+  while (TRUE) {
+    i32 c = getchar();
+    if (c < 0) {
+      break;
+    }
+    if (len + 1 == cap) {
+      // S0 has no realloc: take a larger block and copy
+      uword bigger = cap * 2;
+      ~u8 grown := alloc(bigger);
+      uword i = 0;
+      while (i < len) {
+        grown[i] = buf[i];
+        i = i + 1;
+      }
+      buf := grown;
+      cap = bigger;
+    }
+    buf[len] = c as u8;
+    len = len + 1;
+  }
+  buf[len] = 0;
+  out[0] #= buf;
+  return len;
+}
+
+// ---- growable byte buffers ------------------------------------------------
+
+// Bytes that grow by doubling. A buffer starts as all zero: no block yet,
+// which is never read because len is 0. Old blocks are not freed (S0 has no
+// free), so a pointer into an old block still reads the old bytes.
+struct Buf {
+  ~u8 data;
+  uword len;
+  uword cap;
+}
+
+// Makes room for more bytes after len.
+void = buf_reserve(~Buf b, uword more) {
+  if (b.len + more <= b.cap) {
+    return;
+  }
+  uword cap = b.cap * 2;
+  if (cap < 256) {
+    cap = 256;
+  }
+  while (cap < b.len + more) {
+    cap = cap * 2;
+  }
+  ~u8 grown := alloc(cap);
+  uword i = 0;
+  while (i < b.len) {
+    grown[i] = b.data[i];
+    i = i + 1;
+  }
+  b.data := grown;
+  b.cap = cap;
+}
+
+void = buf_putc(~Buf b, u8 c) {
+  buf_reserve(b, 1);
+  b.data[b.len] = c;
+  b.len = b.len + 1;
+}
+
+void = buf_putn(~Buf b, #u8 s, uword n) {
+  buf_reserve(b, n);
+  uword i = 0;
+  while (i < n) {
+    b.data[b.len + i] = s[i];
+    i = i + 1;
+  }
+  b.len = b.len + n;
+}
+
+void = buf_puts(~Buf b, #u8 s) {
+  buf_putn(b, s, text_len(s));
+}
+
+// Appends a copy of n bytes the buffer already holds at start. The room is
+// made first, so the copy reads the block it writes.
+void = buf_copy(~Buf b, uword start, uword n) {
+  buf_reserve(b, n);
+  uword i = 0;
+  while (i < n) {
+    b.data[b.len + i] = b.data[start + i];
+    i = i + 1;
+  }
+  b.len = b.len + n;
+}
+
+void = buf_put_u64(~Buf b, u64 v) {
+  u8 digits[20];
+  uword n = 0;
+  if (v == 0) {
+    buf_putc(b, '0');
+    return;
+  }
+  while (v != 0) {
+    digits[n] = ('0' + (v % 10)) as u8;
+    v = v / 10;
+    n = n + 1;
+  }
+  while (n != 0) {
+    n = n - 1;
+    buf_putc(b, digits[n]);
+  }
+}
+
+// ---- diagnostics ----------------------------------------------------------
+
+// The message being built. It is printed by err_end, which ends the program.
+Buf g_err;
+
+// Starts a message "line:col: error: ". Lines count from the start of the
+// standard input, which may hold several files one after another.
+void = err_begin(u64 line, u64 col) {
+  buf_put_u64(~g_err, line);
+  buf_putc(~g_err, ':');
+  buf_put_u64(~g_err, col);
+  buf_puts(~g_err, ": error: ");
+}
+
+void = err_s(#u8 s) {
+  buf_puts(~g_err, s);
+}
+
+void = err_u64(u64 v) {
+  buf_put_u64(~g_err, v);
+}
+
+// Prints the message and stops with status 1, an error in the source.
+void = err_end() {
+  buf_putc(~g_err, '\n');
+  print_n(g_err.data, g_err.len);
+  exit(1);
+}
+
+// A limit of cesium1 itself was reached; not an error in the source.
+void = fail_internal(#u8 msg) {
+  print("error: internal: ");
+  print(msg);
+  putchar('\n');
+  exit(2);
+}

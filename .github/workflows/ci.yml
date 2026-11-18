@@ -1,41 +1,130 @@
-name: Run CI
+name: CI
+
+# Builds stage 0 (bootstrap/) with the devkit's Zig and runs its test corpus,
+# on every host the devkit supports that QBE can target. Pull requests and
+# pushes to main and dev are built.
 
 on:
   push:
+    branches: [main, dev]
   pull_request:
-    branches:
-      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
+  stage0:
+    name: Stage 0 on ${{ matrix.host }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-        # python-version:
-        #   - "3.10"
-        #   - "3.11"
-        #   - "3.12"
-        #   - "3.13"
+        include:
+          - { host: x86_64-linux-musl, runner: ubuntu-24.04 }
+          - { host: aarch64-linux-musl, runner: ubuntu-24.04-arm }
+          - { host: x86_64-windows-gnu, runner: windows-2025 }
+          - { host: x86_64-macos-none, runner: macos-15-intel }
+          - { host: aarch64-macos-none, runner: macos-15 }
     steps:
-      - uses: szenius/set-timezone@v2.0
-        with:
-          timezoneLinux: "America/Chicago"
-          timezoneMacos: "America/Chicago"
-          timezoneWindows: "Central Standard Time"
+      # the submodules (buildtools, the cspell dictionary) are not needed
+      - uses: actions/checkout@v7
 
-      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v7
         with:
-          submodules: true
+          python-version: "3.12"
 
-      # - name: Install Python dependencies
-      #   if: contains( matrix.os, 'ubuntu')
-      #   run: |
-      #     python -m pip install --upgrade pip
-      #     pip install hatch
+      - name: Fetch the devkit
+        run: python tools/fetch-devkit.py --host "${{ matrix.host }}"
+
+      - name: Build and test stage 0
+        run: .devkit/zig/zig build test -Dtarget="${{ matrix.host }}" --summary all
+
+  # The stage 0 C dialect (cesiumlang/cesium#10) beyond what `zig cc` checks
+  # in the job above: the source check, other compilers, and the sanitizers.
+  dialect:
+    name: C dialect
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Source check (banned identifiers, common header)
+        run: python3 tools/check-c-dialect.py
+
+      - name: Install TinyCC
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tcc
+
+      - name: GCC, as C99 and as C11
+        run: |
+          gcc --version | head -1
+          bash tools/portable-c.sh compile gnu gcc
+
+      - name: Clang, as C99 and as C11
+        run: |
+          clang --version | head -1
+          bash tools/portable-c.sh compile gnu clang
+
+      # the canary for accidental extensions
+      - name: TinyCC, as C99 and as C11
+        run: |
+          tcc -v
+          bash tools/portable-c.sh compile tcc tcc
+
+      - name: Test corpus under ASan and UBSan
+        run: bash tools/portable-c.sh sanitize clang
+
+      # damaged copies of the corpus: cesium0 must reject or accept each
+      # without crashing; the seed is fixed so that a failure can be repeated
+      - name: Fuzz the MIR text parser and the S0 front end
+        run: bash tools/portable-c.sh fuzz clang 6000 1
+
+      - name: Keep the failing inputs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-failures
+          path: tmp/portable-c/fuzz/inputs/
+          if-no-files-found: ignore
+
+  msvc:
+    name: C dialect (MSVC)
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: MSVC, as C11
+        run: bash tools/portable-c.sh compile msvc cl
+
+  # the one check the rulesets require
+  ci:
+    name: CI
+    needs: [stage0, dialect, msvc]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Every job passed or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          for r in $RESULTS; do
+            case $r in
+              success | skipped) ;;
+              *) echo "::error::a job ended as $r"; exit 1 ;;
+            esac
+          done

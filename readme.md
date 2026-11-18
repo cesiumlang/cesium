@@ -30,13 +30,49 @@ The language strikes a balance between safety and performance, providing develop
 ### Basic Program Structure
 
 ```cesium
-// hello.cs
+// hello.csm
 void = main() {
   printf("Hello, Cesium!\n");
 }
 ```
 
-## Building
+## Status
 
-<!-- To build on Windows, you will need to install the [Windows SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/).   -->
-The current default builds use Zig and Clang, which can be installed via the script in [buildtools](https://github.com/cesiumlang/cesium-buildtools).
+The language design and the compiler's architecture are recorded as issues in this repository; they are the knowledge base. The decisions so far (label [`decision`](https://github.com/cesiumlang/cesium/issues?q=is%3Aissue+label%3Adecision)):
+
+- The compiler is written in Cesium. A small stage 0 compiler in portable C compiles a tiny subset, S0, in which the first Cesium-written compiler (`cesium1`) is written ([ADR 0002](https://github.com/cesiumlang/cesium/issues/5), [stage 0 and S0](https://github.com/cesiumlang/cesium/issues/9), [stage 0 C dialect](https://github.com/cesiumlang/cesium/issues/10)).
+- Every frontend lowers to a middle IR ([MIR](https://github.com/cesiumlang/cesium/issues/8)) with two backends behind it: QBE first, LLVM as the primary release backend ([ADR 0001](https://github.com/cesiumlang/cesium/issues/4), [ADR 0004](https://github.com/cesiumlang/cesium/issues/7)).
+- `build.zig` is the build system and runs in CI; the toolchain (pinned Zig, LLVM and LLD libraries, QBE) comes prebuilt from [cesiumlang/devkits](https://github.com/cesiumlang/devkits).
+- Source files end in `.csm`, module interface files in `.csi` ([#14](https://github.com/cesiumlang/cesium/issues/14)).
+
+Open design questions carry the [`design`](https://github.com/cesiumlang/cesium/issues?q=is%3Aissue+is%3Aopen+label%3Adesign) label.
+
+## Repository layout
+
+[`bootstrap/`](bootstrap/README.md) holds the bootstrap compilers: stage 0 (the S0 compiler `cesium0`, the core MIR library `libcsmir` and a small runtime, in portable C) and stage 1 (`cesium1`, a compiler for S0 written in S0), with their tests. `build.zig` builds and tests them with the Zig of the devkit:
+
+```sh
+python tools/fetch-devkit.py
+.devkit/zig/zig build test
+```
+
+| Path | What |
+| --- | --- |
+| [`bootstrap/`](bootstrap/README.md) | Stage 0 and stage 1: sources, runtime and tests |
+| `build.zig`, `build-src/` | The build |
+| `devkit-version`, `tools/fetch-devkit.py` | Which devkit the build uses, and the script that downloads it to `.devkit/` |
+| `buildtools/` | Submodule: [cesium-buildtools](https://github.com/cesiumlang/cesium-buildtools), Windows scripts for tools the devkit does not contain. Not needed to build the compiler. |
+| `.cspell/cesium/` | Submodule: the spelling dictionary of Cesium terms |
+
+The other Cesium repositories (the devkits, the VS Code extension, the website) are not submodules of this one. [cesium-workspace](https://github.com/cesiumlang/cesium-workspace) gathers all of them, this one included, as submodules of one VS Code workspace.
+
+## Development setup
+
+- **Build:** Python 3 to fetch the devkit; nothing else. The devkit's Zig is the C compiler and the build system.
+- **direnv:** `.envrc` puts the devkit's Zig and QBE and the build outputs on `PATH`. Run `direnv allow` once.
+- **VS Code:** open `cesium.code-workspace`. It points the Zig extension at the devkit and recommends the extensions used here.
+- **clangd:** `zig cc` is Clang, so clangd is the language server for the C sources (`.clangd`, `bootstrap/compile_flags.txt`). The devkit does not contain clangd. The VS Code clangd extension offers to download it when none is on `PATH`.
+
+## History
+
+Until November 2026 this repository held a C++ prototype from September 2025: a documentation generator with a command-line interface, built with CMake. It was removed because the compiler is written in Cesium ([ADR 0002](https://github.com/cesiumlang/cesium/issues/5)). What it did is recorded as requirements for the new toolchain in [#64](https://github.com/cesiumlang/cesium/issues/64); its last state is commit `d7a72d9`.

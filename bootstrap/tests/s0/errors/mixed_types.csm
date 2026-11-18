@@ -1,0 +1,7 @@
+// There are no implicit conversions between integer types.
+i32 = main(i32 argc, ##u8 argv) {
+  u8 a = 1;
+  u64 b = 2;
+  u64 c = a + b;
+  return 0;
+}

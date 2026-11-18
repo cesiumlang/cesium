@@ -1,110 +1,169 @@
 {
-	"folders": [
-		{
-			"path": "."
-		}
-	],
-	"settings": {
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
     "files.associations": {
-      "*.cs": "cesium",
-      "*.czm": "cesium"
+      "*.csm": "cesium",
+      "*.csi": "cesium",
+      "VERSION": "plaintext",
+      ".local-gitignore": "gitignore",
+      ".github/workflows/exempt.txt": "gitignore",
+      ".clangd": "yaml",
+      "**/.claude/projects/*/memory/*.md": "plaintext",
     },
-    "files.watcherExclude": {
-			// "buildtools/clang+llvm-*/": true,
-			// "buildtools/llvm-*/": true,
-      // "buildtools/bin/zig-*/": true,
-			// "buildtools/bin/zig-x86_64-windows-*/": true,
-			// "buildtools/bin/cmake-*-windows-x86_64/**": true,
-			// "buildtools/bin/cmake-*/**": true,
-			"buildtools/opt/**": true,
-			"build/**": true,
-			"doc/**": true,
-      ".cesium-doc/**": true,
-			"tmp/**": true,
-      "**/.zig-cache/**": true,
-      "**/node_modules/**": true,
-      "**/.cache/**": true,
-      "**/.git/**": true,
-      "**/.dep-cache/**": true,
-      // "thirdparty/qt/qt/**": true,
-		},
     "files.exclude": {
       "**/node_modules/**": true,
+      "**/.zig-cache/**": true,
+      "**/zig-pkg/**": true,
+      "**/zig-cache*/**": true,
       ".cache/**": true,
-      ".zig-cache/**": true,
+      ".devkit-downloads/**": true,
     },
-		"editor.wrappingIndent": "indent",
-    // "markdown.styles": ["custom-tag-style.css"]
-		"[markdown]": {
+    "files.watcherExclude": {
+      "**/node_modules/**": true,
+      "**/.zig-cache/**": true,
+      "**/zig-pkg/**": true,
+      "**/zig-cache*/**": true,
+      "**/.cache/**": true,
+      "**/.git/**": true,
+      "zig-out/**": true,
+      "tmp/**": true,
+      ".devkit/**": true,
+      ".devkit-downloads/**": true,
+      "buildtools/bin/**": true,
+      "buildtools/downloads/**": true,
+      "buildtools/opt/**": true,
+    },
+    "search.exclude": {
+      ".devkit/**": true,
+      "buildtools/opt/**": true,
+    },
+    "files.insertFinalNewline": true,
+    "editor.wrappingIndent": "indent",
+    "[markdown]": {
       "editor.quickSuggestions": {
         "other": true,
         "comments": false,
         "strings": false
       }
     },
-    "files.insertFinalNewline": true,
-    // "foam.openDailyNote.onStartup": false,
-    // "foam.edit.linkReferenceDefinitions": "off",
-    // "foam.files.ignore": [
-    //   "readme.md",
-    // ],
-    // "foam.files.newNotePath": "currentDir",
-    // "foam.completion.useAlias": "whenPathDiffersFromTitle",
-    // "foam.preview.embedNoteType": "content-inline",
-    "cmake.cmakePath": "${workspaceFolder}/buildtools/opt/cmake-4.1.1/bin/cmake",
-    "clangd.path": "${workspaceFolder}/buildtools/opt/llvm-21.1.0/bin/clangd.exe",
-    "clangd.arguments": [
-      "--compile-commands-dir=${workspaceFolder}/build"
-    ],
-    "cmake.configureOnOpen": true,
-    "cmake.configureOnEdit": true,
-    "cmake.buildBeforeRun": true,
-    "cmake.launchBehavior": "breakAndReuseTerminal",
-    // "cmake.buildTask": true,
-    "terminal.integrated.env.windows": {
-      "PATH": "${workspaceFolder}/build/bin;${workspaceFolder}/buildtools/opt/llvm-21.1.0/bin;${env:PATH}"
+    "editor.semanticTokenColorCustomizations": {
+      "rules": {
+        "*.deprecated": {
+          // highlight semantic tokens that are marked as "deprecated"
+          "strikethrough": true
+        },
+      },
     },
-    "lldb.verboseLogging": true,
-    "zig.path": "${workspaceFolder}/buildtools/opt/zig-0.15.1/zig.exe",
-    "lldb.useNativePDBReader": true,
-    // "lldb.library": "${workspaceFolder}/buildtools/opt/llvm-21.1.0/bin",
-    // "zig.debugAdapter": "${workspaceFolder}/buildtools/opt/llvm-21.1.0/bin/lldb"
-    "zig.debugAdapter": "lldb"
-    // "lldb.executable": "${workspaceFolder}/buildtools/opt/llvm-21.1.0/bin/lldb.exe",
+    "terminal.integrated.automationProfile.windows": {
+      "path": "C:\\windows\\system32\\cmd.exe",
+    },
+    "ltex.additionalRules.motherTongue": "en-US",
+    "debug.onTaskErrors": "abort",  // will switch to problems pane otherwise
+
+    // the Zig of the Cesium devkit: python tools/fetch-devkit.py
+    "zig.path": "${workspaceFolder}/.devkit/zig/zig",
+    "zig.zls.enabled": "on",
+    "zig.zls.inlayHintsShowParameterName": false,
+    "zig.zls.inlayHintsExcludeSingleArgument": false,
+    "zig.zls.inlayHintsShowBuiltin": false,
+    "zig.zls.inlayHintsShowStructLiteralFieldType": false,
+    "zig.zls.inlayHintsShowVariableTypeHints": false,
+    "zig.zls.warnStyle": true,
+    "zig.zls.enableArgumentPlaceholders": false,
+
+    // The C of bootstrap/ is compiled by `zig cc`, which is Clang, so clangd
+    // is the language server for it (.clangd, bootstrap/compile_flags.txt).
+    // The devkit has no clangd: the clangd extension offers to download one
+    // when none is on PATH. The Microsoft C/C++ extension stays for
+    // debugging only.
+    "C_Cpp.intelliSenseEngine": "disabled",
+
+    // no CMake project here; C dependencies may carry a CMakeLists.txt
+    "cmake.ignoreCMakeListsMissing": true,
+    "cmake.configureOnOpen": false,
   },
   "extensions": {
-    // See http://go.microsoft.com/fwlink/?LinkId=827846
-    // for the documentation about the extensions.json format
     "recommendations": [
-      // Foam's own extension
-      // "foam.foam-vscode",
-
-      // Tons of markdown goodies (lists, tables of content, so much more)
+      "ziglang.vscode-zig",
+      "llvm-vs-code-extensions.vscode-clangd",
+      "ms-vscode.cpptools",  // windows debug
+      // "vadimcn.vscode-lldb",  // posix debug
       "yzhang.markdown-all-in-one",
-
-      // "mushan.vscode-paste-image"
       "bierner.markdown-yaml-preamble",
       "streetsidesoftware.code-spell-checker",
       "streetsidesoftware.code-spell-checker-scientific-terms",
-			"streetsidesoftware.code-spell-checker-win32",
+      "streetsidesoftware.code-spell-checker-win32",
       "ltex-plus.vscode-ltex-plus",
-
-      "vadimcn.vscode-lldb",
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "zig build",
+        "type": "shell",
+        "command": "${config:zig.path}",
+        "args": [
+          "build",
+        ],
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        },
+        "problemMatcher": [],
+        "presentation": {
+          "clear": true,
+          "reveal": "always",
+          "panel": "shared",
+          "focus": true,
+          "revealProblems": "never",
+        },
+      },
+      {
+        "label": "zig build test",
+        "type": "shell",
+        "command": "${config:zig.path}",
+        "args": [
+          "build",
+          "test",
+          "--summary",
+          "all",
+        ],
+        "group": "test",
+        "problemMatcher": [],
+        "presentation": {
+          "clear": true,
+          "reveal": "always",
+          "panel": "shared",
+          "focus": true,
+          "revealProblems": "never",
+        },
+      },
     ]
   },
   "launch": {
     "version": "0.2.0",
     "configurations": [
       {
-        "type": "lldb",
+        "name": "cesium0 (cppvsdbg)",
+        "type": "cppvsdbg",
         "request": "launch",
-        "name": "Launch",
-        // "program": "${workspaceFolder}/build/bin/cesium.exe",
-        "program": "${command:cmake.launchTargetPath}",
-        "args": [],
-        "cwd": "${command:cmake.getLaunchTargetDirectory}",
-        "console": "integratedTerminal"
-      }
-    ]
+        "program": "${workspaceFolder}/zig-out/bin/cesium0.exe",
+        "args": [
+          "--emit-mir",
+          "-o",
+          "${workspaceFolder}/tmp/out.mir",
+          "${workspaceFolder}/bootstrap/tests/s0/tokens.csm",
+        ],
+        "cwd": "${workspaceFolder}",
+        "preLaunchTask": "zig build",
+        "console": "integratedTerminal",
+      },
+    ],
+    "compounds": []
   },
 }
