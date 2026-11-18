@@ -105,7 +105,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: ilammy/msvc-dev-cmd@v1
+      # what vcvars64.bat sets, for the steps that follow
+      - name: MSVC environment
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VS=%%i"
+          call "%VS%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          >>"%GITHUB_ENV%" echo PATH=%PATH%
+          >>"%GITHUB_ENV%" echo INCLUDE=%INCLUDE%
+          >>"%GITHUB_ENV%" echo LIB=%LIB%
+          >>"%GITHUB_ENV%" echo LIBPATH=%LIBPATH%
 
       - name: MSVC, as C11
         run: bash tools/portable-c.sh compile msvc cl
