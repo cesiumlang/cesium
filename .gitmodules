@@ -7,3 +7,6 @@
 [submodule "editors/vscode"]
 	path = editors/vscode
 	url = https://github.com/cesiumlang/vscode-cesium
+[submodule "devkits"]
+	path = devkits
+	url = https://github.com/cesiumlang/devkits
