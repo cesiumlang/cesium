@@ -77,6 +77,8 @@ const s0_rejects = [_]Reject{
     .{ .name = "hex_literal", .message = "S0 has decimal integer literals only" },
     .{ .name = "alloc_borrow", .message = "alloc returns ownership" },
     .{ .name = "missing_return", .message = "does not return a value on every path" },
+    .{ .name = "deep_expression", .message = "nested too deeply (the limit is 128 levels)" },
+    .{ .name = "deep_blocks", .message = "nested too deeply (the limit is 128 levels)" },
 };
 
 const mir_runs = [_]Run{
@@ -92,6 +94,7 @@ const mir_rejects = [_]Reject{
     .{ .name = "unknown_local", .message = "unknown local %x" },
     .{ .name = "bad_version", .message = "expected MIR version 0" },
     .{ .name = "struct_by_value_param", .message = "only integers and pointers" },
+    .{ .name = "deep_nesting", .message = "nested too deeply (the limit is 1024 levels)" },
 };
 
 /// cesium1's files, in the order they make one unit.

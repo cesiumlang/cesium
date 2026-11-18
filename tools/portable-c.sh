@@ -13,6 +13,9 @@
 #          (GCC or Clang) and run the test corpus through it up to QBE IL.
 #          QBE itself is replaced by a stub: it is third-party code and is
 #          not what is checked here.
+#        portable-c.sh fuzz <compiler> [<iterations> [<seed>]]
+#          The same build, run by tools/fuzz-stage0.py on damaged copies of
+#          the corpus (default: 2000 of them, seed 1). Needs Python 3.
 #
 # Run from anywhere; objects go to $PORTABLE_C_OUT (default: tmp/portable-c).
 set -euo pipefail
@@ -34,7 +37,7 @@ SOURCES=(
   runtime/cs_arena.c
 )
 
-usage () { sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage () { sed -n '2,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 compile_all () { # <kind> <compiler> <std>
   local kind=$1 cc=$2 std=$3 src obj dir=$OUT/$1-$3
@@ -64,8 +67,8 @@ compile_all () { # <kind> <compiler> <std>
   echo "ok: ${#SOURCES[@]} translation units compile with $cc ($kind, $std)"
 }
 
-sanitize () { # <compiler>
-  local cc=$1 dir=$OUT/sanitize src objs=() t rc
+build_sanitized () { # <compiler> <directory>: cesium0 with the sanitizers
+  local cc=$1 dir=$2 src objs=()
   rm -rf "$dir"
   mkdir -p "$dir"
   # QBE's entry point, which cesium0 reaches only without --emit-*
@@ -77,8 +80,20 @@ sanitize () { # <compiler>
   # shellcheck disable=SC2086  # the flags are split on purpose
   "$cc" -std=c11 -g -O1 -fno-omit-frame-pointer $SANITIZE_FLAGS \
     "${INCLUDES[@]}" "${objs[@]}" "$dir/qbe_stub.c" -o "$dir/cesium0"
-  local c0=$dir/cesium0
   export ASAN_OPTIONS=detect_leaks=0:abort_on_error=0 UBSAN_OPTIONS=print_stacktrace=1
+}
+
+fuzz () { # <compiler> <iterations> <seed>
+  local dir=$OUT/fuzz python=python3
+  command -v "$python" > /dev/null || python=python
+  build_sanitized "$1" "$dir"
+  "$python" "$ROOT/tools/fuzz-stage0.py" "$dir/cesium0" --iterations "$2" --seed "$3" --out "$dir/inputs"
+}
+
+sanitize () { # <compiler>
+  local cc=$1 dir=$OUT/sanitize t rc
+  build_sanitized "$cc" "$dir"
+  local c0=$dir/cesium0
 
   expect () { # <wanted exit status> <label> <command>...
     local want=$1 label=$2
@@ -143,6 +158,10 @@ case ${1:-} in
   sanitize)
     [ $# -eq 2 ] || usage
     sanitize "$2"
+    ;;
+  fuzz)
+    [ $# -ge 2 ] && [ $# -le 4 ] || usage
+    fuzz "$2" "${3:-2000}" "${4:-1}"
     ;;
   *) usage ;;
 esac

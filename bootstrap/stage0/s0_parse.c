@@ -17,6 +17,7 @@ typedef struct Parser {
   S0Token tok;   /* current */
   S0Token peek;  /* next */
   bool failed;
+  int depth;     /* of the expression or statement being parsed, see enter() */
 } Parser;
 
 static void advance(Parser *p) {
@@ -39,6 +40,19 @@ static void fail(Parser *p, S0Loc loc, const char *fmt, ...) {
   p->lx.pos = p->lx.len;
   p->tok.kind = TK_EOF;
   p->peek.kind = TK_EOF;
+}
+
+/* The parser, the lowering and libcsmir recurse as deep as expressions and
+ * statements nest, so the nesting has a limit: without one, a source file can
+ * overflow the stack. An operand, the body of an `if` or `while`, and each
+ * further `else if` is one level deeper. stage1/parse.csm has the same limit. */
+#define MAX_NESTING 128
+
+static void enter(Parser *p) {
+  p->depth++;
+  if (p->depth > MAX_NESTING) {
+    fail(p, p->tok.loc, "nested too deeply (the limit is %d levels)", MAX_NESTING);
+  }
 }
 
 static bool at(const Parser *p, S0Tok kind) {
@@ -220,12 +234,14 @@ static S0Expr *parse_primary(Parser *p) {
 }
 
 static S0Expr *parse_postfix(Parser *p) {
+  int depth = p->depth;
   S0Expr *e = parse_primary(p);
   for (;;) {
     S0Loc loc = p->tok.loc;
     if (at(p, TK_LBRACKET)) {
       S0Expr *idx;
       S0Expr *n;
+      enter(p);
       advance(p);
       idx = parse_expr(p);
       expect(p, TK_RBRACKET);
@@ -235,6 +251,7 @@ static S0Expr *parse_postfix(Parser *p) {
       e = n;
     } else if (at(p, TK_DOT)) {
       S0Expr *n;
+      enter(p);
       advance(p);
       n = new_expr(p, EX_FIELD, loc);
       n->a = e;
@@ -242,8 +259,10 @@ static S0Expr *parse_postfix(Parser *p) {
       e = n;
     } else if (at(p, TK_LPAREN)) {
       fail(p, loc, "only a function name can be called in S0");
+      p->depth = depth;
       return e;
     } else {
+      p->depth = depth;
       return e;
     }
   }
@@ -253,30 +272,37 @@ static S0Expr *parse_prefix(Parser *p) {
   S0Loc loc = p->tok.loc;
   if (at(p, TK_HASH) || at(p, TK_TILDE)) {
     S0Expr *e;
+    enter(p);
     advance(p);
     e = new_expr(p, EX_ADDROF, loc);
     e->a = parse_prefix(p);
+    p->depth--;
     return e;
   }
   if (at(p, TK_BANG)) {
     S0Expr *e;
+    enter(p);
     advance(p);
     e = new_expr(p, EX_NOT, loc);
     e->a = parse_prefix(p);
+    p->depth--;
     return e;
   }
   return parse_postfix(p);
 }
 
 static S0Expr *parse_cast(Parser *p) {
+  int depth = p->depth;
   S0Expr *e = parse_prefix(p);
   while (at(p, TK_AS)) {
     S0Expr *n = new_expr(p, EX_AS, p->tok.loc);
+    enter(p);
     advance(p);
     n->a = e;
     n->type = parse_type(p, false, false);
     e = n;
   }
+  p->depth = depth;
   return e;
 }
 
@@ -317,13 +343,17 @@ static int binary_level(S0Tok kind) {
 }
 
 static S0Expr *parse_binary(Parser *p, int min_level) {
+  int depth = p->depth;
   S0Expr *lhs = parse_cast(p);
   for (;;) {
     int level = binary_level(p->tok.kind);
     S0Expr *n;
     if (level == 0 || level < min_level) {
+      p->depth = depth;
       return lhs;
     }
+    /* a chain a + b + c + ... nests to the left */
+    enter(p);
     n = new_expr(p, EX_BINARY, p->tok.loc);
     n->op = p->tok.kind;
     advance(p);
@@ -334,7 +364,11 @@ static S0Expr *parse_binary(Parser *p, int min_level) {
 }
 
 static S0Expr *parse_expr(Parser *p) {
-  return parse_binary(p, 1);
+  S0Expr *e;
+  enter(p);
+  e = parse_binary(p, 1);
+  p->depth--;
+  return e;
 }
 
 /* ---- statements -------------------------------------------------------- */
@@ -392,7 +426,17 @@ static bool at_declaration(const Parser *p) {
   return is_base_type_name(p->tok.text) || p->peek.kind == TK_IDENT;
 }
 
+static S0Stmt *parse_stmt_at_depth(Parser *p);
+
 static S0Stmt *parse_stmt(Parser *p) {
+  S0Stmt *s;
+  enter(p);
+  s = parse_stmt_at_depth(p);
+  p->depth--;
+  return s;
+}
+
+static S0Stmt *parse_stmt_at_depth(Parser *p) {
   S0Loc loc = p->tok.loc;
   S0Stmt *s;
   if (accept(p, TK_IF)) {

@@ -46,6 +46,10 @@ const uword BT_STRUCT = 7;
 
 // stage 0's limits on arguments and parameters
 const uword MAX_ARGS = 64;
+// stage 0's limit on the nesting of expressions and statements: an operand,
+// the body of an `if` or `while`, and each further `else if` is one level
+// deeper
+const uword MAX_NESTING = 128;
 
 struct Node {
   uword kind;
@@ -80,6 +84,7 @@ uword g_nnodes;
 uword g_nodes_cap;
 uword g_decls;
 uword g_decls_tail;
+uword g_depth;  // of the expression or statement being parsed
 
 // Every node but the first comes with a token of its own, so a source of
 // src_len bytes needs fewer than src_len + 64 nodes.
@@ -87,6 +92,7 @@ void = parse_init(uword src_len) {
   g_nodes_cap = src_len + 64;
   g_nodes := alloc(g_nodes_cap);
   g_nnodes = 0;
+  g_depth = 0;
 }
 
 uword = node_new(uword kind, u64 line, u64 col) {
@@ -145,6 +151,13 @@ void = parse_fail(#u8 msg) {
   parse_err();
   err_s(msg);
   err_end();
+}
+
+void = parse_enter() {
+  g_depth = g_depth + 1;
+  if (g_depth > MAX_NESTING) {
+    parse_fail("nested too deeply (the limit is 128 levels)");
+  }
 }
 
 void = parse_fail_found(#u8 what) {
@@ -301,10 +314,12 @@ uword = parse_primary() {
 }
 
 uword = parse_postfix() {
+  uword depth = g_depth;
   uword e = parse_primary();
   while (TRUE) {
     uword n = 0;
     if (parse_at(TK_LBRACKET)) {
+      parse_enter();
       n = node_here(EX_INDEX);
       parse_advance();
       g_nodes[n].a = e;
@@ -312,6 +327,7 @@ uword = parse_postfix() {
       parse_expect(TK_RBRACKET);
       e = n;
     } else if (parse_at(TK_DOT)) {
+      parse_enter();
       n = node_here(EX_FIELD);
       parse_advance();
       g_nodes[n].a = e;
@@ -320,6 +336,7 @@ uword = parse_postfix() {
     } else if (parse_at(TK_LPAREN)) {
       parse_fail("only a function name can be called in S0");
     } else {
+      g_depth = depth;
       return e;
     }
   }
@@ -329,29 +346,36 @@ uword = parse_postfix() {
 uword = parse_prefix() {
   uword e = 0;
   if (parse_at(TK_HASH) || parse_at(TK_TILDE)) {
+    parse_enter();
     e = node_here(EX_ADDROF);
     parse_advance();
     g_nodes[e].a = parse_prefix();
+    g_depth = g_depth - 1;
     return e;
   }
   if (parse_at(TK_BANG)) {
+    parse_enter();
     e = node_here(EX_NOT);
     parse_advance();
     g_nodes[e].a = parse_prefix();
+    g_depth = g_depth - 1;
     return e;
   }
   return parse_postfix();
 }
 
 uword = parse_cast() {
+  uword depth = g_depth;
   uword e = parse_prefix();
   while (parse_at(TK_AS)) {
+    parse_enter();
     uword n = node_here(EX_AS);
     parse_advance();
     g_nodes[n].a = e;
     parse_type(n, FALSE, FALSE);
     e = n;
   }
+  g_depth = depth;
   return e;
 }
 
@@ -392,12 +416,16 @@ uword = parse_level(uword kind) {
 }
 
 uword = parse_binary(uword min_level) {
+  uword depth = g_depth;
   uword lhs = parse_cast();
   while (TRUE) {
     uword level = parse_level(g_tok.kind);
     if (level == 0 || level < min_level) {
+      g_depth = depth;
       return lhs;
     }
+    // a chain a + b + c + ... nests to the left
+    parse_enter();
     uword n = node_here(EX_BINARY);
     g_nodes[n].op = g_tok.kind;
     parse_advance();
@@ -409,7 +437,10 @@ uword = parse_binary(uword min_level) {
 }
 
 uword = parse_expr() {
-  return parse_binary(1);
+  parse_enter();
+  uword e = parse_binary(1);
+  g_depth = g_depth - 1;
+  return e;
 }
 
 // ---- statements -----------------------------------------------------------
@@ -472,6 +503,13 @@ void = parse_if(uword s) {
 }
 
 uword = parse_stmt() {
+  parse_enter();
+  uword s = parse_stmt_at_depth();
+  g_depth = g_depth - 1;
+  return s;
+}
+
+uword = parse_stmt_at_depth() {
   u64 line = g_tok.line;
   u64 col = g_tok.col;
   uword s = 0;

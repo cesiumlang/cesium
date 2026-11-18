@@ -95,6 +95,8 @@ These had to be settled to write stage 0, and no issue decides them. Each is iso
 - **Struct and array locals and globals** are allowed, though #9 lists only fixed arrays explicitly.
 - **Tests use ISO C `putchar`**, not the POSIX `write` of #9's sample, so they run on Windows.
 
+- **Nesting limit.** Expressions and statements may nest 128 levels deep; deeper source is rejected with `nested too deeply`. The parser, the lowering and `libcsmir` recurse along the nesting, and without a limit a source file could overflow the stack (found by fuzzing, see below). An operand, the body of an `if` or `while`, and each further `else if` count as one level; so does each further operator of a chain such as `a + b + c`. #9 names no limits; the number is chosen here, like the limit of 64 arguments. `cesium1` has the same limit and message.
+
 **Core MIR and the QBE lowering**
 
 - **Text syntax** follows the sketch in #8. Additions: `else` after `if`; a string escapes bytes as `\HH`; a global initializer is a typed constant, a string, or `@name`; names may contain `.`.
@@ -104,13 +106,15 @@ These had to be settled to write stage 0, and no issue decides them. Each is iso
 - **A local without an initializer starts as all zero bits**, so that no MIR program reads an undefined value. #8 requires defined semantics but does not mention this case.
 - **Locals are block-scoped**, and an inner block may reuse a name; the S0 frontend never does.
 - **Layout** is the C layout of the QBE targets (all LP64-style), computed in `mir.c`. The layout-query interface of #8 does not exist yet.
+- **Nesting limit of MIR text:** types, expressions and statements may nest 1024 levels deep, for the same reason as in the S0 frontend. S0 source at its own limit produces MIR nested about 250 levels deep.
 - **Read-only data** is not placed in a read-only section yet: `const` and `global` lower the same way.
 
 **C dialect**
 
 - **`-Wformat-nonliteral` and the ban on attributes conflict** for the project's own printf-style functions. All forwarding of format strings is confined to `libcsmir/cs_format.c`, the one file built without that warning, and `-Wno-missing-format-attribute` is added everywhere. This follows #10's rule for third-party headers: relax one translation unit, not the rules.
 - **Enforced in CI beyond `zig build`** (#10, "Enforcement in CI"): `tools/check-c-dialect.py` is the source check (banned functions, compiler extensions and optional features, headers outside the allowed list, `%p`, and every `.c` file including the common header). `tools/portable-c.sh compile` compiles every translation unit with GCC and Clang under the dialect's flags as C99 and as C11, with TinyCC as the canary, and with MSVC (`/std:c11 /W4 /WX`, minus C4996, MSVC's own deprecation of ISO C functions such as `fopen`). `tools/portable-c.sh sanitize` builds `cesium0` with ASan and UBSan and runs the corpus through it up to QBE IL, with QBE replaced by a stub. A line that must name a banned word carries the comment `cs-dialect: allow` and a reason.
-- **Not done** from #10: fuzzing the MIR text parser, which #10 lists as something to consider. The other compilers compile but do not link: the devkit's `libqbe.a` is built by `zig cc` for its own targets.
+- **Fuzzing** (#10: "consider fuzzing the MIR text parser"): `tools/fuzz-stage0.py` damages the files of the test corpus a little (tokens, lines, bytes, truncation, repetition, deep nesting) and runs `cesium0` on each result, for the MIR text parser and for the S0 front end. Whatever the input, `cesium0` must exit with status 0 or 1, in time and without a sanitizer report, and MIR text it accepts and prints must read back the same. `tools/portable-c.sh fuzz` builds `cesium0` with ASan and UBSan and runs it; CI does so with a fixed seed, so a failure there can be reproduced. It is mutation fuzzing without coverage feedback, not libFuzzer or AFL.
+- **Not done** from #10: the other compilers compile but do not link: the devkit's `libqbe.a` is built by `zig cc` for its own targets.
 
 **In-process QBE**
 
