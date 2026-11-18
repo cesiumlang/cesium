@@ -61,7 +61,9 @@ python tools/fetch-devkit.py
 | [`bootstrap/`](bootstrap/README.md) | Stage 0 and stage 1: sources, runtime and tests |
 | `build.zig`, `build-src/` | The build |
 | `devkit-version`, `tools/fetch-devkit.py` | Which devkit the build uses, and the script that downloads it to `.devkit/` |
+| `devkits/` | Submodule: [devkits](https://github.com/cesiumlang/devkits), the scripts and pins that build the devkit. Not needed to build the compiler: the build downloads a released devkit. Its own `llvm-project` submodule is skipped by a recursive clone. |
 | `buildtools/` | Submodule: [cesium-buildtools](https://github.com/cesiumlang/cesium-buildtools), Windows scripts for tools the devkit does not contain. Not needed to build the compiler. |
+| `editors/vscode/` | Submodule: [vscode-cesium](https://github.com/cesiumlang/vscode-cesium), the VS Code extension. No code yet; it is to be a client of the language server in the compiler ([#68](https://github.com/cesiumlang/cesium/issues/68)). |
 | `.cspell/cesium/` | Submodule: the spelling dictionary of Cesium terms |
 
 ## Development setup
