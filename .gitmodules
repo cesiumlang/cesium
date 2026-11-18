@@ -4,3 +4,6 @@
 [submodule ".cspell/cesium"]
 	path = .cspell/cesium
 	url = https://github.com/cesiumlang/cspell-cesium.git
+[submodule "editors/vscode"]
+	path = editors/vscode
+	url = https://github.com/cesiumlang/vscode-cesium

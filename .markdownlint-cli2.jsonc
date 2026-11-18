@@ -1,6 +1,9 @@
 {
   "ignores": [
+    // submodules: each has its own repository and rules
     "buildtools/**",
+    "devkits/**",
+    "editors/vscode/**",
     "node_modules/**",
     // toolchain caches, not repository content
     "zig-pkg/**",
