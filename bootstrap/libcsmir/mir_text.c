@@ -304,6 +304,7 @@ typedef struct Parser {
   bool int_overflow;
   const char *text; /* T_NAME, T_LOCAL, T_GLOBAL: the name; T_STRING: the bytes */
   size_t text_len;
+  int depth;        /* of the type, expression or statement being parsed */
 } Parser;
 
 static bool is_name_start(int c) {
@@ -500,7 +501,34 @@ static const char *take(Parser *p, Tok kind, const char *what) {
   return text;
 }
 
+/* The parser, the verifier, the printer and the lowering recurse as deep as
+ * types, expressions and statements nest, so the nesting has a limit: without
+ * one, a MIR file can overflow the stack. The limit is far above what the S0
+ * front end produces from source within its own limit (stage0/s0_parse.c). */
+#define MAX_NESTING 1024
+
+static bool enter(Parser *p) {
+  if (p->depth >= MAX_NESTING) {
+    perr(p, "nested too deeply (the limit is %d levels)", MAX_NESTING);
+    return false;
+  }
+  p->depth++;
+  return true;
+}
+
+static MirType *parse_type_at_depth(Parser *p);
+
 static MirType *parse_type(Parser *p) {
+  MirType *t;
+  if (!enter(p)) {
+    return mir_prim(p->m, MT_VOID);
+  }
+  t = parse_type_at_depth(p);
+  p->depth--;
+  return t;
+}
+
+static MirType *parse_type_at_depth(Parser *p) {
   MirModule *m = p->m;
   if (at_punct(p, '[')) {
     uint64_t count;
@@ -655,7 +683,19 @@ static bool op_is_binary(MirOp op) {
   }
 }
 
+static MirExpr *parse_expr_at_depth(Parser *p);
+
 static MirExpr *parse_expr(Parser *p) {
+  MirExpr *e;
+  if (!enter(p)) {
+    return mir_const(p->m, mir_prim(p->m, MT_I64), 0, p->tok_line);
+  }
+  e = parse_expr_at_depth(p);
+  p->depth--;
+  return e;
+}
+
+static MirExpr *parse_expr_at_depth(Parser *p) {
   MirModule *m = p->m;
   int line = p->tok_line;
   if (p->tok == T_INT || at_punct(p, '-')) {
@@ -767,7 +807,19 @@ static bool at_stmt_keyword(const Parser *p) {
   return false;
 }
 
+static MirStmt *parse_stmt_at_depth(Parser *p);
+
 static MirStmt *parse_stmt(Parser *p) {
+  MirStmt *s;
+  if (!enter(p)) {
+    return mir_stmt(p->m, MS_BREAK, p->tok_line);
+  }
+  s = parse_stmt_at_depth(p);
+  p->depth--;
+  return s;
+}
+
+static MirStmt *parse_stmt_at_depth(Parser *p) {
   MirModule *m = p->m;
   int line = p->tok_line;
   MirStmt *s;
