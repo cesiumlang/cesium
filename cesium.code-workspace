@@ -13,9 +13,6 @@
       ".github/workflows/exempt.txt": "gitignore",
       ".clangd": "yaml",
       "**/.claude/projects/*/memory/*.md": "plaintext",
-      // devkits
-      "no-ci.txt": "gitignore",
-      "*.ssa": "plaintext",
     },
     "files.exclude": {
       "**/node_modules/**": true,
@@ -24,8 +21,6 @@
       "**/zig-cache*/**": true,
       ".cache/**": true,
       ".devkit-downloads/**": true,
-      "devkits/work/**": true,
-      "devkits/dist/**": true,
     },
     "files.watcherExclude": {
       "**/node_modules/**": true,
@@ -41,16 +36,8 @@
       "buildtools/bin/**": true,
       "buildtools/downloads/**": true,
       "buildtools/opt/**": true,
-      "devkits/llvm-project/**": true,
-      "devkits/work/**": true,
-      "devkits/dist/**": true,
-      "editors/vscode/dist/**": true,
-      "editors/vscode/out/**": true,
-      "editors/vscode/.vscode-test/**": true,
     },
     "search.exclude": {
-      "devkits/llvm-project/**": true,
-      "devkits/qbe/**": true,
       ".devkit/**": true,
       "buildtools/opt/**": true,
     },

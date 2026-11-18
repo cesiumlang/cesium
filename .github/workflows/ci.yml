@@ -36,8 +36,7 @@ jobs:
           - { host: x86_64-macos-none, runner: macos-15-intel }
           - { host: aarch64-macos-none, runner: macos-15 }
     steps:
-      # the submodules (devkits, buildtools, the VS Code extension, the cspell
-      # dictionary) are not needed
+      # the submodules (buildtools, the cspell dictionary) are not needed
       - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7

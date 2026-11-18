@@ -11,10 +11,8 @@
     ".gitignore",
     ".local-gitignore",
     ".env",
-    // submodules: each has its own repository and rules
+    // submodule: it has its own repository and rules
     "buildtools/**",
-    "devkits/**",
-    "editors/vscode/**",
   ],
   "dictionaryDefinitions": [
     {
