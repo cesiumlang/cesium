@@ -1,0 +1,2 @@
+struct u8 { i32 a; }
+i32 = main(i32 argc, ##u8 argv) { return 0; }

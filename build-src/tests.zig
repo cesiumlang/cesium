@@ -107,6 +107,7 @@ pub fn add(
     csrt: *std.Build.Step.Compile,
     csmir: *std.Build.Step.Compile,
     stage1: Stage1,
+    tool: *std.Build.Step.Compile,
     devkit: []const u8,
 ) void {
     for (s0_runs) |t| {
@@ -165,7 +166,7 @@ pub fn add(
         step.dependOn(&run.step);
     }
 
-    addStage1(b, step, target, cesium0, csrt, csmir, stage1, devkit);
+    addStage1(b, step, target, cesium0, csrt, csmir, stage1, tool, devkit);
 }
 
 /// cesium1, written in S0 and compiled by cesium0, checked against cesium0.
@@ -177,18 +178,11 @@ fn addStage1(
     csrt: *std.Build.Step.Compile,
     csmir: *std.Build.Step.Compile,
     stage1: Stage1,
+    tool: *std.Build.Step.Compile,
     devkit: []const u8,
 ) void {
-    const tool = b.addExecutable(.{
-        .name = "stage1_tool",
-        .root_module = b.createModule(.{ .target = b.graph.host, .optimize = .Debug, .link_libc = true }),
-    });
-    tool.root_module.addCSourceFile(.{
-        .file = b.path("build-src/stage1_tool.c"),
-        .flags = &.{ "-std=c99", "-Wall", "-Wextra", "-Werror" },
-    });
     // cesium1 writes its MIR through a C text stream
-    const crlf = target.result.os.tag == .windows;
+    const crlf = writesCrlf(target);
     const cesium1 = stage1.cesium1;
 
     // the S0 run tests, their files in the order cesium0 is given them above
@@ -219,7 +213,26 @@ fn addStage1(
     _ = checkMirOf(b, step, tool, crlf, cesium2, "s1-gen2-self", self.unit, self.reference);
 }
 
-const Unit = struct {
+/// build-src/stage1_tool.c, for the host: it joins and compares files.
+pub fn addTool(b: *std.Build) *std.Build.Step.Compile {
+    const tool = b.addExecutable(.{
+        .name = "stage1_tool",
+        .root_module = b.createModule(.{ .target = b.graph.host, .optimize = .Debug, .link_libc = true }),
+    });
+    tool.root_module.addCSourceFile(.{
+        .file = b.path("build-src/stage1_tool.c"),
+        .flags = &.{ "-std=c99", "-Wall", "-Wextra", "-Werror" },
+    });
+    return tool;
+}
+
+/// Whether cesium1's output has CRLF line endings: it writes through a C
+/// text stream.
+pub fn writesCrlf(target: std.Build.ResolvedTarget) bool {
+    return target.result.os.tag == .windows;
+}
+
+pub const Unit = struct {
     /// The files one after another: cesium1's standard input.
     unit: std.Build.LazyPath,
     /// cesium0's core MIR for the files.
@@ -252,7 +265,7 @@ fn checkMir(
 }
 
 /// Runs a cesium1 on a unit and compares its output with the reference MIR.
-fn checkMirOf(
+pub fn checkMirOf(
     b: *std.Build,
     step: *std.Build.Step,
     tool: *std.Build.Step.Compile,

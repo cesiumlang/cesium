@@ -49,6 +49,11 @@ jobs:
       - name: Build and test stage 0
         run: .devkit/zig/zig build install test -Dtarget="${{ matrix.host }}" --summary all
 
+      # the generated corpus (bootstrap/tests/diff), on one host only
+      - name: Compare cesium1 with cesium0 on the generated corpus
+        if: matrix.host == 'x86_64-linux-musl'
+        run: .devkit/zig/zig build test-diff -Dtarget="${{ matrix.host }}" --summary failures
+
   # The stage 0 C dialect (cesiumlang/cesium#10) beyond what `zig cc` checks
   # in the job above: the source check, other compilers, and the sanitizers.
   dialect:
