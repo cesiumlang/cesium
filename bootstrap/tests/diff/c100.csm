@@ -1,0 +1,24 @@
+struct P {
+  i32 x;
+  #P next;
+  u8 arr[3];
+}
+const i32 CI = 5;
+const u8 CU = 2;
+i64 gv;
+u8 garr[4];
+P gp;
+extern libc = import('c') {
+  i32 = putchar(i32 c);
+}
+void = vf(i32 a) {
+}
+i32 = f2(i32 a, #i32 b) {
+  return a;
+}
+#P = getp(#P p) {
+  return p;
+}
+i32 = main(i32 argc, ##u8 argv) {
+  i64 v = 1 << 3; return 0;
+}

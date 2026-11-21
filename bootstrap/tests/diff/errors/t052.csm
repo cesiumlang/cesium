@@ -1,0 +1,2 @@
+u8 = f(u8 a) { if (a) { return 1; } else if (a) { return 2; } }
+i32 = main(i32 argc, ##u8 argv) { return 0; }

@@ -1,0 +1,2 @@
+const i32 B = 1 + 1;
+i32 = main(i32 argc, ##u8 argv) { return 0; }

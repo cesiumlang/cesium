@@ -1,0 +1,2 @@
+struct alloc { i32 a; }
+i32 = main(i32 argc, ##u8 argv) { alloc a; a.a = 1; return a.a; }
