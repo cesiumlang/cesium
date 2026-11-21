@@ -1,13 +1,20 @@
 name: CI
 
 # Builds stage 0 (bootstrap/) with the devkit's Zig and runs its test corpus,
-# on every host the devkit supports that QBE can target. Pull requests and
-# pushes to main and dev are built.
+# on every host the devkit supports that QBE can target.
+#
+# Pull requests into main and pushes to main are run. Pushes to dev and pull
+# requests into it are not (emanspeaks, 2026-11-21; as zfls and rstd do): dev
+# is checked as a whole by the standing pull request from dev to main, whose
+# run each merge into dev restarts. To check one branch alone, start the
+# workflow by hand: `gh workflow run ci.yml --ref BRANCH`.
 
 on:
   push:
-    branches: [main, dev]
+    # (not dev: see the top)
+    branches: [main]
   pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
