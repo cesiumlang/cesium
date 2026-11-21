@@ -144,8 +144,9 @@ fi
 got=$(sha256_of "$archive")
 [ "$got" = "$want" ] || die "$asset: sha256 $got, devkits.json says $want"
 
-# the archive holds one top-level directory; its contents become --dir
-unpack=$dir.unpack
+# the archive holds one top-level directory; its contents become --dir. It is
+# unpacked in .devkit-downloads, which Git ignores, never next to --dir.
+unpack=$downloads/unpack
 rm -rf "$unpack" "$dir"
 mkdir -p "$unpack"
 echo "unpacking $asset"
