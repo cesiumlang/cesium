@@ -64,7 +64,7 @@
     "ltex.additionalRules.motherTongue": "en-US",
     "debug.onTaskErrors": "abort",  // will switch to problems pane otherwise
 
-    // the Zig of the Cesium devkit: python tools/fetch-devkit.py
+    // the Zig of the Cesium devkit: bash tools/fetch-devkit.sh
     "zig.path": "${workspaceFolder}/.devkit/zig/zig",
     "zig.zls.enabled": "on",
     "zig.zls.inlayHintsShowParameterName": false,

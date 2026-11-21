@@ -39,12 +39,8 @@ jobs:
       # the submodules (buildtools, the cspell dictionary) are not needed
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
       - name: Fetch the devkit
-        run: python tools/fetch-devkit.py --host "${{ matrix.host }}"
+        run: bash tools/fetch-devkit.sh --host "${{ matrix.host }}"
 
       - name: Build and test stage 0
         run: .devkit/zig/zig build install test -Dtarget="${{ matrix.host }}" --summary all
@@ -64,7 +60,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Source check (banned identifiers, common header)
-        run: python3 tools/check-c-dialect.py
+        run: bash tools/check-c-dialect.sh
 
       - name: Install TinyCC
         run: |
@@ -89,6 +85,10 @@ jobs:
 
       - name: Test corpus under ASan and UBSan
         run: bash tools/portable-c.sh sanitize clang
+
+      # the fuzzer is a Zig program (zig build fuzz)
+      - name: Fetch the devkit
+        run: bash tools/fetch-devkit.sh
 
       # damaged copies of the corpus: cesium0 must reject or accept each
       # without crashing; the seed is fixed so that a failure can be repeated
