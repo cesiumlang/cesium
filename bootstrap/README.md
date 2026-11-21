@@ -29,7 +29,7 @@ Stage 0 is built with the Zig of the [Cesium devkit](https://github.com/cesiumla
 
 ```sh
 python tools/fetch-devkit.py        # downloads and checks the devkit named in devkit-version
-.devkit/zig/zig build               # cesium0, libcsmir, libcsrt in zig-out
+.devkit/zig/zig build               # cesium0, cesium1, libcsmir, libcsrt in zig-out
 .devkit/zig/zig build test          # builds as C99 and as C11, then runs the corpus
 ```
 
@@ -128,6 +128,8 @@ These had to be settled to write stage 0, and no issue decides them. Each is iso
 cat a.csm b.csm | cesium1            # core MIR text on standard output
 cat a.csm b.csm | cesium1 out.s      # assembly, through cs_compile_mir (and out.s.ssa)
 ```
+
+`zig build` installs `cesium1` to `zig-out/bin`, next to `cesium0`: `cesium0` compiles `stage1/` and the result is linked with `libcsrt`, `libcsmir` and `libqbe.a` (`build-src/stage1.zig`). It is the same build of `cesium1` the tests check.
 
 Several files make one unit by being given one after another on standard input; MIR text has no line numbers, so this is the same unit `cesium0 a.csm b.csm` compiles. The exit status is 0 on success, 1 on an error in the source and 2 when a limit of `cesium1` is reached. An error is printed as `line:col: error: message` on standard output, with lines counted from the start of the input, and nothing else is printed before the whole unit is checked. Linking `cesium1` needs `libcsmir` and the devkit's `libqbe.a` besides `libcsrt`.
 

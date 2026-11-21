@@ -20,6 +20,8 @@
 //!                                     that source, must give it again
 
 const std = @import("std");
+const link = @import("link.zig");
+const Stage1 = @import("stage1.zig").Stage1;
 
 const Run = struct {
     name: []const u8,
@@ -97,9 +99,6 @@ const mir_rejects = [_]Reject{
     .{ .name = "deep_nesting", .message = "nested too deeply (the limit is 1024 levels)" },
 };
 
-/// cesium1's files, in the order they make one unit.
-const stage1_sources = [_][]const u8{ "util.csm", "lex.csm", "parse.csm", "types.csm", "lower.csm", "decl.csm", "main.csm" };
-
 pub fn add(
     b: *std.Build,
     step: *std.Build.Step,
@@ -107,6 +106,7 @@ pub fn add(
     cesium0: *std.Build.Step.Compile,
     csrt: *std.Build.Step.Compile,
     csmir: *std.Build.Step.Compile,
+    stage1: Stage1,
     devkit: []const u8,
 ) void {
     for (s0_runs) |t| {
@@ -165,10 +165,10 @@ pub fn add(
         step.dependOn(&run.step);
     }
 
-    addStage1(b, step, target, cesium0, csrt, csmir, devkit);
+    addStage1(b, step, target, cesium0, csrt, csmir, stage1, devkit);
 }
 
-/// cesium1, written in S0: compiled by cesium0, then checked against it.
+/// cesium1, written in S0 and compiled by cesium0, checked against cesium0.
 fn addStage1(
     b: *std.Build,
     step: *std.Build.Step,
@@ -176,6 +176,7 @@ fn addStage1(
     cesium0: *std.Build.Step.Compile,
     csrt: *std.Build.Step.Compile,
     csmir: *std.Build.Step.Compile,
+    stage1: Stage1,
     devkit: []const u8,
 ) void {
     const tool = b.addExecutable(.{
@@ -188,14 +189,7 @@ fn addStage1(
     });
     // cesium1 writes its MIR through a C text stream
     const crlf = target.result.os.tag == .windows;
-
-    var sources: [stage1_sources.len]std.Build.LazyPath = undefined;
-    for (stage1_sources, 0..) |file, i| sources[i] = b.path(b.fmt("bootstrap/stage1/{s}", .{file}));
-    const compile1 = b.addRunArtifact(cesium0);
-    compile1.addArg("-o");
-    const cesium1_asm = compile1.addOutputFileArg("cesium1.s");
-    for (sources) |source| compile1.addFileArg(source);
-    const cesium1 = linkCompiler(b, target, csrt, csmir, devkit, "cesium1", cesium1_asm);
+    const cesium1 = stage1.cesium1;
 
     // the S0 run tests, their files in the order cesium0 is given them above
     for (s0_runs) |t| {
@@ -215,13 +209,13 @@ fn addStage1(
 
     // the fixed point: cesium1 compiles itself to cesium0's MIR, and the
     // cesium1 it builds from its own source does the same
-    const self = checkMir(b, step, tool, crlf, cesium0, cesium1, "s1-self", &sources);
+    const self = checkMir(b, step, tool, crlf, cesium0, cesium1, "s1-self", &stage1.sources);
     const compile2 = b.addRunArtifact(cesium1);
     compile2.setName("cesium1 compiles cesium1");
     const cesium2_asm = compile2.addOutputFileArg("cesium1-gen2.s");
     compile2.setStdIn(.{ .lazy_path = self.unit });
     compile2.expectExitCode(0);
-    const cesium2 = linkCompiler(b, target, csrt, csmir, devkit, "cesium1-gen2", cesium2_asm);
+    const cesium2 = link.linkCompiler(b, target, csrt, csmir, devkit, "cesium1-gen2", cesium2_asm);
     _ = checkMirOf(b, step, tool, crlf, cesium2, "s1-gen2-self", self.unit, self.reference);
 }
 
@@ -285,40 +279,6 @@ fn checkMirOf(
     return .{ .unit = unit, .reference = reference };
 }
 
-/// Links cesium1 from assembly: it calls libcsmir, which runs QBE in-process.
-fn linkCompiler(
-    b: *std.Build,
-    target: std.Build.ResolvedTarget,
-    csrt: *std.Build.Step.Compile,
-    csmir: *std.Build.Step.Compile,
-    devkit: []const u8,
-    name: []const u8,
-    assembly: std.Build.LazyPath,
-) *std.Build.Step.Compile {
-    const exe = linkProgram(b, target, csrt, name, assembly);
-    exe.root_module.linkLibrary(csmir);
-    // QBE, as cesium0 links it (build-src/__root__.zig)
-    exe.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ devkit, "qbe", "lib", "libqbe.a" }) });
-    return exe;
-}
-
-/// Assembles and links what cesium0 wrote, with libcsrt and libc.
-fn linkProgram(
-    b: *std.Build,
-    target: std.Build.ResolvedTarget,
-    csrt: *std.Build.Step.Compile,
-    name: []const u8,
-    assembly: std.Build.LazyPath,
-) *std.Build.Step.Compile {
-    const exe = b.addExecutable(.{
-        .name = name,
-        .root_module = b.createModule(.{ .target = target, .optimize = .Debug, .link_libc = true }),
-    });
-    exe.root_module.addAssemblyFile(assembly);
-    exe.root_module.linkLibrary(csrt);
-    return exe;
-}
-
 /// Expected output as the target's C library writes it: on Windows a text
 /// stream gets "\r\n" for every '\n'.
 fn hostText(b: *std.Build, target: std.Build.ResolvedTarget, text: []const u8) []const u8 {
@@ -335,7 +295,7 @@ fn runProgram(
     assembly: std.Build.LazyPath,
     expected: []const u8,
 ) *std.Build.Step {
-    const run = b.addRunArtifact(linkProgram(b, target, csrt, name, assembly));
+    const run = b.addRunArtifact(link.linkProgram(b, target, csrt, name, assembly));
     run.expectStdOutEqual(hostText(b, target, expected));
     return &run.step;
 }
