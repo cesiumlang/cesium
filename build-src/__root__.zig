@@ -15,11 +15,13 @@
 //!   zig build         build and install to zig-out
 //!   zig build test       build, then run the test corpus
 //!   zig build test-diff  cesium1 against cesium0 on the generated corpus
+//!   zig build fuzz       cesium0 on damaged copies of the corpus (fuzz.zig)
 
 const std = @import("std");
 const stage1 = @import("stage1.zig");
 const tests = @import("tests.zig");
 const tests_diff = @import("tests_diff.zig");
+const fuzz = @import("fuzz.zig");
 
 /// The flags of the stage 0 C dialect (cesiumlang/cesium#10, "Flags"), minus
 /// the language standard, which the callers add.
@@ -84,6 +86,9 @@ pub fn build(b: *std.Build) tests_diff.Error!void {
 
     const diff_step = b.step("test-diff", "Compare cesium1 with cesium0 on the generated corpus");
     try tests_diff.add(b, diff_step, target, tool, c99.cesium0, s1.cesium1);
+
+    const fuzz_step = b.step("fuzz", "Fuzz cesium0 with damaged copies of the test corpus");
+    fuzz.add(b, fuzz_step, c99.cesium0);
 }
 
 fn addStage0(

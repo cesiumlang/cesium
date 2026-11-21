@@ -14,8 +14,9 @@
 #          QBE itself is replaced by a stub: it is third-party code and is
 #          not what is checked here.
 #        portable-c.sh fuzz <compiler> [<iterations> [<seed>]]
-#          The same build, run by tools/fuzz-stage0.py on damaged copies of
-#          the corpus (default: 2000 of them, seed 1). Needs Python 3.
+#          The same build, run by the fuzzer (zig build fuzz, tools/fuzz-stage0)
+#          on damaged copies of the corpus (default: 2000 of them, seed 1).
+#          Needs the devkit's Zig ($ZIG, else .devkit/zig/zig, else zig).
 #
 # Run from anywhere; objects go to $PORTABLE_C_OUT (default: tmp/portable-c).
 set -euo pipefail
@@ -84,10 +85,10 @@ build_sanitized () { # <compiler> <directory>: cesium0 with the sanitizers
 }
 
 fuzz () { # <compiler> <iterations> <seed>
-  local dir=$OUT/fuzz python=python3
-  command -v "$python" > /dev/null || python=python
+  local dir=$OUT/fuzz zig=${ZIG:-$ROOT/.devkit/zig/zig}
+  [ -x "$zig" ] || zig=zig
   build_sanitized "$1" "$dir"
-  "$python" "$ROOT/tools/fuzz-stage0.py" "$dir/cesium0" --iterations "$2" --seed "$3" --out "$dir/inputs"
+  (cd "$ROOT" && "$zig" build fuzz -- "$dir/cesium0" --iterations "$2" --seed "$3" --out "$dir/inputs")
 }
 
 sanitize () { # <compiler>
