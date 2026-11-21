@@ -47,7 +47,7 @@ jobs:
         run: python tools/fetch-devkit.py --host "${{ matrix.host }}"
 
       - name: Build and test stage 0
-        run: .devkit/zig/zig build test -Dtarget="${{ matrix.host }}" --summary all
+        run: .devkit/zig/zig build install test -Dtarget="${{ matrix.host }}" --summary all
 
   # The stage 0 C dialect (cesiumlang/cesium#10) beyond what `zig cc` checks
   # in the job above: the source check, other compilers, and the sanitizers.

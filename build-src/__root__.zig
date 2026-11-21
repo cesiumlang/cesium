@@ -6,12 +6,17 @@
 //!
 //! Everything is portable C (cesiumlang/cesium#10) compiled by `zig cc`. QBE
 //! comes from the devkit (cesiumlang/devkits) as libqbe.a; pass its
-//! directory with -Ddevkit=<dir> (default: .devkit).
+//! directory with -Ddevkit=<dir> (default: .devkit). With them it builds
+//! stage 1:
+//!
+//!   cesium1    the S0 compiler written in S0 (bootstrap/stage1), compiled
+//!              by cesium0
 //!
 //!   zig build         build and install to zig-out
 //!   zig build test    build, then run the test corpus
 
 const std = @import("std");
+const stage1 = @import("stage1.zig");
 const tests = @import("tests.zig");
 
 /// The flags of the stage 0 C dialect (cesiumlang/cesium#10, "Flags"), minus
@@ -66,10 +71,13 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(c99.cesium0);
     b.installArtifact(c99.csmir);
     b.installArtifact(c99.csrt);
+    // the cesium1 the tests check
+    const s1 = stage1.add(b, target, c99.cesium0, c99.csrt, c99.csmir, devkit);
+    b.installArtifact(s1.cesium1);
 
     const test_step = b.step("test", "Run the stage 0 test corpus");
     test_step.dependOn(&c11.cesium0.step);
-    tests.add(b, test_step, target, c99.cesium0, c99.csrt, c99.csmir, devkit);
+    tests.add(b, test_step, target, c99.cesium0, c99.csrt, c99.csmir, s1, devkit);
 }
 
 fn addStage0(
