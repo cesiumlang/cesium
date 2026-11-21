@@ -52,7 +52,7 @@ Open design questions carry the [`design`](https://github.com/cesiumlang/cesium/
 [`bootstrap/`](bootstrap/README.md) holds the bootstrap compilers: stage 0 (the S0 compiler `cesium0`, the core MIR library `libcsmir` and a small runtime, in portable C) and stage 1 (`cesium1`, a compiler for S0 written in S0), with their tests. `build.zig` builds and tests them with the Zig of the devkit:
 
 ```sh
-python tools/fetch-devkit.py
+bash tools/fetch-devkit.sh
 .devkit/zig/zig build test
 ```
 
@@ -60,7 +60,8 @@ python tools/fetch-devkit.py
 | --- | --- |
 | [`bootstrap/`](bootstrap/README.md) | Stage 0 and stage 1: sources, runtime and tests |
 | `build.zig`, `build-src/` | The build |
-| `devkit-version`, `tools/fetch-devkit.py` | Which devkit the build uses, and the script that downloads it to `.devkit/` |
+| `tools/` | Scripts (bash) and the fuzzer (Zig, `zig build fuzz`); no Python, which cannot be assumed installed |
+| `devkit-version`, `tools/fetch-devkit.sh` | Which devkit the build uses, and the script that downloads it to `.devkit/` |
 | `buildtools/` | Submodule: [cesium-buildtools](https://github.com/cesiumlang/cesium-buildtools), Windows scripts for tools the devkit does not contain. Not needed to build the compiler. |
 | `.cspell/cesium/` | Submodule: the spelling dictionary of Cesium terms |
 
@@ -68,8 +69,8 @@ The other Cesium repositories (the devkits, the VS Code extension, the website) 
 
 ## Development setup
 
-- **Build:** Python 3 to fetch the devkit; nothing else. The devkit's Zig is the C compiler and the build system.
-- **direnv:** `.envrc` puts the devkit's Zig and QBE and the build outputs on `PATH`. Run `direnv allow` once.
+- **Build:** bash and curl to fetch the devkit (Git Bash on Windows); nothing else. The devkit's Zig is the C compiler and the build system.
+- **direnv:** `.envrc` puts the devkit's Zig and QBE and the build outputs on `PATH`, and sources `buildtools/.envrc` for the tools buildtools installed (the Vulkan SDK, tree-sitter, Node.js, direnv). Run `direnv allow` once. The buildtools scripts install direnv; their readme says how to hook it into Git Bash and VS Code.
 - **VS Code:** open `cesium.code-workspace`. It points the Zig extension at the devkit and recommends the extensions used here.
 - **clangd:** `zig cc` is Clang, so clangd is the language server for the C sources (`.clangd`, `bootstrap/compile_flags.txt`). The devkit does not contain clangd. The VS Code clangd extension offers to download it when none is on `PATH`.
 

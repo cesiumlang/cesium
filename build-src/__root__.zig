@@ -6,13 +6,22 @@
 //!
 //! Everything is portable C (cesiumlang/cesium#10) compiled by `zig cc`. QBE
 //! comes from the devkit (cesiumlang/devkits) as libqbe.a; pass its
-//! directory with -Ddevkit=<dir> (default: .devkit).
+//! directory with -Ddevkit=<dir> (default: .devkit). With them it builds
+//! stage 1:
+//!
+//!   cesium1    the S0 compiler written in S0 (bootstrap/stage1), compiled
+//!              by cesium0
 //!
 //!   zig build         build and install to zig-out
-//!   zig build test    build, then run the test corpus
+//!   zig build test       build, then run the test corpus
+//!   zig build test-diff  cesium1 against cesium0 on the generated corpus
+//!   zig build fuzz       cesium0 on damaged copies of the corpus (fuzz.zig)
 
 const std = @import("std");
+const stage1 = @import("stage1.zig");
 const tests = @import("tests.zig");
+const tests_diff = @import("tests_diff.zig");
+const fuzz = @import("fuzz.zig");
 
 /// The flags of the stage 0 C dialect (cesiumlang/cesium#10, "Flags"), minus
 /// the language standard, which the callers add.
@@ -54,7 +63,7 @@ const Stage0 = struct {
     csrt: *std.Build.Step.Compile,
 };
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) tests_diff.Error!void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const devkit = b.option([]const u8, "devkit", "The unpacked Cesium devkit (default: .devkit)") orelse ".devkit";
@@ -66,10 +75,20 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(c99.cesium0);
     b.installArtifact(c99.csmir);
     b.installArtifact(c99.csrt);
+    // the cesium1 the tests check
+    const s1 = stage1.add(b, target, c99.cesium0, c99.csrt, c99.csmir, devkit);
+    b.installArtifact(s1.cesium1);
 
+    const tool = tests.addTool(b);
     const test_step = b.step("test", "Run the stage 0 test corpus");
     test_step.dependOn(&c11.cesium0.step);
-    tests.add(b, test_step, target, c99.cesium0, c99.csrt, c99.csmir, devkit);
+    tests.add(b, test_step, target, c99.cesium0, c99.csrt, c99.csmir, s1, tool, devkit);
+
+    const diff_step = b.step("test-diff", "Compare cesium1 with cesium0 on the generated corpus");
+    try tests_diff.add(b, diff_step, target, tool, c99.cesium0, s1.cesium1);
+
+    const fuzz_step = b.step("fuzz", "Fuzz cesium0 with damaged copies of the test corpus");
+    fuzz.add(b, fuzz_step, c99.cesium0);
 }
 
 fn addStage0(

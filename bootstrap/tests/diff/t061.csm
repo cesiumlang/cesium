@@ -1,0 +1,4 @@
+u8 g;
+u8 = f() { return g; }
+#u8 = h(##u8 p) { return p; }
+i32 = main(i32 argc, ##u8 argv) { return 0; }

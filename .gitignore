@@ -9,7 +9,7 @@
 /zig-out/
 /zig-pkg/
 
-# the Cesium devkit: python tools/fetch-devkit.py
+# the Cesium devkit: bash tools/fetch-devkit.sh
 /.devkit/
 /.devkit-downloads/
 

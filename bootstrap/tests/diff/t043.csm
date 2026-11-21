@@ -1,0 +1,5 @@
+extern libc = import("c") {
+  :#u8 = getenv(#u8 n);
+  void = exit(i32 s);
+}
+i32 = main(i32 argc, ##u8 argv) { exit(0); return 0; }
