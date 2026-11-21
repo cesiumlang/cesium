@@ -106,19 +106,19 @@ A test names the rules it checks in a comment, and skein reads those citations:
 
 ## Drawbacks
 
-- skein is new and has one maintainer. It has no rendering yet (chasingdaylight/skein#51 to #54), so until then the website shows markers as plain text such as `%rule[lex.comment.line syntax]`.
-- CI in cesiumlang/cesium has to build skein, which needs Zig 0.17.1.
+- skein is new and has one maintainer. It does not render HTML itself yet (chasingdaylight/skein#51 to #54); until then the website gets the specification from `skein render`, which writes Markdown with anchors and links for the site generator.
+- CI in cesiumlang/cesium depends on a released skein, which it downloads.
 - Moving the specification changes the paths that existing links to the website's sources point at. The published URLs can stay the same.
 
-## Open questions
+## Questions and their answers
 
-These are for emanspeaks. Each has a recommendation; none is decided.
+Three were answered by emanspeaks on 2026-11-21. Two keep their recommendation; merging this proposal accepts them as written, and they can be changed on its pull request before that.
 
-1. **Location.** Do proposals, the charter and the specification live in cesiumlang/cesium, as proposed above? Recommendation: yes.
-2. **Rule categories.** Which categories does a rule have? Recommendation: `syntax`, `legality` (what the compiler must reject), `static` (meaning fixed at compile time), `dynamic` (behavior at run time), following the Ferrocene Language Specification.
-3. **How CI gets skein.** Recommendation: a pinned commit of skein built in CI with a Zig 0.17.1 that CI downloads for that step only; later, a skein binary in the buildtools.
-4. **Proposal numbers.** Recommendation: four digits in order of filing, `P-0001` onward, with `P-0001` the charter.
-5. **Who may set `proposed`.** Recommendation: anyone, agents included; only emanspeaks sets `accepted` or `rejected`.
+1. **Location: this repository.** The charter, the proposals and the specification live in cesiumlang/cesium. It is the hub of everything else, and all the documentation and the specification of the language stay with the compiler's source; the workspace repository is for developers' tooling only. Everything is driven by the pipelines of this repository. If another repository ever needs items of its own, it gets a `.skein/` directory too, and skein links the two (planned there as links across repositories); nothing needs that now.
+2. **Rule categories:** `syntax`, `legality` (what the compiler must reject), `static` (meaning fixed at compile time) and `dynamic` (behavior at run time), following the Ferrocene Language Specification.
+3. **How skein is obtained.** Not through the buildtools. Developers get it with the VS Code extension `chasingdaylight.skein`, which is to carry the `skein` program for the platform (chasingdaylight/skein#74). CI downloads the archive of a pinned skein release for the runner and checks it against the release's checksums.
+4. **Proposal numbers** (recommendation): four digits in order of filing, `P-0001` onward, with `P-0001` the charter.
+5. **Who may set `proposed`** (recommendation): anyone, agents included; only emanspeaks sets `accepted` or `rejected`.
 
 ## After acceptance
 
