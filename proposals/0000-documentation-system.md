@@ -4,7 +4,7 @@ type = "proposal"
 status = "proposed"
 +++
 
-# Proposal 0000: one documentation system
+# Proposal P-0000: one documentation system
 
 This proposal sets how Cesium's design is written down, decided and checked. It is the first proposal and describes the process that every later one follows. It is accepted when emanspeaks merges the pull request that carries it; until then nothing in it is decided.
 
@@ -46,10 +46,10 @@ A proposal is a Markdown file `proposals/NNNN-short-name.md` with these sections
 | `proposed` | Ready. Waiting for emanspeaks. |
 | `accepted` | Decided. The specification is updated to match. |
 | `rejected` | Decided against. Kept for the record. |
-| `withdrawn` | Dropped by its author before a decision. |
-| `superseded` | Replaced by a later proposal, which it names. |
+| `withdrawn` | Dropped before a decision, by its author or by emanspeaks. |
+| `superseded` | Replaced by a later proposal, which it names. Only emanspeaks sets it. |
 
-A proposal is discussed on its pull request. Merging that pull request with the status `accepted` is the decision, and only emanspeaks does that. An agent may write a proposal and recommend an answer; it never sets `accepted`.
+A proposal is discussed on its pull request. Merging that pull request with the status `accepted` is the decision, and only emanspeaks does that; only he sets `rejected` or `superseded` too. The author or emanspeaks may set `withdrawn`. An agent may write a proposal and recommend an answer; it never sets `accepted`.
 
 ### The specification
 
@@ -118,15 +118,15 @@ A worked example in the specification is an item of its own, `%example[.open rej
 
 ## Questions and their answers
 
-Three were answered by emanspeaks on 2026-11-21. Four keep a recommendation (4 and 5 from the start, 6 and 7 added when the proposal was checked against what skein does today); merging this proposal accepts them as written, and they can be changed on its pull request before that.
+Questions 1 to 3 were answered by emanspeaks on 2026-11-21, and 4 to 7 (recommendations, 6 and 7 added when the proposal was checked against what skein does today) on 2026-11-22, with the changes noted in 4 and 5. Merging this proposal accepts them as written.
 
 1. **Location: this repository.** The charter, the proposals and the specification live in cesiumlang/cesium. It is the hub of everything else, and all the documentation and the specification of the language stay with the compiler's source; the workspace repository is for developers' tooling only. Everything is driven by the pipelines of this repository. If another repository ever needs items of its own, it gets a `.skein/` directory too, and skein links the two (planned there as links across repositories); nothing needs that now.
 2. **Rule categories:** `syntax`, `legality` (what the compiler must reject), `static` (meaning fixed at compile time) and `dynamic` (behavior at run time), following the Ferrocene Language Specification.
 3. **How skein is obtained.** Not through the buildtools. Developers get it with the VS Code extension `chasingdaylight.skein`, which is to carry the `skein` program for the platform (chasingdaylight/skein#74). CI downloads the archive of a pinned skein release for the runner and checks it against the release's checksums.
-4. **Proposal numbers** (recommendation): four digits in order of filing, `P-0001` onward, with `P-0001` the charter.
-5. **Who may set `proposed`** (recommendation): anyone, agents included; only emanspeaks sets `accepted` or `rejected`. skein can make it visible: the type `proposal` declares `approval = ["accepted", "rejected"]`, so `skein check` reports a proposal with either status that has no approval of its current text, and `skein approve --from-pull-request` records the approval from the review of the merged pull request. skein does not yet check who approved (chasingdaylight/skein#213), so until it does this rule is held by review of the pull request, as above.
-6. **Later history of rules and proposals** (recommendation): the link types `changed-by` (rule to the proposals that amended it) and `superseded-by` (proposal to its replacement), beside `introduced-by`, so a rule's whole history is a trace.
-7. **Examples in the specification** (recommendation): tested examples (`%example`, categories `accepts` and `rejects`) are part of the conformance suite, as described above, and the `langspec` template of skein is the starting point of `.skein/`.
+4. **Proposal numbers:** four digits in order of filing; this proposal is `P-0000`, the bootstrap, `P-0001` is the charter and the rest follow (emanspeaks, 2026-11-22).
+5. **Who sets the status** (emanspeaks, 2026-11-22): anyone, agents included, may set `proposed`; for now only emanspeaks sets `accepted`, `rejected` or `superseded`; the author or emanspeaks may set `withdrawn`. skein can make it visible: the type `proposal` declares `approval = ["accepted", "rejected"]`, so `skein check` reports a proposal with either status that has no approval of its current text, and `skein approve --from-pull-request` records the approval from the review of the merged pull request. skein does not yet check who approved (chasingdaylight/skein#213), so until it does this rule is held by review of the pull request, as above.
+6. **Later history of rules and proposals** (accepted 2026-11-22): the link types `changed-by` (rule to the proposals that amended it) and `superseded-by` (proposal to its replacement), beside `introduced-by`, so a rule's whole history is a trace.
+7. **Examples in the specification** (accepted 2026-11-22): tested examples (`%example`, categories `accepts` and `rejects`) are part of the conformance suite, as described above, and the `langspec` template of skein is the starting point of `.skein/`.
 
 ## After acceptance
 
