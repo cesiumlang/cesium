@@ -132,3 +132,4 @@ windeployqt
 WINSYS
 yyjson
 Zig
+emanspeaks
