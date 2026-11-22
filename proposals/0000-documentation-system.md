@@ -88,7 +88,13 @@ A test names the rules it checks in a comment, and skein reads those citations:
 // spec: lex.comment.line, lex.comment.block
 ```
 
-`skein check` fails CI when a citation or a reference names a rule that does not exist. `skein coverage` reports which rules have no test. It reports and does not fail, so coverage can grow chapter by chapter (cesiumlang/cesium#57, step 3).
+`skein check` fails CI when a citation or a reference names a rule that does not exist. `skein coverage` reports which rules have no test. It reports and does not fail, so coverage can grow chapter by chapter (cesiumlang/cesium#57, step 3). A test cites a rule by its text at the time: when a rule changes, skein does not yet flag the tests that cite it (chasingdaylight/skein#212); until it does, a change to a rule is reviewed with its tests by hand.
+
+Rules that have a later history link to it: `changed-by` names the proposals that amended a rule after `introduced-by`, and a proposal that replaces another names it with `superseded-by` (Question 6).
+
+### Examples in the specification are tested
+
+A worked example in the specification is an item of its own, `%example[.open rejects]` (a category says whether the compiler must accept or reject it), and it is part of the conformance suite: `skein examples` compiles each with the bootstrap compilers and fails when the result is not the one the category says. An example is linked to the rule it shows, and `skein coverage` reports rules without one where examples are expected (Question 7).
 
 ### What happens to the existing material
 
@@ -100,33 +106,37 @@ A test names the rules it checks in a comment, and skein reads those citations:
 ## Alternatives
 
 - **Keep deciding in issues.** No tooling to add. Rejected here because it is the current state, with the three problems above.
-- **A separate repository for proposals and the specification.** Cleaner history per kind of document. Rejected here because rules and tests could then not be checked against each other in one CI run until skein can cite across repositories, which is planned and not built.
-- **Keep the specification on cesiumlang.org.** No move needed. Rejected here for the same reason.
+- **A separate repository for proposals and the specification.** Cleaner history per kind of document. Skein can now cite across repositories (a qualified reference such as `%[compiler:lex.token]`, checked against the other repository's recorded state), so this is possible. Rejected here because one repository keeps the rules, the tests and the pipelines that check them in one tree and one CI run (Question 1).
+- **Keep the specification on cesiumlang.org.** No move needed. Rejected here because the tests are not in that repository, so rules and tests could not be checked against each other in one CI run.
 - **Sphinx with sphinx-needs, or Doorstop.** Mature tools. Both need Python, which no Cesium repository may depend on (cesiumlang/cesium#90), and neither reads rules written as plain paragraphs in a Markdown document.
 
 ## Drawbacks
 
-- skein is new and has one maintainer. It does not render HTML itself yet (chasingdaylight/skein#51 to #54); until then the website gets the specification from `skein render`, which writes Markdown with anchors and links for the site generator.
+- skein is new and has one maintainer. It renders the specification itself, as Markdown with anchors and links for a site generator, as a static HTML site, or as one self-contained file per document (chasingdaylight/skein#51 to #54, in v0.1.0, a pre-release), so the website does not depend on how skein is built.
 - CI in cesiumlang/cesium depends on a released skein, which it downloads.
 - Moving the specification changes the paths that existing links to the website's sources point at. The published URLs can stay the same.
 
 ## Questions and their answers
 
-Three were answered by emanspeaks on 2026-11-21. Two keep their recommendation; merging this proposal accepts them as written, and they can be changed on its pull request before that.
+Three were answered by emanspeaks on 2026-11-21. Four keep a recommendation (4 and 5 from the start, 6 and 7 added when the proposal was checked against what skein does today); merging this proposal accepts them as written, and they can be changed on its pull request before that.
 
 1. **Location: this repository.** The charter, the proposals and the specification live in cesiumlang/cesium. It is the hub of everything else, and all the documentation and the specification of the language stay with the compiler's source; the workspace repository is for developers' tooling only. Everything is driven by the pipelines of this repository. If another repository ever needs items of its own, it gets a `.skein/` directory too, and skein links the two (planned there as links across repositories); nothing needs that now.
 2. **Rule categories:** `syntax`, `legality` (what the compiler must reject), `static` (meaning fixed at compile time) and `dynamic` (behavior at run time), following the Ferrocene Language Specification.
 3. **How skein is obtained.** Not through the buildtools. Developers get it with the VS Code extension `chasingdaylight.skein`, which is to carry the `skein` program for the platform (chasingdaylight/skein#74). CI downloads the archive of a pinned skein release for the runner and checks it against the release's checksums.
 4. **Proposal numbers** (recommendation): four digits in order of filing, `P-0001` onward, with `P-0001` the charter.
-5. **Who may set `proposed`** (recommendation): anyone, agents included; only emanspeaks sets `accepted` or `rejected`.
+5. **Who may set `proposed`** (recommendation): anyone, agents included; only emanspeaks sets `accepted` or `rejected`. skein can enforce this instead of leaving it to convention: the type `proposal` declares `approval = { statuses = ["accepted", "rejected"], roles = ["owner"] }`, so `skein check` reports a proposal with either status that emanspeaks has not approved, and `skein approve --from-pull-request` records his approval from the review of the merged pull request.
+6. **Later history of rules and proposals** (recommendation): the link types `changed-by` (rule to the proposals that amended it) and `superseded-by` (proposal to its replacement), beside `introduced-by`, so a rule's whole history is a trace.
+7. **Examples in the specification** (recommendation): tested examples (`%example`, categories `accepts` and `rejects`) are part of the conformance suite, as described above, and the `langspec` template of skein is the starting point of `.skein/`.
 
 ## After acceptance
 
 In this order, each as its own pull request:
 
-1. `.skein/` in cesiumlang/cesium with the item types `proposal`, `rule` and `term`, the link type `introduced-by`, and a citation set for the tests; `skein check` in CI.
+1. `.skein/` in cesiumlang/cesium (from `skein init --template langspec`) with the item types `proposal`, `rule`, `example` and `term`, the rule statuses `draft`, `final`, `deprecated` and `removed` (`removed` the tombstone), the link types `introduced-by`, `changed-by` and `superseded-by`, and a citation set for the tests; `skein check` in CI.
 2. `P-0001`, the charter, from the goals on cesiumlang.org and the 2025 design.
 3. The `decision` issues as proposals `P-0002` onward.
 4. The specification in `spec/` with rule IDs, lexical structure and the S0 grammar first.
 5. Citations in the bootstrap tests, and the coverage report in CI.
-6. `CLAUDE.md`, the workspace skills, the Roadmap project's readme and the agent plugin's skill describe the process.
+6. `CLAUDE.md` (the agent instructions of the process can come from `skein agents`), the workspace skills, the Roadmap project's readme and the agent plugin's skill describe the process.
+
+The website is not part of these steps. How cesiumlang.org takes the specification from `skein render` is settled with whoever is rebuilding the site, in cesiumlang/cesium-workspace#34, before step 4 moves the specification.
