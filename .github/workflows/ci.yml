@@ -150,12 +150,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Zig 0.17.1, the devkit's, for a skein-version that names a commit of
-      # skein, which fetch-skein.sh builds (until the release it waits on)
-      - uses: randyos-org/setup-zig@node24 # v2.2.1 on Node.js 24, until upstream releases it
-        with:
-          version: 0.17.1
-
       - name: Fetch skein
         run: bash tools/fetch-skein.sh
 
