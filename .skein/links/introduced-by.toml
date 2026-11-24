@@ -1,0 +1,4 @@
+description = "The proposal that brought a rule, term or example into the specification"
+from = ["rule", "term", "example"]
+to = ["proposal"]
+required = true

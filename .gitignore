@@ -14,3 +14,6 @@
 /.devkit-downloads/
 
 /tmp/
+
+# skein for CI: bash tools/fetch-skein.sh
+/.skein-bin/

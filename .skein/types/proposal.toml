@@ -1,0 +1,7 @@
+description = "A design change, decided by emanspeaks when its pull request merges"
+id = "numbered"
+prefix = "P"
+digits = 4
+statuses = ["draft", "proposed", "accepted", "rejected", "withdrawn", "superseded"]
+# accepted or rejected only as approved; who approves is not checked yet
+approval = ["accepted", "rejected"]

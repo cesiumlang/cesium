@@ -131,10 +131,29 @@ jobs:
       - name: MSVC, as C11
         run: bash tools/portable-c.sh compile msvc cl
 
+  # the proposals, the specification and the tests' citations of it
+  # (proposals/0000-documentation-system.md), with the skein of skein-version
+  skein:
+    name: Specification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Fetch skein
+        run: bash tools/fetch-skein.sh
+
+      - name: skein check
+        run: .skein-bin/bin/skein check --format github
+
+      # reported, not required: coverage grows chapter by chapter
+      - name: Coverage in the job summary
+        run: .skein-bin/bin/skein coverage --markdown >> "$GITHUB_STEP_SUMMARY"
+
   # the one check the rulesets require
   ci:
     name: CI
-    needs: [stage0, dialect, msvc]
+    needs: [stage0, dialect, msvc, skein]
     if: always()
     runs-on: ubuntu-24.04
     steps:

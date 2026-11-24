@@ -1,0 +1,23 @@
+# Skein reads the proposals, the specification and the tests' citations of it
+# (proposals/0000-documentation-system.md). Types and links not in .skein/
+# come from Skein's langspec template.
+template = "langspec"
+
+[project]
+name = "Cesium"
+id = "cesiumlang/cesium"
+
+# one file per proposal, with front matter
+[[sources]]
+path = "proposals"
+kind = "items"
+type = "proposal"
+
+# the conformance tests cite the rules they check: `// spec: lex.comment.line`
+[[citations]]
+name = "test"
+path = "bootstrap/tests"
+files = [".csm"]
+marker = "// spec:"
+to = ["rule"]
+review = true
