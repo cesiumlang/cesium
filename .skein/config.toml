@@ -13,6 +13,12 @@ path = "proposals"
 kind = "items"
 type = "proposal"
 
+# the charter, a proposal of its own (P-0001); other files in docs/ are not items
+[[sources]]
+path = "docs"
+kind = "items"
+type = "proposal"
+
 # the specification: rules, terms and examples in Markdown chapters
 [[sources]]
 path = "spec"
