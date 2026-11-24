@@ -1,0 +1,4 @@
+description = "A rule of the language; final only through an accepted proposal"
+categories = ["syntax", "legality", "static", "dynamic"]
+statuses = ["draft", "final", "deprecated", "removed"]
+tombstone = "removed"

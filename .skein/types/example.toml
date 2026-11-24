@@ -1,0 +1,8 @@
+description = "Cesium code that shows a rule: accepted, or rejected"
+categories = ["accepts", "rejects"]
+statuses = ["draft", "final", "deprecated", "removed"]
+tombstone = "removed"
+
+[example]
+link = "shows"
+extensions = { cesium = ".csm" }

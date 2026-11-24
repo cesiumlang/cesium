@@ -1,0 +1,3 @@
+description = "The proposal that replaces this one"
+from = ["proposal"]
+to = ["proposal"]
