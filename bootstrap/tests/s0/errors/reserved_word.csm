@@ -1,5 +1,6 @@
 // S0 source must stay valid Cesium, so a keyword of the full language
 // cannot be a name.
+// spec: lex.ident.keyword
 i32 = main(i32 argc, ##u8 argv) {
   i32 switch = 1;
   return switch;

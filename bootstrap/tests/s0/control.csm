@@ -1,4 +1,5 @@
 // Control flow: if / else if / else, while, break, continue, return, recursion.
+// spec: s0.statement, s0.statement.braces, s0.statement.loops, s0.func, s0.func.single-return, s0.condition
 const u8 TRUE = 1;
 
 u64 = fib(u64 n) {

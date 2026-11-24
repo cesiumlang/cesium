@@ -25,3 +25,5 @@ files = [".csm"]
 marker = "// spec:"
 to = ["rule"]
 review = true
+# coverage reports the rules no test cites yet; it does not fail CI
+expected = true

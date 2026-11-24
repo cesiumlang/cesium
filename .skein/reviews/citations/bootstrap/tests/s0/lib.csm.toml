@@ -1,0 +1,4 @@
+# Review records, written by skein. Do not edit: use 'skein review'.
+"bootstrap/tests/s0/lib.csm"."cite:test"."s0.expr.string" = "abb71d697bb5af4531a9a44ced3be3c0"
+"bootstrap/tests/s0/lib.csm"."cite:test"."s0.extern" = "8feee4277e8befa1175196946309b0bb"
+"bootstrap/tests/s0/lib.csm"."cite:test"."s0.func" = "e8af8173fba65e23679944016f3cdf6f"

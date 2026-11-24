@@ -1,0 +1,10 @@
+# Review records, written by skein. Do not edit: use 'skein review'.
+"bootstrap/tests/s0/tokens.csm"."cite:test"."lex.comment.line" = "fc82fc1a8e8569aacfa8c519c9606620"
+"bootstrap/tests/s0/tokens.csm"."cite:test"."lex.lit.char" = "f4168707fadc2b285a3b0b57486a179a"
+"bootstrap/tests/s0/tokens.csm"."cite:test"."s0.assign.pointer" = "2cfc78fe455cf6decc083726842d1e88"
+"bootstrap/tests/s0/tokens.csm"."cite:test"."s0.const" = "8438daafc4b57113e1b1dba38cad10e7"
+"bootstrap/tests/s0/tokens.csm"."cite:test"."s0.entry" = "6bf37c4383a02a68b599c0382f3f3795"
+"bootstrap/tests/s0/tokens.csm"."cite:test"."s0.expr.alloc" = "d0ca21c8d345f5c4f16656390d155300"
+"bootstrap/tests/s0/tokens.csm"."cite:test"."s0.expr.string" = "abb71d697bb5af4531a9a44ced3be3c0"
+"bootstrap/tests/s0/tokens.csm"."cite:test"."s0.extern" = "8feee4277e8befa1175196946309b0bb"
+"bootstrap/tests/s0/tokens.csm"."cite:test"."s0.struct" = "dde6710520047fbd79d69ef3b9c62de1"

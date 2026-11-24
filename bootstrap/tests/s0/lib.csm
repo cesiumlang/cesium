@@ -1,5 +1,6 @@
 // Output helpers shared by the S0 tests. Each test is compiled together with
 // this file as one unit.
+// spec: s0.extern, s0.func, s0.expr.string
 extern libc = import('c') {
   i32 = putchar(i32 c);
 }
