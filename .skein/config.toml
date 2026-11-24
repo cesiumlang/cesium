@@ -13,6 +13,10 @@ path = "proposals"
 kind = "items"
 type = "proposal"
 
+# the specification: rules, terms and examples in Markdown chapters
+[[sources]]
+path = "spec"
+
 # the conformance tests cite the rules they check: `// spec: lex.comment.line`
 [[citations]]
 name = "test"
