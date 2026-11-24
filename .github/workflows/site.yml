@@ -1,0 +1,64 @@
+name: Site
+
+# The specification and the proposals are published on the websites, which
+# render them with Skein when they are built (tools/take-spec.sh of
+# cesiumlang/cesiumlang.org; cesiumlang/cesium#106). A push that changes them
+# starts that build: to dev, the development site cesiumlang.dev; to main,
+# cesiumlang.org.
+#
+# It starts the other repositories' workflows as the Cesium Agent app, with
+# the secret CESIUM_AGENT_PRIVATE_KEY, a private key of the app: a workflow's
+# own token cannot. Without the secret, it says so and does nothing.
+
+on:
+  push:
+    branches: [dev, main]
+    paths:
+      - spec/**
+      - proposals/**
+      - .skein/**
+      - skein-version
+      - .github/workflows/site.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rebuild:
+    name: Rebuild ${{ github.ref_name == 'main' && 'cesiumlang.org' || 'cesiumlang.dev' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: The secret is set
+        id: key
+        env:
+          KEY: ${{ secrets.CESIUM_AGENT_PRIVATE_KEY }}
+        run: |
+          if [ -n "$KEY" ]; then echo "set=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::the secret CESIUM_AGENT_PRIVATE_KEY is not set: the site is not rebuilt"; fi
+
+      - name: The app's token
+        id: token
+        if: steps.key.outputs.set == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: Iv23liXrtnf12IOEFv6c
+          private-key: ${{ secrets.CESIUM_AGENT_PRIVATE_KEY }}
+          owner: cesiumlang
+          repositories: cesiumlang.org,cesiumlang.dev
+
+      - name: Start the build
+        if: steps.key.outputs.set == 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          if [ "$GITHUB_REF_NAME" = main ]; then
+            gh workflow run deploy.yml --repo cesiumlang/cesiumlang.org --ref main
+          else
+            gh workflow run pages.yml --repo cesiumlang/cesiumlang.dev --ref main
+          fi
