@@ -57,6 +57,16 @@ jobs:
         if: matrix.host == 'x86_64-linux-musl'
         run: .devkit/zig/zig build test-diff -Dtarget="${{ matrix.host }}" --summary failures
 
+      # the specification's tested examples, each accepted or rejected by
+      # cesium0 as its category says (proposals/0000-documentation-system.md)
+      - name: The examples of the specification
+        if: matrix.host == 'x86_64-linux-musl'
+        env:
+          ZIG: .devkit/zig/zig
+        run: |
+          bash tools/fetch-skein.sh
+          bash tools/spec-examples.sh
+
   # The stage 0 C dialect (cesiumlang/cesium#10) beyond what `zig cc` checks
   # in the job above: the source check, other compilers, and the sanitizers.
   dialect:

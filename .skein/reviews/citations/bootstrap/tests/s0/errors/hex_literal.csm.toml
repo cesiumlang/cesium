@@ -1,0 +1,3 @@
+# Review records, written by skein. Do not edit: use 'skein review'.
+"bootstrap/tests/s0/errors/hex_literal.csm"."cite:test"."lex.lit.int.decimal" = "5ff6826b0fbb2aac2c4e973eb75d98b7"
+"bootstrap/tests/s0/errors/hex_literal.csm"."cite:test"."s0.tokens" = "4a2be1aefc9a10d74bf593d188840f3b"
