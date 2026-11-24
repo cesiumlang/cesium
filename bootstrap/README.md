@@ -28,8 +28,8 @@ The grammar stage 0 accepts is the S0 chapter of the draft specification on cesi
 Stage 0 is built with the Zig of the [Cesium devkit](https://github.com/cesiumlang/devkits), which also supplies QBE as `libqbe.a`. Unpack the devkit for your host to `.devkit` in the repository root (or pass `-Ddevkit=<dir>`):
 
 ```sh
-python tools/fetch-devkit.py        # downloads and checks the devkit named in devkit-version
-.devkit/zig/zig build               # cesium0, libcsmir, libcsrt in zig-out
+bash tools/fetch-devkit.sh          # downloads and checks the devkit named in devkit-version
+.devkit/zig/zig build               # cesium0, cesium1, libcsmir, libcsrt in zig-out
 .devkit/zig/zig build test          # builds as C99 and as C11, then runs the corpus
 ```
 
@@ -112,8 +112,8 @@ These had to be settled to write stage 0, and no issue decides them. Each is iso
 **C dialect**
 
 - **`-Wformat-nonliteral` and the ban on attributes conflict** for the project's own printf-style functions. All forwarding of format strings is confined to `libcsmir/cs_format.c`, the one file built without that warning, and `-Wno-missing-format-attribute` is added everywhere. This follows #10's rule for third-party headers: relax one translation unit, not the rules.
-- **Enforced in CI beyond `zig build`** (#10, "Enforcement in CI"): `tools/check-c-dialect.py` is the source check (banned functions, compiler extensions and optional features, headers outside the allowed list, `%p`, and every `.c` file including the common header). `tools/portable-c.sh compile` compiles every translation unit with GCC and Clang under the dialect's flags as C99 and as C11, with TinyCC as the canary, and with MSVC (`/std:c11 /W4 /WX`, minus C4996, MSVC's own deprecation of ISO C functions such as `fopen`). `tools/portable-c.sh sanitize` builds `cesium0` with ASan and UBSan and runs the corpus through it up to QBE IL, with QBE replaced by a stub. A line that must name a banned word carries the comment `cs-dialect: allow` and a reason.
-- **Fuzzing** (#10: "consider fuzzing the MIR text parser"): `tools/fuzz-stage0.py` damages the files of the test corpus a little (tokens, lines, bytes, truncation, repetition, deep nesting) and runs `cesium0` on each result, for the MIR text parser and for the S0 front end. Whatever the input, `cesium0` must exit with status 0 or 1, in time and without a sanitizer report, and MIR text it accepts and prints must read back the same. `tools/portable-c.sh fuzz` builds `cesium0` with ASan and UBSan and runs it; CI does so with a fixed seed, so a failure there can be reproduced. It is mutation fuzzing without coverage feedback, not libFuzzer or AFL.
+- **Enforced in CI beyond `zig build`** (#10, "Enforcement in CI"): `tools/check-c-dialect.sh` is the source check (banned functions, compiler extensions and optional features, headers outside the allowed list, `%p`, and every `.c` file including the common header). `tools/portable-c.sh compile` compiles every translation unit with GCC and Clang under the dialect's flags as C99 and as C11, with TinyCC as the canary, and with MSVC (`/std:c11 /W4 /WX`, minus C4996, MSVC's own deprecation of ISO C functions such as `fopen`). `tools/portable-c.sh sanitize` builds `cesium0` with ASan and UBSan and runs the corpus through it up to QBE IL, with QBE replaced by a stub. A line that must name a banned word carries the comment `cs-dialect: allow` and a reason.
+- **Fuzzing** (#10: "consider fuzzing the MIR text parser"): the fuzzer `tools/fuzz-stage0` (Zig, run by `zig build fuzz`) damages the files of the test corpus a little (tokens, lines, bytes, truncation, repetition, deep nesting) and runs `cesium0` on each result, for the MIR text parser and for the S0 front end. Whatever the input, `cesium0` must exit with status 0 or 1, in time and without a sanitizer report, and MIR text it accepts and prints must read back the same. `tools/portable-c.sh fuzz` builds `cesium0` with ASan and UBSan and runs the fuzzer on it; CI does so with a fixed seed, so a failure there can be reproduced. `zig build fuzz -- --iterations 200` fuzzes the build's own `cesium0`, without sanitizers. It is mutation fuzzing without coverage feedback, not libFuzzer or AFL.
 - **Not done** from #10: the other compilers compile but do not link: the devkit's `libqbe.a` is built by `zig cc` for its own targets.
 
 **In-process QBE**
@@ -128,6 +128,8 @@ These had to be settled to write stage 0, and no issue decides them. Each is iso
 cat a.csm b.csm | cesium1            # core MIR text on standard output
 cat a.csm b.csm | cesium1 out.s      # assembly, through cs_compile_mir (and out.s.ssa)
 ```
+
+`zig build` installs `cesium1` to `zig-out/bin`, next to `cesium0`: `cesium0` compiles `stage1/` and the result is linked with `libcsrt`, `libcsmir` and `libqbe.a` (`build-src/stage1.zig`). It is the same build of `cesium1` the tests check.
 
 Several files make one unit by being given one after another on standard input; MIR text has no line numbers, so this is the same unit `cesium0 a.csm b.csm` compiles. The exit status is 0 on success, 1 on an error in the source and 2 when a limit of `cesium1` is reached. An error is printed as `line:col: error: message` on standard output, with lines counted from the start of the input, and nothing else is printed before the whole unit is checked. Linking `cesium1` needs `libcsmir` and the devkit's `libqbe.a` besides `libcsrt`.
 
@@ -166,3 +168,5 @@ What S1 adds to S0 is not decided ("candidate S1 features, to be confirmed when 
 - `mir/<name>.mir` with `<name>.expected`: MIR text printed back unchanged, then compiled and run. `integers.mir` covers the sub-word integer types S0 does not have; `layout.mir` checks sizes, alignments and field offsets.
 - `mir/errors/`: MIR the verifier or parser must reject.
 - `cesium1`, built by `cesium0`, on the same corpus: for every `s0/<name>.csm` run test its core MIR must be what `cesium0 --emit-mir` prints for the same files, and it must reject every program in `s0/errors/` with the same message. On its own source its MIR must be `cesium0`'s too, and the `cesium1` it builds from that source with `cesium1 out.s` must print that MIR again: the fixed point. `build-src/stage1_tool.c` joins the files of a unit and compares the outputs.
+
+`zig build test-diff` runs a second corpus, `diff/`: 246 generated S0 programs (see `diff/README.md`), each given to both compilers (`build-src/tests_diff.zig`). For the 97 in `diff/` the core MIR of `cesium1` must be what `cesium0 --emit-mir` prints; for the 149 in `diff/errors/` both must exit with status 1 and their first errors must be the same message at the same line and column (for the two verifier checks `cesium1` makes itself, the same message and line). The step finds the files by listing the two directories, so a case is added by adding its file. It is not part of `zig build test`, which stays fast on every host; CI runs it on Linux x86_64 only (#67, item 3).

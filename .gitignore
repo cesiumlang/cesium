@@ -9,8 +9,11 @@
 /zig-out/
 /zig-pkg/
 
-# the Cesium devkit: python tools/fetch-devkit.py
+# the Cesium devkit: bash tools/fetch-devkit.sh
 /.devkit/
 /.devkit-downloads/
 
 /tmp/
+
+# skein for CI: bash tools/fetch-skein.sh
+/.skein-bin/

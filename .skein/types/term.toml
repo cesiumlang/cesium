@@ -1,0 +1,3 @@
+description = "A term the specification defines, for its glossary"
+statuses = ["draft", "final", "deprecated", "removed"]
+tombstone = "removed"

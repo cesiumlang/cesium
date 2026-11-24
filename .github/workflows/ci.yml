@@ -1,13 +1,20 @@
 name: CI
 
 # Builds stage 0 (bootstrap/) with the devkit's Zig and runs its test corpus,
-# on every host the devkit supports that QBE can target. Pull requests and
-# pushes to main and dev are built.
+# on every host the devkit supports that QBE can target.
+#
+# Pull requests into main and pushes to main are run. Pushes to dev and pull
+# requests into it are not (emanspeaks, 2026-11-21; as zfls and rstd do): dev
+# is checked as a whole by the standing pull request from dev to main, whose
+# run each merge into dev restarts. To check one branch alone, start the
+# workflow by hand: `gh workflow run ci.yml --ref BRANCH`.
 
 on:
   push:
-    branches: [main, dev]
+    # (not dev: see the top)
+    branches: [main]
   pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -39,15 +46,16 @@ jobs:
       # the submodules (buildtools, the cspell dictionary) are not needed
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
       - name: Fetch the devkit
-        run: python tools/fetch-devkit.py --host "${{ matrix.host }}"
+        run: bash tools/fetch-devkit.sh --host "${{ matrix.host }}"
 
       - name: Build and test stage 0
-        run: .devkit/zig/zig build test -Dtarget="${{ matrix.host }}" --summary all
+        run: .devkit/zig/zig build install test -Dtarget="${{ matrix.host }}" --summary all
+
+      # the generated corpus (bootstrap/tests/diff), on one host only
+      - name: Compare cesium1 with cesium0 on the generated corpus
+        if: matrix.host == 'x86_64-linux-musl'
+        run: .devkit/zig/zig build test-diff -Dtarget="${{ matrix.host }}" --summary failures
 
   # The stage 0 C dialect (cesiumlang/cesium#10) beyond what `zig cc` checks
   # in the job above: the source check, other compilers, and the sanitizers.
@@ -59,7 +67,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Source check (banned identifiers, common header)
-        run: python3 tools/check-c-dialect.py
+        run: bash tools/check-c-dialect.sh
 
       - name: Install TinyCC
         run: |
@@ -84,6 +92,10 @@ jobs:
 
       - name: Test corpus under ASan and UBSan
         run: bash tools/portable-c.sh sanitize clang
+
+      # the fuzzer is a Zig program (zig build fuzz)
+      - name: Fetch the devkit
+        run: bash tools/fetch-devkit.sh
 
       # damaged copies of the corpus: cesium0 must reject or accept each
       # without crashing; the seed is fixed so that a failure can be repeated
@@ -119,10 +131,35 @@ jobs:
       - name: MSVC, as C11
         run: bash tools/portable-c.sh compile msvc cl
 
+  # the proposals, the specification and the tests' citations of it
+  # (proposals/0000-documentation-system.md), with the skein of skein-version
+  skein:
+    name: Specification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # Zig 0.17.1, the devkit's, for a skein-version that names a commit of
+      # skein, which fetch-skein.sh builds (until the release it waits on)
+      - uses: randyos-org/setup-zig@node24 # v2.2.1 on Node.js 24, until upstream releases it
+        with:
+          version: 0.17.1
+
+      - name: Fetch skein
+        run: bash tools/fetch-skein.sh
+
+      - name: skein check
+        run: .skein-bin/bin/skein check --format github
+
+      # reported, not required: coverage grows chapter by chapter
+      - name: Coverage in the job summary
+        run: .skein-bin/bin/skein coverage --markdown >> "$GITHUB_STEP_SUMMARY"
+
   # the one check the rulesets require
   ci:
     name: CI
-    needs: [stage0, dialect, msvc]
+    needs: [stage0, dialect, msvc, skein]
     if: always()
     runs-on: ubuntu-24.04
     steps:
