@@ -63,6 +63,9 @@ jobs:
           grep -B4 -A4 'DW_AT_name.*bootstrap/tests/s0/lines.csm' info.txt
           gdb -batch -ex run -ex bt zig-out/bin/lines 2>&1 | tee gdb.txt
           grep -q '^#0 .* at bootstrap/tests/s0/lines.csm:12' gdb.txt
+          # a breakpoint by absolute path, as an editor sets it
+          gdb -batch -ex "break $PWD/bootstrap/tests/s0/lines.csm:12" -ex run -ex bt zig-out/bin/lines 2>&1 | tee gdb-break.txt
+          grep -q '^Breakpoint 1, .*lines.csm:12' gdb-break.txt
 
       - name: lldb finds the line of a trap
         if: matrix.host == 'aarch64-macos-none'
@@ -71,6 +74,9 @@ jobs:
           .devkit/zig/zig build lines -Dtarget="${{ matrix.host }}"
           lldb --batch -o run -o bt zig-out/bin/lines 2>&1 | tee lldb.txt
           grep -q 'lines.csm:12' lldb.txt
+          # a breakpoint by absolute path, as an editor sets it
+          lldb --batch -o "breakpoint set --file $PWD/bootstrap/tests/s0/lines.csm --line 12" -o run -o bt zig-out/bin/lines 2>&1 | tee lldb-break.txt
+          grep -q 'stop reason = breakpoint 1' lldb-break.txt
 
       # the generated corpus (bootstrap/tests/diff), on one host only
       - name: Compare cesium1 with cesium0 on the generated corpus
