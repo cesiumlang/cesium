@@ -86,9 +86,12 @@ static bool wrap_in_dwarf(const MirTarget *t, const char *out_path, const char *
 }
 
 /* COFF: QBE writes to a file beside the output, which at exit is rewritten
- * with CodeView line tables into the output (mir_codeview.c). */
+ * with CodeView line tables into the output (mir_codeview.c). The module
+ * lives until then, for its variables, or is NULL without them. */
 static CsBuf qbe_path = {NULL, 0, 0};
 static CsBuf cv_path = {NULL, 0, 0};
+static const MirModule *cv_module = NULL;
+static const MirTarget *cv_target = NULL;
 
 static void write_codeview(void) {
   char *data = NULL;
@@ -96,7 +99,7 @@ static void write_codeview(void) {
   CsBuf out = {NULL, 0, 0};
   bool ok = fclose(stdout) == 0 && cs_read_file(qbe_path.data, &data, &len);
   if (ok) {
-    mir_codeview_rewrite(&out, data, len);
+    mir_codeview_rewrite(&out, data, len, cv_module, cv_target);
     ok = cs_write_file(cv_path.data, out.data == NULL ? "" : out.data, out.len);
   }
   remove(qbe_path.data);
@@ -125,7 +128,19 @@ static bool wrap_in_codeview(const char *out_path) {
   return true;
 }
 
-int csmir_emit_qbe(MirModule *m, const MirTarget *t, const char *out_path) {
+bool csmir_opt_mode(const char *name, int *mode) {
+  static const char *const names[] = {"debug", "safe", "fast", "small"};
+  int i;
+  for (i = 0; i < 4; i++) {
+    if (strcmp(name, names[i]) == 0) {
+      *mode = i;
+      return true;
+    }
+  }
+  return false;
+}
+
+int csmir_emit_qbe(MirModule *m, const MirTarget *t, const char *out_path, bool variables) {
   CsBuf il = {NULL, 0, 0};
   CsBuf il_path = {NULL, 0, 0};
   char *argv[7];
@@ -140,7 +155,11 @@ int csmir_emit_qbe(MirModule *m, const MirTarget *t, const char *out_path) {
     set_error("MIR: %s", m->err);
     return 1;
   }
-  file = mir_lower_qbe(&il, m, t);
+  file = mir_lower_qbe(&il, m, t, variables);
+  if (variables) {
+    cv_module = m;
+    cv_target = t;
+  }
   cs_buf_printf(&il_path, "%s.ssa", out_path);
   if (!cs_write_file(il_path.data, il.data == NULL ? "" : il.data, il.len)) {
     set_error("cannot write %s", il_path.data);
@@ -182,9 +201,12 @@ int cs_compile_mir(const char *mir, size_t len, int backend, const char *triple,
   int rc;
   CS_UNUSED(cpu);
   CS_UNUSED(features);
-  CS_UNUSED(opt_level);
   if (backend != CS_BACKEND_QBE) {
     set_error("only the QBE backend exists so far");
+    return 1;
+  }
+  if ((opt_level & ~CS_OPT_VARIABLES) < CS_OPT_DEBUG || (opt_level & ~CS_OPT_VARIABLES) > CS_OPT_SMALL) {
+    set_error("unknown build mode %d", opt_level);
     return 1;
   }
   t = csmir_target(triple);
@@ -197,7 +219,7 @@ int cs_compile_mir(const char *mir, size_t len, int backend, const char *triple,
     mir_module_free(m);
     return 1;
   }
-  rc = csmir_emit_qbe(m, t, out_path);
+  rc = csmir_emit_qbe(m, t, out_path, (opt_level & CS_OPT_VARIABLES) != 0);
   mir_module_free(m);
   return rc;
 }

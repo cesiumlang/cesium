@@ -1,6 +1,7 @@
 /* Core MIR -> QBE IL (cesiumlang/cesium#8, "Lowering to QBE IL").
  *
- *   - locals are stack slots (QBE promotes them to registers);
+ *   - locals are stack slots (QBE promotes them to registers, unless their
+ *     addresses escape to keep them for debuggers, mir_debug.c);
  *   - structured control flow becomes labels and jumps;
  *   - 8- and 16-bit integers are computed in 32-bit temporaries and kept
  *     extended by their signedness after every operation;
@@ -32,6 +33,11 @@ typedef struct Q {
   const char *file;
   const char *func_file;
   const MirStmt *loc; /* the statement whose line was given last, or NULL */
+  /* variables for debuggers (mir_debug.c): the function's index among the
+   * defined ones, and its scopes so far */
+  bool vars;
+  int func;
+  int nscope;
 } Q;
 
 static void emit(Q *q, const char *fmt, ...) {
@@ -518,6 +524,36 @@ static void gen_loc(Q *q, const MirStmt *s) {
 
 static void gen_block(Q *q, MirStmt *s);
 
+/* A store to a marker's symbol, which QBE keeps where it is. */
+static void gen_marker(Q *q, char kind, int n) {
+  emit(q, "\tstoreb 0, $");
+  mir_debug_marker(q->out, kind, q->func, n);
+  emit(q, "\n");
+}
+
+/* A nested block, marked where it opens and closes if it is a scope.
+ * Returns the scope, or -1. */
+static int gen_scoped(Q *q, MirStmt *body) {
+  int k = -1;
+  if (q->vars && mir_block_is_scope(body)) {
+    k = q->nscope++;
+    gen_marker(q, 'o', k);
+  }
+  gen_block(q, body);
+  if (k >= 0) {
+    gen_marker(q, 'c', k);
+  }
+  return k;
+}
+
+/* Where the code after a statement starts: a scope it holds closes there
+ * too, in case the end of its block cannot be reached. */
+static void gen_close(Q *q, int k) {
+  if (k >= 0) {
+    gen_marker(q, 'c', k);
+  }
+}
+
 /* Stores zero over a local's slot. */
 static void gen_zero(Q *q, MirLocal *l) {
   uint64_t size = mir_sizeof(q->t, l->type);
@@ -587,14 +623,18 @@ static void gen_stmt(Q *q, MirStmt *s) {
     int then = new_label(q);
     int els = new_label(q);
     int fi = new_label(q);
+    int k_then;
+    int k_else;
     a = truth(q, s->a->type, gen(q, s->a));
     emit(q, "\tjnz %%t.%d, @then.%d, @else.%d\n", a, then, els);
     emit(q, "@then.%d\n", then);
-    gen_block(q, s->body);
+    k_then = gen_scoped(q, s->body);
     emit(q, "\tjmp @fi.%d\n", fi);
     emit(q, "@else.%d\n", els);
-    gen_block(q, s->els);
+    k_else = gen_scoped(q, s->els);
     emit(q, "@fi.%d\n", fi);
+    gen_close(q, k_then);
+    gen_close(q, k_else);
     return;
   }
 
@@ -604,6 +644,7 @@ static void gen_stmt(Q *q, MirStmt *s) {
     int end = new_label(q);
     int saved_head = q->loop_head;
     int saved_end = q->loop_end;
+    int k;
     emit(q, "@loop.%d\n", head);
     gen_loc(q, s);
     a = truth(q, s->a->type, gen(q, s->a));
@@ -611,11 +652,12 @@ static void gen_stmt(Q *q, MirStmt *s) {
     emit(q, "@body.%d\n", body);
     q->loop_head = head;
     q->loop_end = end;
-    gen_block(q, s->body);
+    k = gen_scoped(q, s->body);
     q->loop_head = saved_head;
     q->loop_end = saved_end;
     emit(q, "\tjmp @loop.%d\n", head);
     emit(q, "@done.%d\n", end);
+    gen_close(q, k);
     return;
   }
 
@@ -647,6 +689,26 @@ static void gen_block(Q *q, MirStmt *s) {
 }
 
 /* ---- declarations ------------------------------------------------------ */
+
+/* The symbols a function's markers store to: never read, so a byte each,
+ * and the addresses of nlocals locals. */
+static void gen_marker_data(Q *q, size_t nlocals) {
+  size_t i;
+  int k;
+  for (i = 0; i < nlocals; i++) {
+    emit(q, "data $");
+    mir_debug_marker(q->out, 'v', q->func, (int)i);
+    emit(q, " = align 8 { l 0 }\n");
+  }
+  for (k = 1; k < q->nscope; k++) {
+    emit(q, "data $");
+    mir_debug_marker(q->out, 'o', q->func, k);
+    emit(q, " = { b 0 }\ndata $");
+    mir_debug_marker(q->out, 'c', q->func, k);
+    emit(q, " = { b 0 }\n");
+  }
+  emit(q, "\n");
+}
 
 static void gen_func(Q *q, MirFunc *f) {
   MirLocal *l;
@@ -681,10 +743,21 @@ static void gen_func(Q *q, MirFunc *f) {
       i++;
     }
   }
+  /* each slot's address escapes, so that QBE keeps the local in memory */
+  i = 0;
+  for (l = f->locals; q->vars && l != NULL; l = l->next) {
+    emit(q, "\tstorel %%v.%d, $", l->slot);
+    mir_debug_marker(q->out, 'v', q->func, (int)i++);
+    emit(q, "\n");
+  }
+  q->nscope = 1;
   gen_block(q, f->body);
   /* the verifier proved a non-void function never gets here */
   emit(q, "%s", f->ret->kind == MT_VOID ? "\tret\n" : "\thlt\n");
   emit(q, "}\n\n");
+  if (q->vars) {
+    gen_marker_data(q, i);
+  }
 }
 
 static void gen_global(Q *q, MirGlobal *g) {
@@ -719,7 +792,7 @@ static void gen_global(Q *q, MirGlobal *g) {
   emit(q, " }\n");
 }
 
-const char *mir_lower_qbe(CsBuf *out, MirModule *m, const MirTarget *t) {
+const char *mir_lower_qbe(CsBuf *out, MirModule *m, const MirTarget *t, bool variables) {
   Q q;
   MirGlobal *g;
   MirFunc *f;
@@ -731,6 +804,7 @@ const char *mir_lower_qbe(CsBuf *out, MirModule *m, const MirTarget *t) {
   q.out = out;
   q.m = m;
   q.t = t;
+  q.vars = variables;
   for (g = m->globals; g != NULL; g = g->next) {
     gen_global(&q, g);
   }
@@ -740,6 +814,7 @@ const char *mir_lower_qbe(CsBuf *out, MirModule *m, const MirTarget *t) {
   for (f = m->funcs; f != NULL; f = f->next) {
     if (!f->is_extern) {
       gen_func(&q, f);
+      q.func++;
       if (first_file == NULL) {
         first_file = q.file;
       }

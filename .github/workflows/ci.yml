@@ -102,6 +102,18 @@ jobs:
           grep -q 'frames!leaf+.*frames\.csm @ 7' cdb-frames.txt
           grep -q 'frames!wide+.*frames\.csm @ 13' cdb-frames.txt
           grep -q 'frames!main+.*frames\.csm @ 17' cdb-frames.txt
+          # variables (cesiumlang/cesium#143): in a block's own scope, then
+          # out of it, and through a pointer to a struct
+          vars=$(cygpath -w "$PWD/zig-out/bin/vars.exe")
+          vsrc=$(cygpath -w "$PWD/bootstrap/tests/s0/vars.csm")
+          "$cdb" -lines -c "bp \`$vsrc:21\`; bp \`$vsrc:33\`; g; dv /t; g; dv /t; dx *p; q" "$vars" 2>&1 | tee cdb-vars.txt
+          grep -q 'int inner = 0n84' cdb-vars.txt
+          grep -q 'int k = 0n2' cdb-vars.txt
+          grep -q 'int total = 0n42' cdb-vars.txt
+          grep -q 'struct Pair \* p = ' cdb-vars.txt
+          grep -Eq '\] a +: 40 ' cdb-vars.txt
+          grep -q 'int i = 0n2' cdb-vars.txt
+          ! grep -q 'int step = 0n2' cdb-vars.txt
           # and a step out of a function, in cesium1
           .devkit/zig/zig build -Dtarget="${{ matrix.host }}"
           cesium1=$(cygpath -w "$PWD/zig-out/bin/cesium1.exe")

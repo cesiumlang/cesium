@@ -106,9 +106,88 @@ static bool starts_with(const char *s, size_t len, const char *prefix) {
   return len >= n && memcmp(s, prefix, n) == 0;
 }
 
+/* The variables of the functions rewritten (cesiumlang/cesium#143). */
+typedef struct CvVars {
+  const MirModule *m;
+  const MirTarget *t;
+  CsArena arena;
+  CsBuf funcs;    /* a MirCvFunc pointer, or NULL, for each function with an id */
+  MirCvFunc *cur; /* the function being read, if it has variables */
+  bool *closed;
+  MirDebugScan scan;
+  uint32_t count; /* functions met */
+} CvVars;
+
+static const MirFunc *find_func(const MirModule *m, const char *name) {
+  const MirFunc *f;
+  for (f = m->funcs; f != NULL; f = f->next) {
+    if (!f->is_extern && strcmp(f->name, name) == 0) {
+      return f;
+    }
+  }
+  return NULL;
+}
+
+/* A function's label: its markers are read from here on. */
+static void vars_begin(CvVars *v, const char *name) {
+  const MirFunc *f = v->m == NULL ? NULL : find_func(v->m, name);
+  MirCvFunc *c;
+  v->cur = NULL;
+  if (f == NULL) {
+    return;
+  }
+  c = cs_arena_new(&v->arena, sizeof *c);
+  c->id = v->count++;
+  mir_debug_func(&v->arena, &c->d, f);
+  c->vars = cs_arena_new(&v->arena, cs_mul_size(c->d.nlocals + 1, sizeof *c->vars));
+  c->opened = cs_arena_new(&v->arena, cs_mul_size(c->d.nscopes, sizeof *c->opened));
+  v->closed = cs_arena_new(&v->arena, cs_mul_size(c->d.nscopes, sizeof *v->closed));
+  mir_debug_scan_start(&v->scan, c->vars, c->d.nlocals);
+  v->cur = c;
+}
+
+/* Reads an instruction; a scope's first marker of each kind becomes its
+ * label, written before the instruction. */
+static void vars_line(CvVars *v, CsBuf *dst, const char *line, size_t text) {
+  MirCvFunc *c = v->cur;
+  int k = 0;
+  char kind;
+  if (c == NULL) {
+    return;
+  }
+  kind = mir_debug_scan_line(&v->scan, line, text, &k);  if (kind == 0 || k < 1 || (size_t)k >= c->d.nscopes) {
+    return;
+  }
+  if (kind == 'o' && !c->opened[k]) {
+    cs_buf_printf(dst, ".Lcs_sb%" PRIu32 "_%d:\n", c->id, k);
+    c->opened[k] = true;
+  } else if (kind == 'c' && c->opened[k] && !v->closed[k]) {
+    cs_buf_printf(dst, ".Lcs_se%" PRIu32 "_%d:\n", c->id, k);
+    v->closed[k] = true;
+  }
+}
+
+/* A function's end, where scopes still open close; with an id, it gets a
+ * procedure record. */
+static void vars_end(CvVars *v, CsBuf *out, bool has_id) {
+  MirCvFunc *c = v->cur;
+  size_t k;
+  for (k = 1; c != NULL && k < c->d.nscopes; k++) {
+    if (c->opened[k] && !v->closed[k]) {
+      cs_buf_printf(out, ".Lcs_se%" PRIu32 "_%d:\n", c->id, (int)k);
+    }
+  }
+  if (has_id) {
+    cs_buf_put(&v->funcs, (const char *)&c, sizeof(MirCvFunc *));
+  }
+  v->cur = NULL;
+}
+
 /* The procedure record of a function, named by its symbol as QBE writes it:
- * COFF symbols have no prefix, and a quoted one stays quoted. */
-static void put_procedure(CsBuf *out, uint32_t id, const char *name) {
+ * COFF symbols have no prefix, and a quoted one stays quoted. Its variables
+ * and scopes go before its S_END. */
+static void put_procedure(CsBuf *out, uint32_t id, const char *name, const MirCvFunc *f, MirCvTypes *types,
+                          const MirTarget *t) {
   cs_buf_printf(out, "\t.short .Lcs_cv_p%" PRIu32 "_end - .Lcs_cv_p%" PRIu32 "\n", id, id);
   cs_buf_printf(out, ".Lcs_cv_p%" PRIu32 ":\n\t.short 0x%04x\n", id, S_GPROC32);
   /* parent, end, next: the linker fills them in */
@@ -123,14 +202,21 @@ static void put_procedure(CsBuf *out, uint32_t id, const char *name) {
     mir_asm_string(out, name);
   }
   cs_buf_printf(out, "\n\t.p2align 2\n.Lcs_cv_p%" PRIu32 "_end:\n", id);
+  if (f != NULL) {
+    mir_cv_put_vars(out, types, f, t);
+  }
   cs_buf_printf(out, "\t.short 2\n\t.short 0x%04x\n", S_END);
 }
 
 /* The .debug$S section: one symbol subsection, then the line tables and the
- * file tables the assembler makes. names holds a line per function. */
-static void put_tail(CsBuf *out, const CsBuf *names) {
+ * file tables the assembler makes; then the types of the variables. names
+ * holds a line per function, v the variables of each. */
+static void put_tail(CsBuf *out, const CsBuf *names, const CvVars *v) {
   const char *p = names->data;
+  const MirCvFunc *const *funcs = (const MirCvFunc *const *)v->funcs.data;
+  MirCvTypes types;
   uint32_t id;
+  mir_cv_types_init(&types);
   cs_buf_puts(out, "/* CodeView (libcsmir) */\n.section .debug$S,\"dr\"\n\t.p2align 2\n");
   cs_buf_printf(out, "\t.long %d\n\t.long 0x%02x\n", CV_SIGNATURE_C13, DEBUG_S_SYMBOLS);
   cs_buf_puts(out, "\t.long .Lcs_cv_syms_end - .Lcs_cv_syms\n.Lcs_cv_syms:\n");
@@ -143,7 +229,7 @@ static void put_tail(CsBuf *out, const CsBuf *names) {
     const char *nl = strchr(p, '\n');
     CsBuf name = {NULL, 0, 0};
     cs_buf_put(&name, p, (size_t)(nl - p));
-    put_procedure(out, id, name.data);
+    put_procedure(out, id, name.data, funcs == NULL ? NULL : funcs[id], &types, v->t);
     cs_buf_free(&name);
     p = nl + 1;
   }
@@ -155,6 +241,8 @@ static void put_tail(CsBuf *out, const CsBuf *names) {
     p = nl + 1;
   }
   cs_buf_puts(out, "\t.cv_filechecksums\n\t.cv_stringtable\n");
+  mir_cv_put_types(out, &types);
+  mir_cv_types_free(&types);
 }
 
 /* Writes a held prologue, its function's unwind data begun. */
@@ -162,7 +250,7 @@ static void put_held(CsBuf *out, const CsBuf *name, const CsBuf *body) {
   mir_seh_prologue(out, name->data, body->data == NULL ? "" : body->data, body->len);
 }
 
-void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
+void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len, const MirModule *m, const MirTarget *t) {
   static const char end_fn[] = "/* end function ";
   CsBuf names = {NULL, 0, 0};
   CsBuf loc = {NULL, 0, 0};  /* the last .loc, not yet written */
@@ -176,6 +264,10 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
   bool has_id = false;
   uint32_t next_id = 0;
   size_t i = 0;
+  CvVars v;
+  memset(&v, 0, sizeof v);
+  v.m = m;
+  v.t = t;
   cs_buf_put(&names, "", 0);
   while (i < len) {
     const char *line = in + i;
@@ -205,6 +297,7 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
       cs_buf_putc(out, '\n');
       fn.len = 0;
       cs_buf_put(&fn, line, text - 1);
+      vars_begin(&v, fn.data);
       body.len = 0;
       held = true;
       continue;
@@ -244,6 +337,7 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
         cs_buf_puts(out, "\t.seh_endproc\n");
         in_proc = false;
       }
+      vars_end(&v, out, has_id);
       if (has_id) {
         cs_buf_printf(out, ".Lcs_cv_end%" PRIu32 ":\n", next_id);
         /* the name, between the prefix and the comment's end */
@@ -252,9 +346,12 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
         has_id = false;
         next_id++;
       }
-    } else if (loc.len != 0) {
-      cs_buf_put(dst, loc.data, loc.len);
-      loc.len = 0;
+    } else {
+      if (loc.len != 0) {
+        cs_buf_put(dst, loc.data, loc.len);
+        loc.len = 0;
+      }
+      vars_line(&v, dst, line, text);
     }
     cs_buf_put(dst, line, n);
     if (nl != NULL) {
@@ -269,8 +366,10 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
     cs_buf_puts(out, "\t.seh_endproc\n");
   }
   if (next_id != 0) {
-    put_tail(out, &names);
+    put_tail(out, &names, &v);
   }
+  cs_buf_free(&v.funcs);
+  cs_arena_free(&v.arena);
   cs_buf_free(&fn);
   cs_buf_free(&body);
   cs_buf_free(&loc);

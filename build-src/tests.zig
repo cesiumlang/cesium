@@ -219,6 +219,15 @@ pub fn add(
         compile.expectExitCode(0);
         step.dependOn(&b.addCheckFile(asm_out, .{ .expected_matches = &frames.coff }).step);
     }
+    // and its variables, in the default mode, debug
+    {
+        const compile = runFromRoot(b, cesium0, vars.name);
+        compile.addArgs(&.{ "--target", "x86_64-windows", "-o" });
+        const asm_out = compile.addOutputFileArg(vars.name ++ "-x86_64-windows.s");
+        compile.addArg(s0_dir ++ vars.name ++ ".csm");
+        compile.expectExitCode(0);
+        step.dependOn(&b.addCheckFile(asm_out, .{ .expected_matches = &vars.coff }).step);
+    }
 
     addStage1(b, step, target, cesium0, csrt, csmir, stage1, tool, devkit);
 }
@@ -296,24 +305,45 @@ const frames = struct {
         // the frame set at once, as it is too large to be set after the
         // allocation
         ".seh_proc wide\n\tendbr64\n\tpushq %rbp\n\t.seh_pushreg %rbp\n\tmovq %rsp, %rbp\n" ++
-            "\t.seh_setframe %rbp, 0\n\t.seh_endprologue\n\tsubq $512, %rsp",
+            "\t.seh_setframe %rbp, 0\n\t.seh_endprologue\n\tsubq $528, %rsp",
         ".seh_proc main",
         "\t.seh_endproc\n.Lcs_cv_end2:",
     };
 };
 
-/// s0/lines.csm and s0/frames.csm as programs, compiled as the tests compile
-/// them, for the debuggers to run (the gdb, lldb and cdb steps of CI).
+/// s0/vars.csm has locals in nested scopes; in a debug build its COFF
+/// assembly keeps them in memory and describes them (mir_debug.c,
+/// mir_codeview_vars.c).
+const vars = struct {
+    const name = "vars";
+    const coff = [_][]const u8{
+        // each slot's address escapes to its marker
+        "\tleaq 28(%rsp), %rax\n\tmovq %rax, .Lcs_v0_0(%rip)",
+        // the if block of scale is a scope
+        ".Lcs_sb0_1:\n\tmovb $0, .Lcs_o0_1(%rip)",
+        ".Lcs_se0_1:",
+        // S_REGREL32 at rsp + 28, a pointer to Pair, and S_BLOCK32
+        "\t.short 0x1111\n\t.long 28\n\t.long 0x1001\n\t.short 335\n\t.asciz \"p\"",
+        "\t.asciz \"inner\"",
+        "\t.short 0x1103",
+        ".section .debug$T,\"dr\"",
+    };
+};
+
+/// s0/lines.csm, s0/frames.csm and s0/vars.csm as programs, compiled as the
+/// tests compile them in the build's mode, for the debuggers to run (the gdb,
+/// lldb and cdb steps of CI).
 pub fn addLines(
     b: *std.Build,
     step: *std.Build.Step,
     target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
     cesium0: *std.Build.Step.Compile,
     csrt: *std.Build.Step.Compile,
 ) void {
-    for ([_][]const u8{ lines.name, frames.name }) |name| {
+    for ([_][]const u8{ lines.name, frames.name, vars.name }) |name| {
         const compile = runFromRoot(b, cesium0, name);
-        compile.addArg("-o");
+        compile.addArgs(&.{ "-O", @tagName(optimize), "-o" });
         const asm_out = compile.addOutputFileArg(b.fmt("{s}.s", .{name}));
         compile.addArg(b.fmt(s0_dir ++ "{s}.csm", .{name}));
         const exe = link.linkProgram(b, target, csrt, name, asm_out);
