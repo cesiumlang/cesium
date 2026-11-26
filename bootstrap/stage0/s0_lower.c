@@ -888,6 +888,13 @@ static void block_add(Block *b, MirStmt *s) {
   b->tail = s;
 }
 
+/* A MIR statement located at the first token of the S0 statement. */
+static MirStmt *new_stmt(L *l, MirStmtKind kind, const S0Stmt *s) {
+  MirStmt *ms = mir_stmt(l->m, kind, s->loc.line);
+  mir_stmt_loc(l->m, ms, s->loc.file, (uint32_t)s->loc.line, (uint32_t)s->loc.col);
+  return ms;
+}
+
 static MirStmt *lower_block(L *l, S0Stmt *s);
 
 static void lower_decl(L *l, S0Stmt *s, Block *out) {
@@ -935,7 +942,7 @@ static void lower_decl(L *l, S0Stmt *s, Block *out) {
   if (name_taken(l, s->name, s->loc, true)) {
     return;
   }
-  ms = mir_stmt(l->m, MS_LOCAL, s->loc.line);
+  ms = new_stmt(l, MS_LOCAL, s);
   ms->name = s->name;
   ms->type = t;
   ms->a = has_init ? init.e : NULL;
@@ -985,11 +992,11 @@ static void lower_assign(L *l, S0Stmt *s, Block *out) {
     return;
   }
   if (p.local != NULL) {
-    ms = mir_stmt(l->m, MS_SET, s->loc.line);
+    ms = new_stmt(l, MS_SET, s);
     ms->name = p.local;
     ms->a = v.e;
   } else {
-    ms = mir_stmt(l->m, MS_STORE, s->loc.line);
+    ms = new_stmt(l, MS_STORE, s);
     ms->a = p.addr;
     ms->b = v.e;
   }
@@ -1019,7 +1026,7 @@ static void lower_stmt(L *l, S0Stmt *s, Block *out) {
     if (!v.ok) {
       return;
     }
-    ms = mir_stmt(l->m, MS_EVAL, s->loc.line);
+    ms = new_stmt(l, MS_EVAL, s);
     ms->a = v.e;
     block_add(out, ms);
     return;
@@ -1027,7 +1034,7 @@ static void lower_stmt(L *l, S0Stmt *s, Block *out) {
 
   case ST_IF:
     v = lower_expr(l, s->a, want_value());
-    ms = mir_stmt(l->m, MS_IF, s->loc.line);
+    ms = new_stmt(l, MS_IF, s);
     ms->body = lower_block(l, s->body);
     /* `else if` parses as an else block holding one if statement */
     ms->els = lower_block(l, s->els);
@@ -1040,7 +1047,7 @@ static void lower_stmt(L *l, S0Stmt *s, Block *out) {
 
   case ST_WHILE:
     v = lower_expr(l, s->a, want_value());
-    ms = mir_stmt(l->m, MS_WHILE, s->loc.line);
+    ms = new_stmt(l, MS_WHILE, s);
     l->loops++;
     ms->body = lower_block(l, s->body);
     l->loops--;
@@ -1057,11 +1064,11 @@ static void lower_stmt(L *l, S0Stmt *s, Block *out) {
       s0_error(l->diag, s->loc, "E0604", "'%s' outside a loop", s->kind == ST_BREAK ? "break" : "continue");
       return;
     }
-    block_add(out, mir_stmt(l->m, s->kind == ST_BREAK ? MS_BREAK : MS_CONTINUE, s->loc.line));
+    block_add(out, new_stmt(l, s->kind == ST_BREAK ? MS_BREAK : MS_CONTINUE, s));
     return;
 
   case ST_RETURN:
-    ms = mir_stmt(l->m, MS_RETURN, s->loc.line);
+    ms = new_stmt(l, MS_RETURN, s);
     if (s->a == NULL) {
       if (l->fn->ret->kind != MT_VOID) {
         s0_error(l->diag, s->loc, "E0605", "'%s' returns a %s", l->fn->name, type_name(l, l->fn->ret));

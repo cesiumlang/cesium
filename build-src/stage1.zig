@@ -4,7 +4,7 @@ const std = @import("std");
 const link = @import("link.zig");
 
 /// cesium1's files, in the order they make one unit.
-const files = [_][]const u8{ "util.csm", "lex.csm", "parse.csm", "types.csm", "habit.csm", "lower.csm", "decl.csm", "main.csm" };
+const files = [_][]const u8{ "util.csm", "lex.csm", "parse.csm", "types.csm", "habit.csm", "lower.csm", "decl.csm", "loc.csm", "main.csm" };
 
 pub const Stage1 = struct {
     cesium1: *std.Build.Step.Compile,

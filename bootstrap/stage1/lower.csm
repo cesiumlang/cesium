@@ -417,26 +417,10 @@ void = low_put_bytes(~Buf out, uword start, uword len) {
     if (i < len) {
       c = g_strs.data[start + i];
     }
-    if (c == '"' || c == '\\') {
-      buf_putc(out, '\\');
-      buf_putc(out, c);
-    } else if (c >= 32 && c < 127) {
-      buf_putc(out, c);
-    } else {
-      buf_putc(out, '\\');
-      buf_putc(out, low_hex_digit(c >> 4));
-      buf_putc(out, low_hex_digit(c & 15));
-    }
+    buf_put_mir_byte(out, c);
     i = i + 1;
   }
   buf_putc(out, '"');
-}
-
-u8 = low_hex_digit(u8 d) {
-  if (d < 10) {
-    return '0' + d;
-  }
-  return 'A' + d - 10;
 }
 
 // A string literal: a global array of its bytes and a NUL, and the value
@@ -878,7 +862,7 @@ void = low_decl(uword s, uword depth) {
   }
   // the name comes into scope after its initializer
   low_name_free(g_nodes[s].id, s, TRUE);
-  out_indent(depth);
+  loc_stmt(s, depth);
   out_s("local %");
   out_name(g_nodes[s].id);
   out_s(": ");
@@ -927,7 +911,7 @@ void = low_assign(uword s, uword depth) {
     }
     low_pointer_value(g_nodes[s].b, op, p.ty, ~v);
   }
-  out_indent(depth);
+  loc_stmt(s, depth);
   if (p.local != 0) {
     out_s("set %");
     out_name(p.local);
@@ -950,7 +934,7 @@ void = low_eval(uword s, uword depth) {
   want_value(~w);
   w.allow_void = TRUE;
   low_call(g_nodes[s].a, ~w, ~v);
-  out_indent(depth);
+  loc_stmt(s, depth);
   out_s("eval ");
   out_val(~v);
   out_s("\n");
@@ -962,7 +946,7 @@ void = low_cond(uword s, uword depth, #u8 keyword) {
   Val c;
   want_value(~w);
   low_expr(g_nodes[s].a, ~w, ~c);
-  out_indent(depth);
+  loc_stmt(s, depth);
   out_s(keyword);
   out_val(~c);
   out_s(" {\n");
@@ -980,7 +964,7 @@ void = low_return(uword s, uword depth) {
       err_ty(ret);
       err_end();
     }
-    out_indent(depth);
+    loc_stmt(s, depth);
     out_s("return\n");
     return;
   }
@@ -995,7 +979,7 @@ void = low_return(uword s, uword depth) {
   Val v;
   want_type(~w, ret);
   low_expr(g_nodes[s].a, ~w, ~v);
-  out_indent(depth);
+  loc_stmt(s, depth);
   out_s("return ");
   out_val(~v);
   out_s("\n");
@@ -1037,7 +1021,7 @@ void = low_stmt(uword s, uword depth) {
       }
       err_node(s, "E0604", "'continue' outside a loop");
     }
-    out_indent(depth);
+    loc_stmt(s, depth);
     if (k == ST_BREAK) {
       out_s("break\n");
     } else {

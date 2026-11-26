@@ -6,11 +6,14 @@
  *
  *   stage1_tool cat <out> <in>...                 writes the inputs, one after
  *                                                 another, to <out>
- *   stage1_tool same <expected> <actual> [crlf]   fails unless <actual> has the
+ *   stage1_tool same <expected> <actual> [crlf] [noloc]
+ *                                                 fails unless <actual> has the
  *                                                 bytes of <expected>; with crlf,
  *                                                 every '\n' of <expected> as
  *                                                 "\r\n", which is how a C text
- *                                                 stream writes it on Windows
+ *                                                 stream writes it on Windows;
+ *                                                 with noloc, without the MIR
+ *                                                 `loc` lines of <expected>
  *   stage1_tool error <cesium0-stderr> <cesium1-stdout>
  *                                                 fails unless the first error
  *                                                 of each is the same code and
@@ -72,7 +75,15 @@ static int cat(int argc, char **argv) {
   return fclose(out) == 0 ? 0 : 1;
 }
 
-static int same(const char *expected_path, const char *actual_path, int crlf) {
+/* Whether the line of e starting at i is a MIR `loc` line. */
+static int is_loc_line(const char *e, size_t elen, size_t i) {
+  while (i < elen && e[i] == ' ') {
+    i++;
+  }
+  return elen - i >= 4 && memcmp(e + i, "loc ", 4) == 0;
+}
+
+static int same(const char *expected_path, const char *actual_path, int crlf, int noloc) {
   size_t elen;
   size_t alen;
   char *e = read_file(expected_path, &elen);
@@ -80,7 +91,20 @@ static int same(const char *expected_path, const char *actual_path, int crlf) {
   size_t i = 0;
   size_t j = 0;
   size_t line = 1;
-  while (i < elen && j < alen) {
+  for (;;) {
+    if (noloc && (i == 0 || e[i - 1] == '\n') && is_loc_line(e, elen, i)) {
+      while (i < elen && e[i] != '\n') {
+        i++;
+      }
+      if (i < elen) {
+        i++;
+        line++;
+      }
+      continue;
+    }
+    if (i >= elen || j >= alen) {
+      break;
+    }
     if (crlf && e[i] == '\n') {
       if (a[j] != '\r') {
         break;
@@ -172,13 +196,20 @@ int main(int argc, char **argv) {
   if (argc >= 3 && strcmp(argv[1], "cat") == 0) {
     return cat(argc, argv);
   }
-  if ((argc == 4 || argc == 5) && strcmp(argv[1], "same") == 0) {
-    return same(argv[2], argv[3], argc == 5 && strcmp(argv[4], "crlf") == 0);
+  if (argc >= 4 && argc <= 6 && strcmp(argv[1], "same") == 0) {
+    int crlf = 0;
+    int noloc = 0;
+    int i;
+    for (i = 4; i < argc; i++) {
+      crlf |= strcmp(argv[i], "crlf") == 0;
+      noloc |= strcmp(argv[i], "noloc") == 0;
+    }
+    return same(argv[2], argv[3], crlf, noloc);
   }
   if (argc == 4 && strcmp(argv[1], "error") == 0) {
     return same_error(argv[2], argv[3]);
   }
-  fputs("usage: stage1_tool cat <out> <in>... | stage1_tool same <expected> <actual> [crlf]\n"
+  fputs("usage: stage1_tool cat <out> <in>... | stage1_tool same <expected> <actual> [crlf] [noloc]\n"
         "       | stage1_tool error <cesium0-stderr> <cesium1-stdout>\n",
         stderr);
   return 1;

@@ -150,9 +150,16 @@ struct MirLocal {
   MirLocal *next;    /* every local of the function, in declaration order */
 };
 
+/* Source lines and columns of a `loc` are below this, QBE's limit. */
+#define MIR_LOC_MAX ((uint32_t)1 << 29)
+
 struct MirStmt {
   MirStmtKind kind;
   int line;
+  /* the source location, `loc "file" line:col`; loc_line 0 for none */
+  const char *loc_file;
+  uint32_t loc_line;
+  uint32_t loc_col;
   const char *name;  /* MS_LOCAL, MS_SET */
   MirType *type;     /* MS_LOCAL */
   MirExpr *a;
@@ -210,6 +217,7 @@ struct MirModule {
   MirStruct *structs, *structs_tail;
   MirGlobal *globals, *globals_tail;
   MirFunc *funcs, *funcs_tail;
+  const char *loc_file; /* the last file name mir_stmt_loc copied */
   bool verified;
   /* the first error, if any */
   bool failed;
@@ -257,6 +265,10 @@ MirExpr *mir_as(MirModule *m, MirType *to, MirExpr *a, int line);
 MirExpr *mir_type_op(MirModule *m, MirOp op, MirType *t, int line); /* sizeof, alignof */
 
 MirStmt *mir_stmt(MirModule *m, MirStmtKind kind, int line);
+/* Gives a statement its source location, copying the file name into the
+ * module. A line or column of 0, or of MIR_LOC_MAX or more, or an empty name,
+ * leaves the statement without one. */
+void mir_stmt_loc(MirModule *m, MirStmt *s, const char *file, uint32_t line, uint32_t col);
 
 /* ---- text -------------------------------------------------------------- */
 

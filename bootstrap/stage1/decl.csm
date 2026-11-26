@@ -122,6 +122,7 @@ void = decl_structs() {
       uword fi = g_structs[sk].first + i;
       if (decl_contains(g_field_ty[fi], sk, 0)) {
         uword sd = g_structs[sk].decl;
+        g_err_file = g_nodes[sd].infile;
         err_begin_verifier(g_nodes[sd].line, g_nodes[sd].col);
         err_s("struct ");
         err_name(g_structs[sk].id);
@@ -315,6 +316,9 @@ void = decl_body(uword f) {
   uword id = g_funcs[f].id;
   g_fn = f;
   g_loops = 0;
+  // errors without a node of their own are in the function's file
+  g_err_file = g_nodes[d].infile;
+  g_loc_last = 0;
   buf_puts(~g_out_funcs, "\n");
   // the entry point is the one symbol the C runtime must see
   if (id == ID_MAIN) {
@@ -415,6 +419,7 @@ void = decl_unit() {
   }
   if (g_uses_alloc) {
     uword sym = g_name_tab[ID_ARENA].sym;
+    g_err_file = g_nodes[g_decls].infile;
     if (sym == SYM_FUNC) {
       err_begin(g_nodes[g_decls].line, g_nodes[g_decls].col, "E0319");
       err_s("'cs_arena_alloc' is the runtime function behind alloc and cannot be declared");

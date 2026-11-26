@@ -1,5 +1,5 @@
-/* Core MIR text: printer and parser (cesiumlang/cesium#8, "Core level
- * sketch"). The grammar, version 0:
+/* Core MIR text: the parser (cesiumlang/cesium#8, "Core level sketch"); the
+ * printer is mir_print.c. The grammar, version 0:
  *
  *   module  := "cesium-mir" INT decl*
  *   decl    := "struct" NAME "{" [NAME ":" type {"," NAME ":" type}] "}"
@@ -8,7 +8,8 @@
  *            | ["export"] "func" @NAME "(" [%NAME ":" type {"," ...}] ")" "->" type block
  *   init    := const | STRING | @NAME
  *   type    := NAME | "ptr" "<" type ">" | "[" INT "x" type "]"
- *   block   := "{" stmt* "}"
+ *   block   := "{" ([loc] stmt)* "}"
+ *   loc     := "loc" [STRING] INT ":" INT
  *   stmt    := "local" %NAME ":" type ["=" expr]
  *            | "set" %NAME "=" expr
  *            | "store" expr "," expr
@@ -26,258 +27,13 @@
  * ";" starts a comment that runs to the end of the line. Names may contain
  * letters, digits, "_" and ".". Strings escape a byte as "\HH" (two hex
  * digits); "\\" and "\"" are written that way.
+ *
+ * A loc is the source location of the statement after it: file, line and
+ * column, each line and column from 1 to MIR_LOC_MAX - 1. The first loc of a
+ * function names its file; a loc without one has the file of the previous
+ * loc in the same function.
  */
 #include "mir.h"
-
-/* ======================================================================== */
-/* printer                                                                  */
-/* ======================================================================== */
-
-static void print_expr(CsBuf *b, const MirExpr *e);
-
-static void print_const(CsBuf *b, const MirType *type, uint64_t v) {
-  if (mir_type_is_signed(type)) {
-    /* ival holds the bits truncated to the type; sign-extend to print */
-    int bits = type->kind == MT_I8 ? 8 : type->kind == MT_I16 ? 16 : type->kind == MT_I32 ? 32 : 64;
-    uint64_t sign = (uint64_t)1 << (bits - 1);
-    if (v & sign) {
-      uint64_t mag = bits == 64 ? (uint64_t)0 - v : (((uint64_t)1 << bits) - v);
-      cs_buf_printf(b, "-%" PRIu64, mag);
-    } else {
-      cs_buf_printf(b, "%" PRIu64, v);
-    }
-  } else {
-    cs_buf_printf(b, "%" PRIu64, v);
-  }
-  cs_buf_putc(b, ':');
-  mir_type_print(b, type);
-}
-
-static void print_expr(CsBuf *b, const MirExpr *e) {
-  size_t i;
-  switch (e->op) {
-  case ME_CONST:
-    print_const(b, e->type, e->ival);
-    break;
-  case ME_LOCAL:
-    cs_buf_printf(b, "%%%s", e->name);
-    break;
-  case ME_GLOBAL:
-    cs_buf_printf(b, "@%s", e->name);
-    break;
-  case ME_ADDR:
-    cs_buf_printf(b, "addr(%%%s)", e->name);
-    break;
-  case ME_FIELD:
-    cs_buf_puts(b, "field(");
-    print_expr(b, e->a);
-    cs_buf_printf(b, ", %s)", e->name);
-    break;
-  case ME_CALL:
-    cs_buf_printf(b, "call @%s(", e->name);
-    for (i = 0; i < e->nargs; i++) {
-      if (i != 0) {
-        cs_buf_puts(b, ", ");
-      }
-      print_expr(b, e->args[i]);
-    }
-    cs_buf_putc(b, ')');
-    break;
-  case ME_AS:
-    cs_buf_puts(b, "as(");
-    mir_type_print(b, e->targ);
-    cs_buf_puts(b, ", ");
-    print_expr(b, e->a);
-    cs_buf_putc(b, ')');
-    break;
-  case ME_SIZEOF:
-  case ME_ALIGNOF:
-    cs_buf_printf(b, "%s(", mir_op_name(e->op));
-    mir_type_print(b, e->targ);
-    cs_buf_putc(b, ')');
-    break;
-  default:
-    cs_buf_printf(b, "%s(", mir_op_name(e->op));
-    print_expr(b, e->a);
-    if (e->b != NULL) {
-      cs_buf_puts(b, ", ");
-      print_expr(b, e->b);
-    }
-    cs_buf_putc(b, ')');
-    break;
-  }
-}
-
-static void print_indent(CsBuf *b, int depth) {
-  int i;
-  for (i = 0; i < depth; i++) {
-    cs_buf_puts(b, "  ");
-  }
-}
-
-static void print_block(CsBuf *b, const MirStmt *s, int depth);
-
-static void print_stmt(CsBuf *b, const MirStmt *s, int depth) {
-  print_indent(b, depth);
-  switch (s->kind) {
-  case MS_LOCAL:
-    cs_buf_printf(b, "local %%%s: ", s->name);
-    mir_type_print(b, s->type);
-    if (s->a != NULL) {
-      cs_buf_puts(b, " = ");
-      print_expr(b, s->a);
-    }
-    break;
-  case MS_SET:
-    cs_buf_printf(b, "set %%%s = ", s->name);
-    print_expr(b, s->a);
-    break;
-  case MS_STORE:
-    cs_buf_puts(b, "store ");
-    print_expr(b, s->a);
-    cs_buf_puts(b, ", ");
-    print_expr(b, s->b);
-    break;
-  case MS_EVAL:
-    cs_buf_puts(b, "eval ");
-    print_expr(b, s->a);
-    break;
-  case MS_IF:
-    cs_buf_puts(b, "if ");
-    print_expr(b, s->a);
-    cs_buf_puts(b, " {\n");
-    print_block(b, s->body, depth + 1);
-    print_indent(b, depth);
-    cs_buf_putc(b, '}');
-    if (s->els != NULL) {
-      cs_buf_puts(b, " else {\n");
-      print_block(b, s->els, depth + 1);
-      print_indent(b, depth);
-      cs_buf_putc(b, '}');
-    }
-    break;
-  case MS_WHILE:
-    cs_buf_puts(b, "while ");
-    print_expr(b, s->a);
-    cs_buf_puts(b, " {\n");
-    print_block(b, s->body, depth + 1);
-    print_indent(b, depth);
-    cs_buf_putc(b, '}');
-    break;
-  case MS_BREAK:
-    cs_buf_puts(b, "break");
-    break;
-  case MS_CONTINUE:
-    cs_buf_puts(b, "continue");
-    break;
-  case MS_RETURN:
-    cs_buf_puts(b, "return");
-    if (s->a != NULL) {
-      cs_buf_putc(b, ' ');
-      print_expr(b, s->a);
-    }
-    break;
-  }
-  cs_buf_putc(b, '\n');
-}
-
-static void print_block(CsBuf *b, const MirStmt *s, int depth) {
-  for (; s != NULL; s = s->next) {
-    print_stmt(b, s, depth);
-  }
-}
-
-static void print_bytes(CsBuf *b, const char *bytes, size_t n) {
-  size_t i;
-  cs_buf_putc(b, '"');
-  for (i = 0; i < n; i++) {
-    unsigned char c = (unsigned char)bytes[i];
-    if (c == '"' || c == '\\') {
-      cs_buf_putc(b, '\\');
-      cs_buf_putc(b, (char)c);
-    } else if (c >= 0x20 && c < 0x7f) {
-      cs_buf_putc(b, (char)c);
-    } else {
-      cs_buf_printf(b, "\\%02X", (unsigned)c);
-    }
-  }
-  cs_buf_putc(b, '"');
-}
-
-void mir_print(CsBuf *out, const MirModule *m) {
-  const MirStruct *s;
-  const MirGlobal *g;
-  const MirFunc *f;
-  size_t i;
-  cs_buf_printf(out, "cesium-mir %d\n", MIR_VERSION);
-  for (s = m->structs; s != NULL; s = s->next) {
-    if (!s->defined) {
-      continue;
-    }
-    cs_buf_printf(out, "\nstruct %s {", s->name);
-    for (i = 0; i < s->nfields; i++) {
-      cs_buf_printf(out, "%s%s: ", i == 0 ? " " : ", ", s->fields[i].name);
-      mir_type_print(out, s->fields[i].type);
-    }
-    cs_buf_puts(out, " }\n");
-  }
-  if (m->globals != NULL) {
-    cs_buf_putc(out, '\n');
-  }
-  for (g = m->globals; g != NULL; g = g->next) {
-    cs_buf_printf(out, "%s @%s: ", g->is_const ? "const" : "global", g->name);
-    mir_type_print(out, g->type);
-    switch (g->init) {
-    case MI_ZERO:
-      break;
-    case MI_INT:
-      cs_buf_puts(out, " = ");
-      print_const(out, g->type, g->ival);
-      break;
-    case MI_BYTES:
-      cs_buf_puts(out, " = ");
-      print_bytes(out, g->bytes, g->nbytes);
-      break;
-    case MI_ADDR:
-      cs_buf_printf(out, " = @%s", g->addr_name);
-      break;
-    }
-    cs_buf_putc(out, '\n');
-  }
-  for (f = m->funcs; f != NULL; f = f->next) {
-    cs_buf_putc(out, '\n');
-    if (f->is_extern) {
-      cs_buf_printf(out, "extern func @%s(", f->name);
-      for (i = 0; i < f->nparams; i++) {
-        if (i != 0) {
-          cs_buf_puts(out, ", ");
-        }
-        mir_type_print(out, f->params[i].type);
-      }
-      cs_buf_puts(out, ") -> ");
-      mir_type_print(out, f->ret);
-      cs_buf_puts(out, " callconv(c)\n");
-      continue;
-    }
-    cs_buf_printf(out, "%sfunc @%s(", f->is_export ? "export " : "", f->name);
-    for (i = 0; i < f->nparams; i++) {
-      if (i != 0) {
-        cs_buf_puts(out, ", ");
-      }
-      cs_buf_printf(out, "%%%s: ", f->params[i].name);
-      mir_type_print(out, f->params[i].type);
-    }
-    cs_buf_puts(out, ") -> ");
-    mir_type_print(out, f->ret);
-    cs_buf_puts(out, " {\n");
-    print_block(out, f->body, 1);
-    cs_buf_puts(out, "}\n");
-  }
-}
-
-/* ======================================================================== */
-/* parser                                                                   */
-/* ======================================================================== */
 
 typedef enum Tok {
   T_EOF,
@@ -305,6 +61,7 @@ typedef struct Parser {
   const char *text; /* T_NAME, T_LOCAL, T_GLOBAL: the name; T_STRING: the bytes */
   size_t text_len;
   int depth;        /* of the type, expression or statement being parsed */
+  const char *loc_file; /* the file of the function's previous loc, or NULL */
 } Parser;
 
 static bool is_name_start(int c) {
@@ -794,7 +551,8 @@ static MirExpr *parse_expr_at_depth(Parser *p) {
 static MirStmt *parse_block(Parser *p);
 
 static bool at_stmt_keyword(const Parser *p) {
-  static const char *const kw[] = {"local", "set", "store", "eval", "if", "while", "break", "continue", "return"};
+  static const char *const kw[] = {"local", "set",      "store",  "eval", "if", "while",
+                                   "break", "continue", "return", "loc"};
   size_t i;
   if (p->tok != T_NAME) {
     return false;
@@ -899,12 +657,66 @@ static MirStmt *parse_stmt_at_depth(Parser *p) {
   return mir_stmt(m, MS_BREAK, line);
 }
 
+/* A line or column of a loc. */
+static uint32_t parse_loc_number(Parser *p, const char *what) {
+  uint32_t v;
+  if (p->tok != T_INT) {
+    perr(p, "expected a %s number", what);
+    return 0;
+  }
+  if (p->int_overflow || p->ival == 0 || p->ival >= MIR_LOC_MAX) {
+    perr(p, "a %s number in a loc is from 1 to %" PRIu32, what, MIR_LOC_MAX - 1);
+    return 0;
+  }
+  v = (uint32_t)p->ival;
+  next(p);
+  return v;
+}
+
+/* An optional loc before a statement; gives it to s once s is parsed. */
+static bool parse_loc(Parser *p, const char **file, uint32_t *line, uint32_t *col) {
+  if (!at_name(p, "loc")) {
+    return false;
+  }
+  next(p);
+  if (p->tok == T_STRING) {
+    if (p->text_len == 0) {
+      perr(p, "empty file name in a loc");
+      return false;
+    }
+    if (memchr(p->text, '\0', p->text_len) != NULL) {
+      perr(p, "a file name in a loc has a zero byte");
+      return false;
+    }
+    p->loc_file = p->text;
+    next(p);
+  } else if (p->loc_file == NULL) {
+    perr(p, "the first loc of a function names its file");
+    return false;
+  }
+  *line = parse_loc_number(p, "line");
+  expect_punct(p, ':');
+  *col = parse_loc_number(p, "column");
+  if (at_punct(p, '}') || p->tok == T_EOF) {
+    perr(p, "a loc stands before a statement");
+  }
+  *file = p->loc_file;
+  return !p->m->failed;
+}
+
 static MirStmt *parse_block(Parser *p) {
   MirStmt *head = NULL;
   MirStmt *tail = NULL;
   expect_punct(p, '{');
   while (!at_punct(p, '}') && p->tok != T_EOF) {
+    const char *file = NULL;
+    uint32_t line = 0;
+    uint32_t col = 0;
+    bool has_loc = parse_loc(p, &file, &line, &col);
     MirStmt *s = parse_stmt(p);
+    if (has_loc) {
+      mir_stmt_loc(p->m, s, file, line, col);
+    }
     if (tail != NULL) {
       tail->next = s;
     } else {
@@ -967,6 +779,7 @@ static void parse_func(Parser *p, bool is_extern, bool is_export) {
     expect_name(p, "c");
     expect_punct(p, ')');
   } else {
+    p->loc_file = NULL;
     f->body = parse_block(p);
   }
 }

@@ -47,6 +47,7 @@ const csmir_sources = [_][]const u8{
     "cs_common.c",
     "mir.c",
     "mir_text.c",
+    "mir_print.c",
     "mir_verify.c",
     "mir_qbe.c",
     "csmir_api.c",

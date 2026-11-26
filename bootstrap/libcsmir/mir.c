@@ -288,6 +288,19 @@ MirStmt *mir_stmt(MirModule *m, MirStmtKind kind, int line) {
   return s;
 }
 
+void mir_stmt_loc(MirModule *m, MirStmt *s, const char *file, uint32_t line, uint32_t col) {
+  if (line == 0 || line >= MIR_LOC_MAX || col == 0 || col >= MIR_LOC_MAX || file[0] == '\0') {
+    return;
+  }
+  /* consecutive statements share one copy of the name */
+  if (m->loc_file == NULL || strcmp(m->loc_file, file) != 0) {
+    m->loc_file = cs_arena_str(&m->arena, file);
+  }
+  s->loc_file = m->loc_file;
+  s->loc_line = line;
+  s->loc_col = col;
+}
+
 /* ---- targets and layout ------------------------------------------------ */
 
 /* The targets of the pinned QBE. All are LP64-style: 8-byte pointers, and

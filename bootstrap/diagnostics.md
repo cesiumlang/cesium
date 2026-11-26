@@ -1,10 +1,10 @@
 # Diagnostics
 
-The errors `cesium0` and `cesium1` report in S0 source, by code (cesiumlang/cesium#82). `cesium0` prints `file:line:col: error[E0101]: message` on standard error; `cesium1` prints `line:col: error[E0101]: message` on standard output, with lines counted from the start of its input. Both give the same code and the same message for the same error.
+The errors `cesium0` and `cesium1` report in S0 source, by code (cesiumlang/cesium#82). `cesium0` prints `file:line:col: error[E0101]: message` on standard error; `cesium1` prints the same on standard output, or `line:col: error[E0101]: message` for source given on standard input, with lines counted from the start of the input. Both give the same code and the same message for the same error.
 
 Each code is stable once released: what it means does not change, and a code is never reused for another message. A message is shown as a template, in which the parts in angle brackets (`<name>`, `<type>`, `<token>`, `<n>`) are filled in by the compiler. The first two digits of a code are its group; the last two count within the group, first in the order of first appearance in the source of `cesium0`, and a code added later takes the next free number of its group. `zig build test` checks that every code here is used, and that every code the compilers use is here and is used by both (`build-src/diagnostics.zig`).
 
-Not covered yet, and printed without a code: the messages of `libcsmir`, its MIR text parser and its verifier (`cesium0: error: ...`, and in `cesium1`, for the two verifier checks it makes itself, `line:col: error: ...`); the I/O messages of `cesium0`; and the limits of `cesium1` itself (`error: internal: ...`, exit status 2).
+Not covered yet, and printed without a code: the messages of `libcsmir`, its MIR text parser and its verifier (`cesium0: error: ...`, and in `cesium1`, for the two verifier checks it makes itself, `line:col: error: ...`); the I/O messages of both compilers (`cesium1`: `error: cannot read a.csm`) and the usage errors of `cesium1` (exit status 2); and the limits of `cesium1` itself (`error: internal: ...`, exit status 2).
 
 ## Lexical (E01xx)
 

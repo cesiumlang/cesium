@@ -1,0 +1,38 @@
+cesium-mir 0
+
+extern func @putchar(i32) -> i32 callconv(c)
+
+func @show(%c: i32) -> void {
+  loc "bootstrap/tests/mir/locs.csm" 2:3
+  if eq(%c, 0:i32) {
+    loc 3:5
+    return
+    loc 4:5
+    eval call @putchar(63:i32)
+  }
+  loc 6:3
+  eval call @putchar(%c)
+  loc "other.csm" 1:1
+  eval call @putchar(10:i32)
+}
+
+func @count(%n: i32) -> i32 {
+  loc "dir\\sub\"q\C3\A9.csm" 10:3
+  local %i: i32 = 0:i32
+  loc 11:3
+  while lt(%i, %n) {
+    loc 12:5
+    set %i = add(%i, 1:i32)
+  }
+  loc 14:3
+  return %i
+}
+
+export func @main(%argc: i32, %argv: ptr<ptr<u8>>) -> i32 {
+  loc "bootstrap/tests/mir/locs.csm" 20:3
+  eval call @show(add(48:i32, call @count(3:i32)))
+  loc 21:3
+  eval call @show(0:i32)
+  loc 22:3
+  return 0:i32
+}

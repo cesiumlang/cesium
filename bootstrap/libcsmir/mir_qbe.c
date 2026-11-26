@@ -5,7 +5,8 @@
  *   - 8- and 16-bit integers are computed in 32-bit temporaries and kept
  *     extended by their signedness after every operation;
  *   - index, field, sizeof and alignof are resolved with the target's layout;
- *   - comparisons and logical operations give 0 or 1.
+ *   - comparisons and logical operations give 0 or 1;
+ *   - source locations become dbgfile and dbgloc (line tables only).
  *
  * Defined semantics (no undefined behavior in core MIR):
  *   - add, sub, mul, neg wrap;
@@ -26,6 +27,11 @@ typedef struct Q {
   /* innermost loop */
   int loop_head;
   int loop_end;
+  /* source locations: the file of QBE's last dbgfile, and the one of the
+   * function's first loc, the only file its dbglocs can name */
+  const char *file;
+  const char *func_file;
+  const MirStmt *loc; /* the statement whose line was given last, or NULL */
 } Q;
 
 static void emit(Q *q, const char *fmt, ...) {
@@ -181,11 +187,16 @@ static int truth(Q *q, const MirType *t, int v) {
 
 static int gen(Q *q, MirExpr *e);
 
+/* QBE may move the trap's block anywhere, so it repeats its statement's line. */
 static void gen_trap_if(Q *q, int cond) {
   int trap = new_label(q);
   int ok = new_label(q);
   emit(q, "\tjnz %%t.%d, @trap.%d, @ok.%d\n", cond, trap, ok);
-  emit(q, "@trap.%d\n\thlt\n@ok.%d\n", trap, ok);
+  emit(q, "@trap.%d\n", trap);
+  if (q->loc != NULL) {
+    emit(q, "\tdbgloc %" PRIu32 ", %" PRIu32 "\n", q->loc->loc_line, q->loc->loc_col);
+  }
+  emit(q, "\thlt\n@ok.%d\n", ok);
 }
 
 static int gen_div(Q *q, MirExpr *e, int a, int b) {
@@ -458,6 +469,52 @@ static int gen(Q *q, MirExpr *e) {
   return -1;
 }
 
+/* ---- source locations -------------------------------------------------- */
+
+/* The file of the first loc in a block, in text order, or NULL. */
+static const char *first_loc_file(const MirStmt *s) {
+  const char *file;
+  for (; s != NULL; s = s->next) {
+    if (s->loc_line != 0) {
+      return s->loc_file;
+    }
+    file = first_loc_file(s->body);
+    if (file == NULL) {
+      file = first_loc_file(s->els);
+    }
+    if (file != NULL) {
+      return file;
+    }
+  }
+  return NULL;
+}
+
+/* The name escaped as the assembler reads it: \\, \" and \ooo. */
+static void gen_dbgfile(Q *q, const char *file) {
+  const unsigned char *c;
+  emit(q, "dbgfile \"");
+  for (c = (const unsigned char *)file; *c != '\0'; c++) {
+    if (*c == '"' || *c == '\\') {
+      emit(q, "\\%c", *c);
+    } else if (*c >= 0x20 && *c <= 0x7e) {
+      emit(q, "%c", *c);
+    } else {
+      emit(q, "\\%03o", (unsigned)*c);
+    }
+  }
+  emit(q, "\"\n");
+}
+
+/* QBE cannot change files within a function: a statement located in
+ * another file than the function's first loc gets no line. */
+static void gen_loc(Q *q, const MirStmt *s) {
+  q->loc = NULL;
+  if (s->loc_line != 0 && strcmp(s->loc_file, q->func_file) == 0) {
+    emit(q, "\tdbgloc %" PRIu32 ", %" PRIu32 "\n", s->loc_line, s->loc_col);
+    q->loc = s;
+  }
+}
+
 /* ---- statements -------------------------------------------------------- */
 
 static void gen_block(Q *q, MirStmt *s);
@@ -498,6 +555,10 @@ static void gen_zero(Q *q, MirLocal *l) {
 static void gen_stmt(Q *q, MirStmt *s) {
   int a;
   int b;
+  /* a while's line goes after its label, with each test of the condition */
+  if (s->kind != MS_WHILE) {
+    gen_loc(q, s);
+  }
   switch (s->kind) {
   case MS_LOCAL:
     if (s->a != NULL) {
@@ -545,6 +606,7 @@ static void gen_stmt(Q *q, MirStmt *s) {
     int saved_head = q->loop_head;
     int saved_end = q->loop_end;
     emit(q, "@loop.%d\n", head);
+    gen_loc(q, s);
     a = truth(q, s->a->type, gen(q, s->a));
     emit(q, "\tjnz %%t.%d, @body.%d, @done.%d\n", a, body, end);
     emit(q, "@body.%d\n", body);
@@ -592,6 +654,12 @@ static void gen_func(Q *q, MirFunc *f) {
   size_t i;
   q->ntemp = 0;
   q->nlabel = 0;
+  q->loc = NULL;
+  q->func_file = first_loc_file(f->body);
+  if (q->func_file != NULL && (q->file == NULL || strcmp(q->file, q->func_file) != 0)) {
+    gen_dbgfile(q, q->func_file);
+    q->file = q->func_file;
+  }
   emit(q, "%sfunction ", f->is_export ? "export " : "");
   if (f->ret->kind != MT_VOID) {
     emit(q, "%s ", abi_type(f->ret));

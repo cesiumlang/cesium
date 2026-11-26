@@ -1,0 +1,14 @@
+// Line information (cesiumlang/cesium#78): run without arguments, this
+// program divides by zero at line 12, column 3, and the assembly of both
+// compilers says so with .file and .loc (build-src/tests.zig). It is
+// compiled, not run.
+// spec: s0.entry, s0.expr.arithmetic
+i32 = main(i32 argc, ##u8 argv) {
+  i32 zero = argc - 1;
+  i32 q = 7;
+  if (argc > 1) {
+    q = 8;
+  }
+  q = q / zero;
+  return q;
+}
