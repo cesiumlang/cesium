@@ -185,7 +185,7 @@ static MirType *resolve_type(L *l, const S0TypeSyn *syn) {
     break;
   default:
     if (find_struct(l, syn->name) == NULL) {
-      s0_error(l->diag, syn->loc, "unknown type '%s'", syn->name);
+      s0_error(l->diag, syn->loc, "E0301", "unknown type '%s'", syn->name);
       return NULL;
     }
     t = &mir_struct_ref(l->m, syn->name)->type;
@@ -281,7 +281,7 @@ static bool name_taken(L *l, const char *name, S0Loc loc, bool check_locals) {
     what = "a local or parameter";
   }
   if (what != NULL) {
-    s0_error(l->diag, loc, "'%s' is already the name of %s", name, what);
+    s0_error(l->diag, loc, "E0302", "'%s' is already the name of %s", name, what);
     return true;
   }
   return false;
@@ -343,7 +343,7 @@ static Val settle(L *l, S0Loc loc, MirExpr *v, MirType *t, Want w) {
   while (depth_of(t) > target) {
     t = t->elem;
     if (!mir_type_is_scalar(t)) {
-      s0_error(l->diag, loc, "a %s is not a value; use one of its %s", type_name(l, t),
+      s0_error(l->diag, loc, "E0401", "a %s is not a value; use one of its %s", type_name(l, t),
                t->kind == MT_ARRAY ? "elements" : "fields");
       return bad_val();
     }
@@ -351,17 +351,22 @@ static Val settle(L *l, S0Loc loc, MirExpr *v, MirType *t, Want w) {
   }
   if (w.type != NULL) {
     if (!mir_type_eq(t, w.type)) {
-      s0_error(l->diag, loc, "expected %s, found %s%s", type_name(l, w.type), type_name(l, t),
-               mir_type_is_int(t) && mir_type_is_int(w.type) ? "; convert it with 'as'" : "");
+      if (mir_type_is_int(t) && mir_type_is_int(w.type)) {
+        s0_error(l->diag, loc, "E0403", "expected %s, found %s; convert it with 'as'", type_name(l, w.type),
+                 type_name(l, t));
+      } else {
+        s0_error(l->diag, loc, "E0402", "expected %s, found %s", type_name(l, w.type), type_name(l, t));
+      }
       return bad_val();
     }
   } else if (w.ptr_depth > 0) {
     if (!(t->kind == MT_PTR || (w.or_uword && t->kind == MT_UWORD))) {
-      s0_error(l->diag, loc, "expected a pointer%s, found %s", w.or_uword ? " or a uword" : "", type_name(l, t));
+      s0_error(l->diag, loc, "E0404", "expected a pointer%s, found %s", w.or_uword ? " or a uword" : "",
+               type_name(l, t));
       return bad_val();
     }
   } else if (!mir_type_is_int(t)) {
-    s0_error(l->diag, loc, "expected a number, found %s", type_name(l, t));
+    s0_error(l->diag, loc, "E0405", "expected a number, found %s", type_name(l, t));
     return bad_val();
   }
   return make_val(v, t);
@@ -399,11 +404,12 @@ static Place lower_place(L *l, S0Expr *e) {
       return p;
     }
     if (find_const(l, e->name) != NULL) {
-      s0_error(l->diag, e->loc, "'%s' is a constant: it has no address and cannot be assigned", e->name);
+      s0_error(l->diag, e->loc, "E0501", "'%s' is a constant: it has no address and cannot be assigned",
+               e->name);
     } else if (find_func(l, e->name) != NULL) {
-      s0_error(l->diag, e->loc, "'%s' is a function", e->name);
+      s0_error(l->diag, e->loc, "E0303", "'%s' is a function", e->name);
     } else {
-      s0_error(l->diag, e->loc, "unknown name '%s'", e->name);
+      s0_error(l->diag, e->loc, "E0304", "unknown name '%s'", e->name);
     }
     return p;
   }
@@ -425,11 +431,11 @@ static Place lower_place(L *l, S0Expr *e) {
       elem = base.t->elem;
       first = mir_as(l->m, mir_ptr(l->m, elem), base.addr, e->loc.line);
     } else {
-      s0_error(l->diag, e->loc, "a %s cannot be indexed", type_name(l, base.t));
+      s0_error(l->diag, e->loc, "E0502", "a %s cannot be indexed", type_name(l, base.t));
       return p;
     }
     if (elem->kind == MT_VOID) {
-      s0_error(l->diag, e->loc, "a pointer to void cannot be indexed");
+      s0_error(l->diag, e->loc, "E0503", "a pointer to void cannot be indexed");
       return p;
     }
     if (is_untyped(e->b)) {
@@ -460,7 +466,7 @@ static Place lower_place(L *l, S0Expr *e) {
       base.local = NULL;
     }
     if (base.t->kind != MT_STRUCT) {
-      s0_error(l->diag, e->loc, "a %s has no fields", type_name(l, base.t));
+      s0_error(l->diag, e->loc, "E0504", "a %s has no fields", type_name(l, base.t));
       return p;
     }
     st = base.t->st;
@@ -472,12 +478,12 @@ static Place lower_place(L *l, S0Expr *e) {
         return p;
       }
     }
-    s0_error(l->diag, e->loc, "struct %s has no field '%s'", st->name, e->name);
+    s0_error(l->diag, e->loc, "E0505", "struct %s has no field '%s'", st->name, e->name);
     return p;
   }
 
   default:
-    s0_error(l->diag, e->loc, "this expression is not a variable, an element or a field");
+    s0_error(l->diag, e->loc, "E0506", "this expression is not a variable, an element or a field");
     return p;
   }
 }
@@ -542,7 +548,8 @@ static bool lower_operands(L *l, S0Expr *e, MirType *fallback, Val *a, Val *b) {
   bool ru = is_untyped(e->b);
   if (lu && ru) {
     if (fallback == NULL || !mir_type_is_int(fallback)) {
-      s0_error(l->diag, e->loc, "the type of these literals is not determined by their context; write 'as T' after one");
+      s0_error(l->diag, e->loc, "E0406",
+               "the type of these literals is not determined by their context; write 'as T' after one");
       return false;
     }
     *a = lower_expr(l, e->a, want_type(fallback));
@@ -565,7 +572,7 @@ static bool lower_operands(L *l, S0Expr *e, MirType *fallback, Val *a, Val *b) {
     *a = lower_expr(l, e->a, want_value());
     *b = lower_expr(l, e->b, want_value());
     if (a->ok && b->ok && !mir_type_eq(a->t, b->t)) {
-      s0_error(l->diag, e->loc, "the operands are %s and %s; convert one with 'as'", type_name(l, a->t),
+      s0_error(l->diag, e->loc, "E0407", "the operands are %s and %s; convert one with 'as'", type_name(l, a->t),
                type_name(l, b->t));
       return false;
     }
@@ -596,15 +603,16 @@ static Val lower_call(L *l, S0Expr *e, Want w) {
   size_t i;
   bool ok = true;
   if (strcmp(e->name, "alloc") == 0) {
-    s0_error(l->diag, e->loc, "alloc(count) can only initialize or be assigned to a pointer with ':='");
+    s0_error(l->diag, e->loc, "E0507",
+             "alloc(count) can only initialize or be assigned to a pointer with ':='");
     return bad_val();
   }
   if (f == NULL) {
-    s0_error(l->diag, e->loc, "unknown function '%s'", e->name);
+    s0_error(l->diag, e->loc, "E0305", "unknown function '%s'", e->name);
     return bad_val();
   }
   if (e->nargs != f->mir->nparams) {
-    s0_error(l->diag, e->loc, "'%s' takes %lu arguments, not %lu", e->name, (unsigned long)f->mir->nparams,
+    s0_error(l->diag, e->loc, "E0601", "'%s' takes %lu arguments, not %lu", e->name, (unsigned long)f->mir->nparams,
              (unsigned long)e->nargs);
     return bad_val();
   }
@@ -622,7 +630,7 @@ static Val lower_call(L *l, S0Expr *e, Want w) {
   }
   if (f->mir->ret->kind == MT_VOID) {
     if (!w.allow_void) {
-      s0_error(l->diag, e->loc, "'%s' returns nothing", e->name);
+      s0_error(l->diag, e->loc, "E0602", "'%s' returns nothing", e->name);
       return bad_val();
     }
     return make_val(mir_call(l->m, e->name, args, e->nargs, e->loc.line), f->mir->ret);
@@ -663,7 +671,7 @@ static Val lower_as(L *l, S0Expr *e, Want w) {
       Want ow = want_value();
       ow.ptr_depth = 1;
       if (to->kind != MT_UWORD) {
-        s0_error(l->diag, e->loc, "an address converts to uword only, not to %s", type_name(l, to));
+        s0_error(l->diag, e->loc, "E0408", "an address converts to uword only, not to %s", type_name(l, to));
         return bad_val();
       }
       v = lower_expr(l, e->a, ow);
@@ -671,7 +679,8 @@ static Val lower_as(L *l, S0Expr *e, Want w) {
       v = lower_expr(l, e->a, want_value());
     }
   } else {
-    s0_error(l->diag, e->loc, "'as' converts to a number or a pointer type, not to %s", type_name(l, to));
+    s0_error(l->diag, e->loc, "E0409", "'as' converts to a number or a pointer type, not to %s",
+             type_name(l, to));
     return bad_val();
   }
   if (!v.ok) {
@@ -689,15 +698,15 @@ static Val lower_expr(L *l, S0Expr *e, Want w) {
   case EX_INT:
     if (w.type == NULL || !mir_type_is_int(w.type)) {
       if (w.type != NULL) {
-        s0_error(l->diag, e->loc, "expected %s, found a number", type_name(l, w.type));
+        s0_error(l->diag, e->loc, "E0410", "expected %s, found a number", type_name(l, w.type));
       } else {
-        s0_error(l->diag, e->loc,
+        s0_error(l->diag, e->loc, "E0411",
                  "the type of this literal is not determined by its context; write 'as T' after it");
       }
       return bad_val();
     }
     if (!literal_fits(w.type, e->ival)) {
-      s0_error(l->diag, e->loc, "%" PRIu64 " does not fit %s", e->ival, type_name(l, w.type));
+      s0_error(l->diag, e->loc, "E0412", "%" PRIu64 " does not fit %s", e->ival, type_name(l, w.type));
       return bad_val();
     }
     return make_val(mir_const(l->m, w.type, e->ival, e->loc.line), w.type);
@@ -705,7 +714,7 @@ static Val lower_expr(L *l, S0Expr *e, Want w) {
   case EX_STRING: {
     Val v = lower_string(l, e);
     if (w.type == NULL && w.ptr_depth == 0) {
-      s0_error(l->diag, e->loc, "a string is a #u8, not a number");
+      s0_error(l->diag, e->loc, "E0413", "a string is a #u8, not a number");
       return bad_val();
     }
     return settle(l, e->loc, v.e, v.t, w);
@@ -722,7 +731,7 @@ static Val lower_expr(L *l, S0Expr *e, Want w) {
       return bad_val();
     }
     if (!mir_type_is_scalar(p.t)) {
-      s0_error(l->diag, e->loc, "'%s' is a %s, not a value; use one of its %s", e->name, type_name(l, p.t),
+      s0_error(l->diag, e->loc, "E0414", "'%s' is a %s, not a value; use one of its %s", e->name, type_name(l, p.t),
                p.t->kind == MT_ARRAY ? "elements" : "fields");
       return bad_val();
     }
@@ -736,7 +745,7 @@ static Val lower_expr(L *l, S0Expr *e, Want w) {
       return bad_val();
     }
     if (!mir_type_is_scalar(p.t)) {
-      s0_error(l->diag, e->loc, "a %s is not a value; use one of its %s", type_name(l, p.t),
+      s0_error(l->diag, e->loc, "E0401", "a %s is not a value; use one of its %s", type_name(l, p.t),
                p.t->kind == MT_ARRAY ? "elements" : "fields");
       return bad_val();
     }
@@ -750,7 +759,8 @@ static Val lower_expr(L *l, S0Expr *e, Want w) {
     Place p;
     MirType *t;
     if (!is_place_expr(e->a)) {
-      s0_error(l->diag, e->loc, "'#' and '~' take the address of a variable, an element or a field");
+      s0_error(l->diag, e->loc, "E0508",
+               "'#' and '~' take the address of a variable, an element or a field");
       return bad_val();
     }
     p = lower_place(l, e->a);
@@ -761,11 +771,12 @@ static Val lower_expr(L *l, S0Expr *e, Want w) {
     /* an explicit address is never read through */
     if (w.type != NULL) {
       if (!mir_type_eq(t, w.type)) {
-        s0_error(l->diag, e->loc, "expected %s, found %s", type_name(l, w.type), type_name(l, t));
+        s0_error(l->diag, e->loc, "E0402", "expected %s, found %s", type_name(l, w.type), type_name(l, t));
         return bad_val();
       }
     } else if (w.ptr_depth == 0) {
-      s0_error(l->diag, e->loc, "an address is not a number; a pointer is expected only where one is declared");
+      s0_error(l->diag, e->loc, "E0415",
+               "an address is not a number; a pointer is expected only where one is declared");
       return bad_val();
     }
     return make_val(p.addr, t);
@@ -825,11 +836,11 @@ static Val lower_alloc(L *l, S0Expr *e, MirType *to) {
   MirExpr **args;
   Val n;
   if (e->nargs != 1) {
-    s0_error(l->diag, e->loc, "alloc takes one argument, the element count");
+    s0_error(l->diag, e->loc, "E0509", "alloc takes one argument, the element count");
     return bad_val();
   }
   if (to->elem->kind == MT_VOID) {
-    s0_error(l->diag, e->loc, "alloc needs an element type; the pointer is #void");
+    s0_error(l->diag, e->loc, "E0510", "alloc needs an element type; the pointer is #void");
     return bad_val();
   }
   n = lower_expr(l, e->args[0], want_type(uword));
@@ -851,7 +862,7 @@ static bool is_alloc(const S0Expr *e) {
 static Val lower_pointer_value(L *l, S0Expr *e, S0Tok op, MirType *to) {
   if (is_alloc(e)) {
     if (op != TK_OWN) {
-      s0_error(l->diag, e->loc, "alloc returns ownership; receive it with ':='");
+      s0_error(l->diag, e->loc, "E0511", "alloc returns ownership; receive it with ':='");
       return bad_val();
     }
     return lower_alloc(l, e, to);
@@ -888,26 +899,27 @@ static void lower_decl(L *l, S0Stmt *s, Block *out) {
   }
   if (s->is_array) {
     if (s->count == 0) {
-      s0_error(l->diag, s->loc, "an array has at least one element");
+      s0_error(l->diag, s->loc, "E0306", "an array has at least one element");
       return;
     }
     t = mir_array(l->m, t, s->count);
   }
   if (has_init) {
     if (!mir_type_is_scalar(t)) {
-      s0_error(l->diag, s->loc, "a %s has no initializer in S0; assign its %s one at a time", type_name(l, t),
-               t->kind == MT_ARRAY ? "elements" : "fields");
+      s0_error(l->diag, s->loc, "E0512", "a %s has no initializer in S0; assign its %s one at a time",
+               type_name(l, t), t->kind == MT_ARRAY ? "elements" : "fields");
       return;
     }
     if (t->kind == MT_PTR) {
       if (s->op == TK_ASSIGN) {
-        s0_error(l->diag, s->loc, "a pointer is initialized with ':=', '#=' or '~='; plain '=' assigns through it");
+        s0_error(l->diag, s->loc, "E0513",
+                 "a pointer is initialized with ':=', '#=' or '~='; plain '=' assigns through it");
         return;
       }
       init = lower_pointer_value(l, s->b, s->op, t);
     } else {
       if (s->op != TK_ASSIGN) {
-        s0_error(l->diag, s->loc, "%s is only for pointers; a plain value is initialized with '='",
+        s0_error(l->diag, s->loc, "E0514", "%s is only for pointers; a plain value is initialized with '='",
                  s0_tok_name(s->op));
         return;
       }
@@ -938,7 +950,8 @@ static void lower_assign(L *l, S0Stmt *s, Block *out) {
   Val v;
   MirStmt *ms;
   if (!is_place_expr(s->a)) {
-    s0_error(l->diag, s->loc, "the left side of an assignment is a variable, an element or a field");
+    s0_error(l->diag, s->loc, "E0515",
+             "the left side of an assignment is a variable, an element or a field");
     return;
   }
   p = lower_place(l, s->a);
@@ -953,14 +966,14 @@ static void lower_assign(L *l, S0Stmt *s, Block *out) {
       p.local = NULL;
     }
     if (!mir_type_is_int(p.t)) {
-      s0_error(l->diag, s->loc, "a %s is not assigned as a whole in S0; assign its %s", type_name(l, p.t),
+      s0_error(l->diag, s->loc, "E0516", "a %s is not assigned as a whole in S0; assign its %s", type_name(l, p.t),
                p.t->kind == MT_ARRAY ? "elements" : "fields");
       return;
     }
     v = lower_expr(l, s->b, want_type(p.t));
   } else {
     if (p.t->kind != MT_PTR) {
-      s0_error(l->diag, s->loc, "%s sets where a pointer points; the left side is a %s", s0_tok_name(s->op),
+      s0_error(l->diag, s->loc, "E0517", "%s sets where a pointer points; the left side is a %s", s0_tok_name(s->op),
                type_name(l, p.t));
       return;
     }
@@ -996,7 +1009,7 @@ static void lower_stmt(L *l, S0Stmt *s, Block *out) {
   case ST_EXPR: {
     Want w = want_value();
     if (s->a->kind != EX_CALL) {
-      s0_error(l->diag, s->loc, "only a call can be a statement");
+      s0_error(l->diag, s->loc, "E0603", "only a call can be a statement");
       return;
     }
     w.allow_void = true;
@@ -1039,7 +1052,7 @@ static void lower_stmt(L *l, S0Stmt *s, Block *out) {
   case ST_BREAK:
   case ST_CONTINUE:
     if (l->loops == 0) {
-      s0_error(l->diag, s->loc, "'%s' outside a loop", s->kind == ST_BREAK ? "break" : "continue");
+      s0_error(l->diag, s->loc, "E0604", "'%s' outside a loop", s->kind == ST_BREAK ? "break" : "continue");
       return;
     }
     block_add(out, mir_stmt(l->m, s->kind == ST_BREAK ? MS_BREAK : MS_CONTINUE, s->loc.line));
@@ -1049,12 +1062,12 @@ static void lower_stmt(L *l, S0Stmt *s, Block *out) {
     ms = mir_stmt(l->m, MS_RETURN, s->loc.line);
     if (s->a == NULL) {
       if (l->fn->ret->kind != MT_VOID) {
-        s0_error(l->diag, s->loc, "'%s' returns a %s", l->fn->name, type_name(l, l->fn->ret));
+        s0_error(l->diag, s->loc, "E0605", "'%s' returns a %s", l->fn->name, type_name(l, l->fn->ret));
         return;
       }
     } else {
       if (l->fn->ret->kind == MT_VOID) {
-        s0_error(l->diag, s->loc, "'%s' returns nothing", l->fn->name);
+        s0_error(l->diag, s->loc, "E0602", "'%s' returns nothing", l->fn->name);
         return;
       }
       v = lower_expr(l, s->a, want_type(l->fn->ret));
@@ -1088,7 +1101,7 @@ static void declare_structs(L *l, S0Decl *decls) {
     if (d->kind == DK_STRUCT) {
       StructName *s;
       if (find_struct(l, d->name) != NULL) {
-        s0_error(l->diag, d->loc, "struct '%s' is declared twice", d->name);
+        s0_error(l->diag, d->loc, "E0307", "struct '%s' is declared twice", d->name);
         continue;
       }
       s = (StructName *)cs_arena_new(l->arena, sizeof(StructName));
@@ -1111,7 +1124,7 @@ static void declare_structs(L *l, S0Decl *decls) {
       n++;
     }
     if (n == 0) {
-      s0_error(l->diag, d->loc, "struct '%s' has no fields", d->name);
+      s0_error(l->diag, d->loc, "E0308", "struct '%s' has no fields", d->name);
       continue;
     }
     fields = (MirField *)cs_arena_new(&l->m->arena, cs_mul_size(n, sizeof(MirField)));
@@ -1124,7 +1137,7 @@ static void declare_structs(L *l, S0Decl *decls) {
       }
       if (f->is_array) {
         if (f->count == 0) {
-          s0_error(l->diag, f->loc, "an array has at least one element");
+          s0_error(l->diag, f->loc, "E0306", "an array has at least one element");
           ok = false;
           continue;
         }
@@ -1132,7 +1145,7 @@ static void declare_structs(L *l, S0Decl *decls) {
       }
       for (j = 0; j < i; j++) {
         if (strcmp(fields[j].name, f->name) == 0) {
-          s0_error(l->diag, f->loc, "struct '%s' has two fields named '%s'", d->name, f->name);
+          s0_error(l->diag, f->loc, "E0309", "struct '%s' has two fields named '%s'", d->name, f->name);
           ok = false;
         }
       }
@@ -1157,25 +1170,26 @@ static void declare_const(L *l, S0Decl *d) {
     return;
   }
   if (!mir_type_is_int(t)) {
-    s0_error(l->diag, d->loc, "a constant is a number in S0, not a %s", type_name(l, t));
+    s0_error(l->diag, d->loc, "E0310", "a constant is a number in S0, not a %s", type_name(l, t));
     return;
   }
   if (d->init->kind == EX_INT) {
     value = d->init->ival;
     if (!literal_fits(t, value)) {
-      s0_error(l->diag, d->init->loc, "%" PRIu64 " does not fit %s", value, type_name(l, t));
+      s0_error(l->diag, d->init->loc, "E0412", "%" PRIu64 " does not fit %s", value, type_name(l, t));
       return;
     }
   } else if (d->init->kind == EX_NAME && find_const(l, d->init->name) != NULL) {
     Const *other = find_const(l, d->init->name);
     if (!mir_type_eq(other->type, t)) {
-      s0_error(l->diag, d->init->loc, "'%s' is a %s, not a %s", other->name, type_name(l, other->type),
+      s0_error(l->diag, d->init->loc, "E0311", "'%s' is a %s, not a %s", other->name, type_name(l, other->type),
                type_name(l, t));
       return;
     }
     value = other->value;
   } else {
-    s0_error(l->diag, d->init->loc, "a constant is initialized with a literal or another constant in S0");
+    s0_error(l->diag, d->init->loc, "E0312",
+             "a constant is initialized with a literal or another constant in S0");
     return;
   }
   if (name_taken(l, d->name, d->loc, false)) {
@@ -1198,7 +1212,7 @@ static void declare_global(L *l, S0Decl *d) {
   }
   if (d->is_array) {
     if (d->count == 0) {
-      s0_error(l->diag, d->loc, "an array has at least one element");
+      s0_error(l->diag, d->loc, "E0306", "an array has at least one element");
       return;
     }
     t = mir_array(l->m, t, d->count);
@@ -1218,7 +1232,8 @@ static void declare_global(L *l, S0Decl *d) {
   if (mir_type_is_int(t)) {
     Const *c = d->init->kind == EX_NAME ? find_const(l, d->init->name) : NULL;
     if (d->op != TK_ASSIGN) {
-      s0_error(l->diag, d->loc, "%s is only for pointers; a plain value is initialized with '='", s0_tok_name(d->op));
+      s0_error(l->diag, d->loc, "E0514", "%s is only for pointers; a plain value is initialized with '='",
+               s0_tok_name(d->op));
     } else if (d->init->kind == EX_INT && literal_fits(t, d->init->ival)) {
       g->init = MI_INT;
       g->ival = d->init->ival;
@@ -1226,21 +1241,24 @@ static void declare_global(L *l, S0Decl *d) {
       g->init = MI_INT;
       g->ival = c->value;
     } else {
-      s0_error(l->diag, d->init->loc, "a global is initialized with a literal or a constant of its type in S0");
+      s0_error(l->diag, d->init->loc, "E0313",
+               "a global is initialized with a literal or a constant of its type in S0");
     }
   } else if (t->kind == MT_PTR) {
     if (d->op == TK_ASSIGN) {
-      s0_error(l->diag, d->loc, "a pointer is initialized with ':=', '#=' or '~='; plain '=' assigns through it");
+      s0_error(l->diag, d->loc, "E0513",
+               "a pointer is initialized with ':=', '#=' or '~='; plain '=' assigns through it");
     } else if (d->init->kind == EX_STRING && t->elem->kind == MT_U8) {
       Val v = lower_string(l, d->init);
       /* lower_string made the bytes global and an `as(ptr<u8>, @str.N)` expression */
       g->init = MI_ADDR;
       g->addr_name = v.e->a->name;
     } else {
-      s0_error(l->diag, d->init->loc, "a global pointer is initialized with a string in S0, or not at all");
+      s0_error(l->diag, d->init->loc, "E0314",
+               "a global pointer is initialized with a string in S0, or not at all");
     }
   } else {
-    s0_error(l->diag, d->loc, "a %s has no initializer in S0", type_name(l, t));
+    s0_error(l->diag, d->loc, "E0315", "a %s has no initializer in S0", type_name(l, t));
   }
 }
 
@@ -1252,7 +1270,7 @@ static void declare_func(L *l, S0Decl *d) {
   size_t j;
   bool ok = ret != NULL;
   if (ok && ret->kind != MT_VOID && !mir_type_is_scalar(ret)) {
-    s0_error(l->diag, d->loc, "'%s' returns a %s; S0 functions return a number, a pointer or nothing", d->name,
+    s0_error(l->diag, d->loc, "E0316", "'%s' returns a %s; S0 functions return a number, a pointer or nothing", d->name,
              type_name(l, ret));
     ok = false;
   }
@@ -1263,13 +1281,13 @@ static void declare_func(L *l, S0Decl *d) {
       continue;
     }
     if (!mir_type_is_scalar(t)) {
-      s0_error(l->diag, d->params[i].loc, "parameter '%s' is a %s; S0 parameters are numbers and pointers",
+      s0_error(l->diag, d->params[i].loc, "E0317", "parameter '%s' is a %s; S0 parameters are numbers and pointers",
                d->params[i].name, type_name(l, t));
       ok = false;
     }
     for (j = 0; j < i; j++) {
       if (strcmp(d->params[j].name, d->params[i].name) == 0) {
-        s0_error(l->diag, d->params[i].loc, "two parameters are named '%s'", d->params[i].name);
+        s0_error(l->diag, d->params[i].loc, "E0318", "two parameters are named '%s'", d->params[i].name);
         ok = false;
       }
     }
@@ -1347,7 +1365,8 @@ MirModule *s0_lower(CsArena *arena, S0Diag *diag, S0Decl *decls) {
   if (l.uses_alloc && diag->errors == 0) {
     if (find_func(&l, "cs_arena_alloc") != NULL) {
       S0Loc loc = decls->loc;
-      s0_error(diag, loc, "'cs_arena_alloc' is the runtime function behind alloc and cannot be declared");
+      s0_error(diag, loc, "E0319",
+               "'cs_arena_alloc' is the runtime function behind alloc and cannot be declared");
     } else {
       MirType *uword = mir_prim(l.m, MT_UWORD);
       MirParam *params = (MirParam *)cs_arena_new(&l.m->arena, 2 * sizeof(MirParam));

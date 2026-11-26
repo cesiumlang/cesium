@@ -1,13 +1,13 @@
 /* S0 lexer. */
 #include "s0.h"
 
-void s0_error(S0Diag *d, S0Loc loc, const char *fmt, ...) {
+void s0_error(S0Diag *d, S0Loc loc, const char *code, const char *fmt, ...) {
   va_list ap;
   char msg[512];
   va_start(ap, fmt);
   cs_vsnprintf(msg, sizeof msg, fmt, ap);
   va_end(ap);
-  fprintf(stderr, "%s:%d:%d: error: %s\n", loc.file, loc.line, loc.col, msg);
+  fprintf(stderr, "%s:%d:%d: error[%s]: %s\n", loc.file, loc.line, loc.col, code, msg);
   d->errors++;
 }
 
@@ -70,10 +70,10 @@ static void advance(S0Lexer *lx) {
   }
 }
 
-static S0Token fail(S0Lexer *lx, S0Loc loc, const char *msg) {
+static S0Token fail(S0Lexer *lx, S0Loc loc, const char *code, const char *msg) {
   S0Token t;
   memset(&t, 0, sizeof t);
-  s0_error(lx->diag, loc, "%s", msg);
+  s0_error(lx->diag, loc, code, "%s", msg);
   lx->pos = lx->len; /* every later call returns TK_EOF */
   t.kind = TK_EOF;
   t.loc = loc;
@@ -154,7 +154,7 @@ S0Token s0_lex_next(S0Lexer *lx) {
   loc.line = lx->line;
   loc.col = lx->col;
   if (!skip_space_and_comments(lx, &loc)) {
-    return fail(lx, loc, "unterminated comment");
+    return fail(lx, loc, "E0101", "unterminated comment");
   }
   loc.file = lx->file;
   loc.line = lx->line;
@@ -182,7 +182,7 @@ S0Token s0_lex_next(S0Lexer *lx) {
     }
     for (i = 0; i < sizeof cesium_reserved / sizeof cesium_reserved[0]; i++) {
       if (strcmp(t.text, cesium_reserved[i]) == 0) {
-        s0_error(lx->diag, loc, "'%s' is a Cesium keyword that S0 does not have", t.text);
+        s0_error(lx->diag, loc, "E0102", "'%s' is a Cesium keyword that S0 does not have", t.text);
         lx->pos = lx->len;
         t.kind = TK_EOF;
         return t;
@@ -203,10 +203,10 @@ S0Token s0_lex_next(S0Lexer *lx) {
       advance(lx);
     }
     if (is_ident_start(peek(lx, 0))) {
-      return fail(lx, loc, "S0 has decimal integer literals only");
+      return fail(lx, loc, "E0103", "S0 has decimal integer literals only");
     }
     if (overflow) {
-      return fail(lx, loc, "integer literal is too large");
+      return fail(lx, loc, "E0104", "integer literal is too large");
     }
     t.kind = TK_INT;
     t.ival = v;
@@ -222,7 +222,7 @@ S0Token s0_lex_next(S0Lexer *lx) {
       int ch = peek(lx, 0);
       if (ch == -1 || ch == '\n') {
         cs_buf_free(&b);
-        return fail(lx, loc, "unterminated literal");
+        return fail(lx, loc, "E0105", "unterminated literal");
       }
       if (ch == quote) {
         advance(lx);
@@ -231,7 +231,7 @@ S0Token s0_lex_next(S0Lexer *lx) {
       ch = read_char(lx);
       if (ch < 0) {
         cs_buf_free(&b);
-        return fail(lx, loc, "unknown escape: stage 0 accepts \\n \\t \\r \\0 \\\\ \\' \\\"");
+        return fail(lx, loc, "E0106", "unknown escape: stage 0 accepts \\n \\t \\r \\0 \\\\ \\' \\\"");
       }
       cs_buf_putc(&b, (char)(unsigned char)ch);
       nchars++;
@@ -381,7 +381,7 @@ S0Token s0_lex_next(S0Lexer *lx) {
   default:
     break;
   }
-  return fail(lx, loc, "unexpected character");
+  return fail(lx, loc, "E0107", "unexpected character");
 }
 
 const char *s0_tok_name(S0Tok kind) {

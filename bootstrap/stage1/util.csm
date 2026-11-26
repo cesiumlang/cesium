@@ -159,13 +159,27 @@ void = buf_put_u64(~Buf b, u64 v) {
 // The message being built. It is printed by err_end, which ends the program.
 Buf g_err;
 
-// Starts a message "line:col: error: ". Lines count from the start of the
-// standard input, which may hold several files one after another.
-void = err_begin(u64 line, u64 col) {
+// Starts a message "line:col: error[code]: ", the code as in
+// bootstrap/diagnostics.md. Lines count from the start of the standard
+// input, which may hold several files one after another.
+void = err_begin(u64 line, u64 col, #u8 code) {
+  err_pos(line, col);
+  buf_puts(~g_err, ": error[");
+  buf_puts(~g_err, code);
+  buf_puts(~g_err, "]: ");
+}
+
+// Starts "line:col: error: ", for the checks of libcsmir's verifier that
+// cesium1 makes itself: like the verifier's messages, they have no code.
+void = err_begin_verifier(u64 line, u64 col) {
+  err_pos(line, col);
+  buf_puts(~g_err, ": error: ");
+}
+
+void = err_pos(u64 line, u64 col) {
   buf_put_u64(~g_err, line);
   buf_putc(~g_err, ':');
   buf_put_u64(~g_err, col);
-  buf_puts(~g_err, ": error: ");
 }
 
 void = err_s(#u8 s) {
