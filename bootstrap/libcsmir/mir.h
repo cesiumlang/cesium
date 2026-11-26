@@ -306,9 +306,76 @@ uint64_t mir_alignof(const MirTarget *t, MirType *type);
 
 /* ---- lowering ---------------------------------------------------------- */
 
-/* Appends QBE IL for a verified module. Returns the file of its first
- * dbgfile, or NULL if it has no locations. */
-const char *mir_lower_qbe(CsBuf *out, MirModule *m, const MirTarget *t);
+/* Appends QBE IL for a verified module; with variables, each local kept in
+ * memory for debuggers, with markers for the rewrite of the assembly
+ * (mir_debug.c). Returns the file of its first dbgfile, or NULL if it has no
+ * locations. */
+const char *mir_lower_qbe(CsBuf *out, MirModule *m, const MirTarget *t, bool variables);
+
+/* ---- variables for debuggers (mir_debug.c) ----------------------------- */
+
+/* A function's lexical scopes and variables in a debug build. Scope 0 is the
+ * function; every other block that declares a local is a scope, numbered in
+ * the order the lowering meets them. */
+typedef struct MirDebugFunc {
+  const MirFunc *f;
+  size_t nscopes;
+  int *parent;       /* of each scope; -1 for scope 0 */
+  size_t nlocals;    /* f's locals, in their order */
+  MirLocal **locals;
+  int *scope;        /* of each local */
+} MirDebugFunc;
+
+/* Whether a block (its first statement) declares a local of its own. */
+bool mir_block_is_scope(const MirStmt *body);
+/* Fills d for f, in a's memory. */
+void mir_debug_func(CsArena *a, MirDebugFunc *d, const MirFunc *f);
+/* Appends the symbol of a marker, without QBE's $: kind 'v' for local n's
+ * address, 'o' and 'c' where scope n opens and closes; func is the index of
+ * the function among the module's defined ones. */
+void mir_debug_marker(CsBuf *out, char kind, int func, int n);
+/* Reads a marker from its symbol in an instruction: its kind and number, or
+ * kind 0. */
+char mir_debug_find_marker(const char *line, size_t len, int *n);
+
+/* Where a local is: at an offset from the frame pointer (rbp, x29) or the
+ * stack pointer, or not found. */
+typedef enum MirBase { MIR_BASE_NONE, MIR_BASE_FP, MIR_BASE_SP } MirBase;
+typedef struct MirDebugVar {
+  MirBase base;
+  int64_t offset;
+} MirDebugVar;
+
+/* AArch64's 32 registers, then x86-64's 16 */
+#define MIR_SCAN_REGS 48
+
+/* The reading of one function's markers (mir_debug_scan.c). */
+typedef struct MirDebugScan {
+  MirDebugVar *vars;
+  size_t nlocals;
+  MirBase slot_base[MIR_SCAN_REGS]; /* a register holding a slot's address */
+  int64_t slot_off[MIR_SCAN_REGS];
+  bool imm_known[MIR_SCAN_REGS];    /* a register holding a constant */
+  int64_t imm[MIR_SCAN_REGS];
+  int pending[MIR_SCAN_REGS];       /* a register holding local n's marker */
+} MirDebugScan;
+
+/* Where a reading of QBE's assembly is: in the text, after a directive. */
+typedef struct MirAsmLines {
+  bool in_text;
+  bool was_directive;
+} MirAsmLines;
+
+/* Reads a line of QBE's assembly, without its line ending, and returns
+ * whether it is a function's label: in the text, right after the
+ * function's directives. Call it for every line. */
+bool mir_asm_func_label(MirAsmLines *s, const char *line, size_t len);
+
+/* Starts reading a function whose nlocals locals go into vars. */
+void mir_debug_scan_start(MirDebugScan *s, MirDebugVar *vars, size_t nlocals);
+/* Reads an instruction. Returns 'o' or 'c', with the scope in *n, if a
+ * scope's marker starts on it; 0 otherwise. */
+char mir_debug_scan_line(MirDebugScan *s, const char *line, size_t len, int *n);
 
 /* ---- debug information ------------------------------------------------- */
 
@@ -319,10 +386,23 @@ void mir_asm_string(CsBuf *out, const char *s);
 bool mir_dwarf_target(const MirTarget *t);
 /* The assembly that goes before QBE's: a label at the start of the text. */
 void mir_dwarf_head(CsBuf *out, const MirTarget *t);
+/* What variables add to the compile unit (mir_dwarf_vars.c): its children,
+ * abbreviations from code 2 on, and strings for .debug_str. */
+typedef struct MirDwarfExtra {
+  CsBuf info;
+  CsBuf abbrev;
+  CsBuf str;
+} MirDwarfExtra;
+
 /* The assembly that goes after QBE's: a label at the end of the text and a
  * compile unit covering it, named file, whose line table is the one the
- * assembler writes for QBE's .file and .loc. */
-void mir_dwarf_tail(CsBuf *out, const MirTarget *t, const char *file);
+ * assembler writes for QBE's .file and .loc; with extra, its children. */
+void mir_dwarf_tail(CsBuf *out, const MirTarget *t, const char *file, const MirDwarfExtra *extra);
+/* QBE's assembly with a compile unit around it, as mir_dwarf_head and
+ * mir_dwarf_tail write it, and the variables of m's functions in it, read
+ * from their markers (cesiumlang/cesium#143). */
+void mir_dwarf_rewrite(CsBuf *out, const char *in, size_t len, const MirModule *m, const MirTarget *t,
+                       const char *file);
 
 /* Whether the target's objects get CodeView line tables instead: COFF. */
 bool mir_codeview_target(const MirTarget *t);
@@ -330,8 +410,60 @@ bool mir_codeview_target(const MirTarget *t);
  * components; relative to the current directory if it is relative. */
 void mir_codeview_path(CsBuf *out, const char *file);
 /* Appends QBE's assembly with its .file and .loc made CodeView directives,
- * and the .debug$S section of their line tables. */
-void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len);
+ * and the .debug$S section of their line tables; with m, the variables of
+ * its functions and their types too, for target t. */
+void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len, const MirModule *m, const MirTarget *t);
+/* A function's variables as a rewrite of QBE's assembly found them: its
+ * number among the functions read, its scopes and locals, where each local
+ * is, and which scopes have labels (PREFIXcs_sbID_K and PREFIXcs_seID_K). */
+typedef struct MirVarsFunc {
+  uint32_t id;
+  MirDebugFunc d;
+  MirDebugVar *vars;
+  bool *opened;
+  bool *closed;
+} MirVarsFunc;
+
+/* The reading of a module's markers by a rewrite (mir_debug.c). */
+typedef struct MirVars {
+  const MirModule *m;
+  const char *prefix; /* of the assembler's local labels */
+  bool underscore;    /* symbols start with _ (Mach-O) */
+  CsArena arena;
+  CsBuf funcs;        /* a MirVarsFunc pointer, or NULL, per function kept */
+  MirVarsFunc *cur;   /* the function being read, if it has variables */
+  MirDebugScan scan;
+  uint32_t count;
+} MirVars;
+
+/* Starts reading m's markers in assembly for t; m may be NULL, for none. */
+void mir_vars_init(MirVars *v, const MirModule *m, const MirTarget *t);
+void mir_vars_free(MirVars *v);
+/* A function's label, as QBE writes it. */
+void mir_vars_begin(MirVars *v, const char *label);
+/* Reads an instruction; a scope's first open marker, and its first close
+ * marker after that, get its labels, appended to dst before the line. */
+void mir_vars_line(MirVars *v, CsBuf *dst, const char *line, size_t len);
+/* A function's end, where its scopes still open close, their labels
+ * appended to out; with keep, the function (or NULL) joins v->funcs.
+ * Returns it, or NULL. */
+MirVarsFunc *mir_vars_end(MirVars *v, CsBuf *out, bool keep);
+
+/* The .debug$T records of one object (mir_codeview_vars.c). */
+typedef struct MirCvTypes {
+  CsBuf map;      /* the types given an index so far */
+  CsBuf records;
+  uint32_t next;  /* the next index */
+} MirCvTypes;
+
+void mir_cv_types_init(MirCvTypes *types);
+void mir_cv_types_free(MirCvTypes *types);
+/* Appends the S_REGREL32 and S_BLOCK32 records of f, within its S_GPROC32,
+ * adding their types to types. */
+void mir_cv_put_vars(CsBuf *out, MirCvTypes *types, const MirVarsFunc *f, const MirTarget *t);
+/* Appends the .debug$T section, if there are types. */
+void mir_cv_put_types(CsBuf *out, const MirCvTypes *types);
+
 /* Appends body, the code of function name from its label, with .seh_proc and
  * its prologue described in .seh_ directives; .seh_endproc is the caller's. */
 void mir_seh_prologue(CsBuf *out, const char *name, const char *body, size_t len);

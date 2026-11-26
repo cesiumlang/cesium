@@ -12,6 +12,14 @@
 #define CS_BACKEND_QBE 0
 #define CS_BACKEND_LLVM 1
 
+/* Build modes. The QBE backend optimizes the same in each; only whether
+ * variables are kept differs, by CS_OPT_VARIABLES. */
+#define CS_OPT_DEBUG 0
+#define CS_OPT_SAFE 1
+#define CS_OPT_FAST 2
+#define CS_OPT_SMALL 3
+#define CS_OPT_VARIABLES 0x100
+
 /* Prepares the backends. Returns 0. */
 int cs_backend_init(void);
 
@@ -22,7 +30,10 @@ int cs_backend_init(void);
  *   triple     the target: "" or NULL for the machine this runs on, a QBE
  *              target name ("amd64_sysv"), or a triple starting with
  *              <arch>-<os> ("x86_64-linux-musl").
- *   cpu, features, opt_level   unused by the QBE backend.
+ *   opt_level  the build mode, CS_OPT_DEBUG to CS_OPT_SMALL, Zig's (-O),
+ *              with CS_OPT_VARIABLES or'ed in to keep variables for
+ *              debuggers (cesiumlang/cesium#143).
+ *   cpu, features   unused by the QBE backend.
  *
  * Returns nonzero on an error; cs_last_error() describes it.
  *

@@ -144,3 +144,9 @@ windeployqt
 WINSYS
 yyjson
 Zig
+adrp
+leaq
+UQUADWORD
+breg
+ndiff
+vsrc

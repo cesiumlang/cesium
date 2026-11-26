@@ -1,6 +1,10 @@
 // cesium1: the driver. Written in S0.
 //
-//   cesium1 [-o out.s] [file.csm ...]
+//   cesium1 [-O mode] [-f[no-]debug-variables] [-o out.s] [file.csm ...]
+//
+// -O is the build mode, as Zig names it (debug, the default, safe, fast or
+// small); a debug build keeps variables for debuggers unless told not to,
+// the others only when told to (cesiumlang/cesium#143).
 //
 // The files are compiled as one unit, each read in turn (loc.csm), to the
 // core MIR text cesium0 --emit-mir prints for the same files, byte for
@@ -25,6 +29,8 @@ extern csmir = import('csmir') {
 }
 
 const i32 CS_BACKEND_QBE = 0;
+// or'ed into the build mode: keep variables for debuggers
+const i32 CS_OPT_VARIABLES = 256;
 
 i32 = main(i32 argc, ##u8 argv) {
   #u8 src;
@@ -45,7 +51,11 @@ i32 = main(i32 argc, ##u8 argv) {
   decl_unit();
 
   if (g_loc_has_out) {
-    cs_compile_mir(g_out.data, g_out.len, CS_BACKEND_QBE, "", "", "", 0, g_loc_out);
+    i32 opt = g_loc_mode;
+    if (g_loc_vars) {
+      opt = opt | CS_OPT_VARIABLES;
+    }
+    cs_compile_mir(g_out.data, g_out.len, CS_BACKEND_QBE, "", "", "", opt, g_loc_out);
     print("error: ");
     print(cs_last_error());
     putchar('\n');

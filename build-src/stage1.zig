@@ -12,10 +12,12 @@ pub const Stage1 = struct {
     sources: [files.len]std.Build.LazyPath,
 };
 
-/// Compiles cesium1's sources with cesium0 and links the result.
+/// Compiles cesium1's sources with cesium0 in the build's mode, which keeps
+/// its variables for debuggers in a debug build, and links the result.
 pub fn add(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
     cesium0: *std.Build.Step.Compile,
     csrt: *std.Build.Step.Compile,
     csmir: *std.Build.Step.Compile,
@@ -24,7 +26,7 @@ pub fn add(
     var sources: [files.len]std.Build.LazyPath = undefined;
     for (files, &sources) |file, *source| source.* = b.path(b.fmt("bootstrap/stage1/{s}", .{file}));
     const compile = b.addRunArtifact(cesium0);
-    compile.addArg("-o");
+    compile.addArgs(&.{ "-O", @tagName(optimize), "-o" });
     const assembly = compile.addOutputFileArg("cesium1.s");
     for (sources) |source| compile.addFileArg(source);
     const cesium1 = link.linkCompiler(b, target, csrt, csmir, devkit, "cesium1", assembly);

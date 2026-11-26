@@ -33,8 +33,8 @@ SANITIZE_FLAGS=${PORTABLE_C_SANITIZE:--fsanitize=address,undefined -fno-sanitize
 
 SOURCES=(
   libcsmir/cs_common.c libcsmir/cs_format.c libcsmir/mir.c libcsmir/mir_text.c
-  libcsmir/mir_print.c libcsmir/mir_verify.c libcsmir/mir_qbe.c libcsmir/mir_dwarf.c
-  libcsmir/mir_codeview.c libcsmir/mir_seh.c libcsmir/cs_platform.c libcsmir/csmir_api.c
+  libcsmir/mir_print.c libcsmir/mir_verify.c libcsmir/mir_qbe.c libcsmir/mir_dwarf.c libcsmir/mir_dwarf_vars.c
+  libcsmir/mir_codeview.c libcsmir/mir_codeview_vars.c libcsmir/mir_seh.c libcsmir/mir_debug.c libcsmir/mir_debug_scan.c libcsmir/cs_platform.c libcsmir/csmir_api.c
   stage0/main.c stage0/s0_lex.c stage0/s0_parse.c stage0/s0_lower.c stage0/s0_habit.c
   runtime/cs_arena.c
 )

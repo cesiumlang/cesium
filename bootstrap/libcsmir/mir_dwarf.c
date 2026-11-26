@@ -5,8 +5,9 @@
  * no .debug_info; debuggers use a line table only through a compile unit
  * that covers the code. This adds the smallest such unit: DWARF 4, the
  * version of the line table the devkit's assembler writes, with one
- * DW_TAG_compile_unit and no children. COFF gets none: Windows debuggers
- * read CodeView, not DWARF.
+ * DW_TAG_compile_unit, whose children are the variables of a build that
+ * keeps them (mir_dwarf_vars.c). COFF gets none: Windows debuggers read
+ * CodeView, not DWARF.
  */
 #include "mir.h"
 
@@ -79,7 +80,7 @@ static void sec_offset(CsBuf *out, const MirTarget *t, const char *label, const 
   }
 }
 
-void mir_dwarf_tail(CsBuf *out, const MirTarget *t, const char *file) {
+void mir_dwarf_tail(CsBuf *out, const MirTarget *t, const char *file, const MirDwarfExtra *extra) {
   const char *p = local_prefix(t);
   cs_buf_printf(out, "/* DWARF compile unit (libcsmir) */\n.text\n%scs_text_end:\n", p);
   /* the assembler puts its line table after the label */
@@ -91,16 +92,24 @@ void mir_dwarf_tail(CsBuf *out, const MirTarget *t, const char *file) {
   cs_buf_printf(out, "%scs_producer:\n\t.asciz \"libcsmir\"\n%scs_name:\n\t.asciz ", p, p);
   mir_asm_string(out, file);
   cs_buf_printf(out, "\n%scs_dir:\n\t.asciz \".\"\n", p);
+  if (extra != NULL) {
+    cs_buf_put(out, extra->str.data == NULL ? "" : extra->str.data, extra->str.len);
+  }
   section(out, t, "debug_abbrev", "\"\",@progbits");
-  /* abbreviation 1: the compile unit, no children, its attributes */
-  cs_buf_printf(out, "%scs_abbrev:\n\t.byte 1, 0x%02x, 0\n", p, DW_TAG_compile_unit);
+  /* abbreviation 1: the compile unit, with children if it has variables,
+   * its attributes */
+  cs_buf_printf(out, "%scs_abbrev:\n\t.byte 1, 0x%02x, %d\n", p, DW_TAG_compile_unit, extra != NULL);
   cs_buf_printf(out, "\t.byte 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x\n", DW_AT_producer,
                 DW_FORM_strp, DW_AT_language, DW_FORM_data2, DW_AT_name, DW_FORM_strp, DW_AT_comp_dir, DW_FORM_strp);
   cs_buf_printf(out, "\t.byte 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0, 0\n", DW_AT_stmt_list,
                 DW_FORM_sec_offset, DW_AT_low_pc, DW_FORM_addr, DW_AT_high_pc, DW_FORM_data4);
+  if (extra != NULL) {
+    cs_buf_put(out, extra->abbrev.data == NULL ? "" : extra->abbrev.data, extra->abbrev.len);
+  }
   cs_buf_puts(out, "\t.byte 0\n");
   section(out, t, "debug_info", "\"\",@progbits");
-  cs_buf_printf(out, "\t.long %scs_info_end - %scs_info_start\n%scs_info_start:\n\t.short 4\n", p, p, p);
+  /* references within the unit are offsets from its start, cs_cu */
+  cs_buf_printf(out, "%scs_cu:\n\t.long %scs_info_end - %scs_info_start\n%scs_info_start:\n\t.short 4\n", p, p, p, p);
   sec_offset(out, t, "abbrev", NULL);
   cs_buf_printf(out, "\t.byte %d\n\t.byte 1\n", (int)t->ptr_size);
   sec_offset(out, t, "producer", "producer");
@@ -110,5 +119,10 @@ void mir_dwarf_tail(CsBuf *out, const MirTarget *t, const char *file) {
   sec_offset(out, t, "line", NULL);
   cs_buf_printf(out, "\t%s %scs_text_start\n", t->ptr_size == 8 ? ".quad" : ".long", p);
   cs_buf_printf(out, "\t.set %scs_text_size, %scs_text_end - %scs_text_start\n", p, p, p);
-  cs_buf_printf(out, "\t.long %scs_text_size\n%scs_info_end:\n", p, p);
+  cs_buf_printf(out, "\t.long %scs_text_size\n", p);
+  if (extra != NULL) {
+    cs_buf_put(out, extra->info.data == NULL ? "" : extra->info.data, extra->info.len);
+    cs_buf_puts(out, "\t.byte 0\n");
+  }
+  cs_buf_printf(out, "%scs_info_end:\n", p);
 }

@@ -107,8 +107,10 @@ static bool starts_with(const char *s, size_t len, const char *prefix) {
 }
 
 /* The procedure record of a function, named by its symbol as QBE writes it:
- * COFF symbols have no prefix, and a quoted one stays quoted. */
-static void put_procedure(CsBuf *out, uint32_t id, const char *name) {
+ * COFF symbols have no prefix, and a quoted one stays quoted. Its variables
+ * and scopes (cesiumlang/cesium#143) go before its S_END. */
+static void put_procedure(CsBuf *out, uint32_t id, const char *name, const MirVarsFunc *f, MirCvTypes *types,
+                          const MirTarget *t) {
   cs_buf_printf(out, "\t.short .Lcs_cv_p%" PRIu32 "_end - .Lcs_cv_p%" PRIu32 "\n", id, id);
   cs_buf_printf(out, ".Lcs_cv_p%" PRIu32 ":\n\t.short 0x%04x\n", id, S_GPROC32);
   /* parent, end, next: the linker fills them in */
@@ -123,14 +125,21 @@ static void put_procedure(CsBuf *out, uint32_t id, const char *name) {
     mir_asm_string(out, name);
   }
   cs_buf_printf(out, "\n\t.p2align 2\n.Lcs_cv_p%" PRIu32 "_end:\n", id);
+  if (f != NULL) {
+    mir_cv_put_vars(out, types, f, t);
+  }
   cs_buf_printf(out, "\t.short 2\n\t.short 0x%04x\n", S_END);
 }
 
 /* The .debug$S section: one symbol subsection, then the line tables and the
- * file tables the assembler makes. names holds a line per function. */
-static void put_tail(CsBuf *out, const CsBuf *names) {
+ * file tables the assembler makes; then the types of the variables. names
+ * holds a line per function, v the variables of each. */
+static void put_tail(CsBuf *out, const CsBuf *names, const MirVars *v, const MirTarget *t) {
   const char *p = names->data;
+  const MirVarsFunc *const *funcs = (const MirVarsFunc *const *)v->funcs.data;
+  MirCvTypes types;
   uint32_t id;
+  mir_cv_types_init(&types);
   cs_buf_puts(out, "/* CodeView (libcsmir) */\n.section .debug$S,\"dr\"\n\t.p2align 2\n");
   cs_buf_printf(out, "\t.long %d\n\t.long 0x%02x\n", CV_SIGNATURE_C13, DEBUG_S_SYMBOLS);
   cs_buf_puts(out, "\t.long .Lcs_cv_syms_end - .Lcs_cv_syms\n.Lcs_cv_syms:\n");
@@ -143,7 +152,7 @@ static void put_tail(CsBuf *out, const CsBuf *names) {
     const char *nl = strchr(p, '\n');
     CsBuf name = {NULL, 0, 0};
     cs_buf_put(&name, p, (size_t)(nl - p));
-    put_procedure(out, id, name.data);
+    put_procedure(out, id, name.data, funcs == NULL ? NULL : funcs[id], &types, t);
     cs_buf_free(&name);
     p = nl + 1;
   }
@@ -155,6 +164,8 @@ static void put_tail(CsBuf *out, const CsBuf *names) {
     p = nl + 1;
   }
   cs_buf_puts(out, "\t.cv_filechecksums\n\t.cv_stringtable\n");
+  mir_cv_put_types(out, &types);
+  mir_cv_types_free(&types);
 }
 
 /* Writes a held prologue, its function's unwind data begun. */
@@ -162,7 +173,7 @@ static void put_held(CsBuf *out, const CsBuf *name, const CsBuf *body) {
   mir_seh_prologue(out, name->data, body->data == NULL ? "" : body->data, body->len);
 }
 
-void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
+void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len, const MirModule *m, const MirTarget *t) {
   static const char end_fn[] = "/* end function ";
   CsBuf names = {NULL, 0, 0};
   CsBuf loc = {NULL, 0, 0};  /* the last .loc, not yet written */
@@ -171,11 +182,12 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
   CsBuf *dst = out;
   bool held = false;
   bool in_proc = false; /* between .seh_proc and .seh_endproc */
-  bool in_text = false;
-  bool was_directive = false;
+  MirAsmLines lines = {false, false};
   bool has_id = false;
   uint32_t next_id = 0;
   size_t i = 0;
+  MirVars v;
+  mir_vars_init(&v, m, t);
   cs_buf_put(&names, "", 0);
   while (i < len) {
     const char *line = in + i;
@@ -183,28 +195,21 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
     size_t n = nl == NULL ? len - i : (size_t)(nl - line);
     size_t text = n > 0 && line[n - 1] == '\r' ? n - 1 : n; /* without the line ending */
     i += nl == NULL ? n : n + 1;
-    bool directive = text > 0 && line[0] == '.';
-    bool after_directive = was_directive;
-    was_directive = directive;
+    bool label = mir_asm_func_label(&lines, line, text);
     if (starts_with(line, text, ".file ")) {
       cs_buf_puts(out, ".cv_file ");
       cs_buf_put(out, line + 6, n - 6);
       cs_buf_putc(out, '\n');
       continue;
     }
-    if (directive) {
-      in_text = starts_with(line, text, ".text") ||
-                (in_text && !starts_with(line, text, ".data") && !starts_with(line, text, ".bss") &&
-                 !starts_with(line, text, ".section"));
-    }
-    /* a function's label: in the text, right after its directives; its
-     * prologue is held until the function's first line is known */
-    if (in_text && after_directive && !held && !has_id && text > 1 && line[text - 1] == ':' && line[0] != '\t' &&
-        line[0] != '/') {
+    /* a function's label: its prologue is held until the function's first
+     * line is known */
+    if (label && !held && !has_id) {
       cs_buf_put(out, line, n);
       cs_buf_putc(out, '\n');
       fn.len = 0;
       cs_buf_put(&fn, line, text - 1);
+      mir_vars_begin(&v, fn.data);
       body.len = 0;
       held = true;
       continue;
@@ -244,6 +249,7 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
         cs_buf_puts(out, "\t.seh_endproc\n");
         in_proc = false;
       }
+      (void)mir_vars_end(&v, out, has_id);
       if (has_id) {
         cs_buf_printf(out, ".Lcs_cv_end%" PRIu32 ":\n", next_id);
         /* the name, between the prefix and the comment's end */
@@ -252,9 +258,12 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
         has_id = false;
         next_id++;
       }
-    } else if (loc.len != 0) {
-      cs_buf_put(dst, loc.data, loc.len);
-      loc.len = 0;
+    } else {
+      if (loc.len != 0) {
+        cs_buf_put(dst, loc.data, loc.len);
+        loc.len = 0;
+      }
+      mir_vars_line(&v, dst, line, text);
     }
     cs_buf_put(dst, line, n);
     if (nl != NULL) {
@@ -269,8 +278,9 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
     cs_buf_puts(out, "\t.seh_endproc\n");
   }
   if (next_id != 0) {
-    put_tail(out, &names);
+    put_tail(out, &names, &v, t);
   }
+  mir_vars_free(&v);
   cs_buf_free(&fn);
   cs_buf_free(&body);
   cs_buf_free(&loc);

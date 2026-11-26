@@ -77,7 +77,7 @@ static bool wrap_in_dwarf(const MirTarget *t, const char *out_path, const char *
   mir_dwarf_head(&head, t);
   fwrite(head.data, 1, head.len, stdout);
   cs_buf_free(&head);
-  mir_dwarf_tail(&dwarf_tail, t, file);
+  mir_dwarf_tail(&dwarf_tail, t, file, NULL);
   if (atexit(write_dwarf_tail) != 0) {
     set_error("cannot register the DWARF tail of %s", out_path);
     return false;
@@ -85,25 +85,35 @@ static bool wrap_in_dwarf(const MirTarget *t, const char *out_path, const char *
   return true;
 }
 
-/* COFF: QBE writes to a file beside the output, which at exit is rewritten
- * with CodeView line tables into the output (mir_codeview.c). */
+/* COFF, and ELF and Mach-O with variables: QBE writes to a file beside the
+ * output, which at exit is rewritten into the output, with CodeView
+ * (mir_codeview.c) or with a DWARF compile unit and its variables
+ * (mir_dwarf_vars.c). The module lives until then, for its variables, or is
+ * NULL without them. */
 static CsBuf qbe_path = {NULL, 0, 0};
-static CsBuf cv_path = {NULL, 0, 0};
+static CsBuf rw_path = {NULL, 0, 0};
+static const MirModule *rw_module = NULL;
+static const MirTarget *rw_target = NULL;
+static const char *rw_file = NULL;
 
-static void write_codeview(void) {
+static void write_rewrite(void) {
   char *data = NULL;
   size_t len = 0;
   CsBuf out = {NULL, 0, 0};
   bool ok = fclose(stdout) == 0 && cs_read_file(qbe_path.data, &data, &len);
   if (ok) {
-    mir_codeview_rewrite(&out, data, len);
-    ok = cs_write_file(cv_path.data, out.data == NULL ? "" : out.data, out.len);
+    if (mir_codeview_target(rw_target)) {
+      mir_codeview_rewrite(&out, data, len, rw_module, rw_target);
+    } else {
+      mir_dwarf_rewrite(&out, data, len, rw_module, rw_target, rw_file);
+    }
+    ok = cs_write_file(rw_path.data, out.data == NULL ? "" : out.data, out.len);
   }
   remove(qbe_path.data);
   free(data);
   cs_buf_free(&out);
   if (!ok) {
-    fprintf(stderr, "cannot write %s\n", cv_path.data);
+    fprintf(stderr, "cannot write %s\n", rw_path.data);
     /* exit() may not be called again from a handler it runs */
     _Exit(1);
   }
@@ -111,21 +121,35 @@ static void write_codeview(void) {
 
 /* Makes QBE write to stdout, opened on a file beside out_path, which is
  * rewritten into out_path at exit. Returns false with the error set. */
-static bool wrap_in_codeview(const char *out_path) {
-  cs_buf_puts(&cv_path, out_path);
+static bool wrap_in_rewrite(const MirTarget *t, const char *out_path, const char *file) {
+  rw_target = t;
+  rw_file = file;
+  cs_buf_puts(&rw_path, out_path);
   cs_buf_printf(&qbe_path, "%s.qbe.s", out_path);
   if (freopen(qbe_path.data, "wb", stdout) == NULL) {
     set_error("cannot write %s", qbe_path.data);
     return false;
   }
-  if (atexit(write_codeview) != 0) {
-    set_error("cannot register the CodeView rewrite of %s", out_path);
+  if (atexit(write_rewrite) != 0) {
+    set_error("cannot register the rewrite of %s", out_path);
     return false;
   }
   return true;
 }
 
-int csmir_emit_qbe(MirModule *m, const MirTarget *t, const char *out_path) {
+bool csmir_opt_mode(const char *name, int *mode) {
+  static const char *const names[] = {"debug", "safe", "fast", "small"};
+  int i;
+  for (i = 0; i < 4; i++) {
+    if (strcmp(name, names[i]) == 0) {
+      *mode = i;
+      return true;
+    }
+  }
+  return false;
+}
+
+int csmir_emit_qbe(MirModule *m, const MirTarget *t, const char *out_path, bool variables) {
   CsBuf il = {NULL, 0, 0};
   CsBuf il_path = {NULL, 0, 0};
   char *argv[7];
@@ -135,12 +159,16 @@ int csmir_emit_qbe(MirModule *m, const MirTarget *t, const char *out_path) {
   char *target;
   char *out;
   const char *file;
+  bool rewrite;
   int argc = 6;
   if (!mir_verify(m)) {
     set_error("MIR: %s", m->err);
     return 1;
   }
-  file = mir_lower_qbe(&il, m, t);
+  file = mir_lower_qbe(&il, m, t, variables);
+  if (variables) {
+    rw_module = m;
+  }
   cs_buf_printf(&il_path, "%s.ssa", out_path);
   if (!cs_write_file(il_path.data, il.data == NULL ? "" : il.data, il.len)) {
     set_error("cannot write %s", il_path.data);
@@ -161,9 +189,11 @@ int csmir_emit_qbe(MirModule *m, const MirTarget *t, const char *out_path) {
   argv[6] = NULL;
   fflush(stdout);
   fflush(stderr);
-  /* "-" (stdout) gets no CodeView: there is no file to rewrite */
-  if (file != NULL && ((mir_codeview_target(t) && strcmp(out_path, "-") != 0) || mir_dwarf_target(t))) {
-    if (!(mir_codeview_target(t) ? wrap_in_codeview(out_path) : wrap_in_dwarf(t, out_path, file))) {
+  /* "-" (stdout) gets no CodeView and no variables: there is no file to
+   * rewrite; DWARF without variables is streamed around QBE's output */
+  rewrite = strcmp(out_path, "-") != 0 && (mir_codeview_target(t) || (variables && mir_dwarf_target(t)));
+  if (file != NULL && (rewrite || mir_dwarf_target(t))) {
+    if (!(rewrite ? wrap_in_rewrite(t, out_path, file) : wrap_in_dwarf(t, out_path, file))) {
       cs_buf_free(&il_path);
       return 1;
     }
@@ -182,9 +212,12 @@ int cs_compile_mir(const char *mir, size_t len, int backend, const char *triple,
   int rc;
   CS_UNUSED(cpu);
   CS_UNUSED(features);
-  CS_UNUSED(opt_level);
   if (backend != CS_BACKEND_QBE) {
     set_error("only the QBE backend exists so far");
+    return 1;
+  }
+  if ((opt_level & ~CS_OPT_VARIABLES) < CS_OPT_DEBUG || (opt_level & ~CS_OPT_VARIABLES) > CS_OPT_SMALL) {
+    set_error("unknown build mode %d", opt_level);
     return 1;
   }
   t = csmir_target(triple);
@@ -197,7 +230,7 @@ int cs_compile_mir(const char *mir, size_t len, int backend, const char *triple,
     mir_module_free(m);
     return 1;
   }
-  rc = csmir_emit_qbe(m, t, out_path);
+  rc = csmir_emit_qbe(m, t, out_path, (opt_level & CS_OPT_VARIABLES) != 0);
   mir_module_free(m);
   return rc;
 }

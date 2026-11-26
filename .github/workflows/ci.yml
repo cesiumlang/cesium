@@ -66,6 +66,17 @@ jobs:
           # a breakpoint by absolute path, as an editor sets it
           gdb -batch -ex "break $PWD/bootstrap/tests/s0/lines.csm:12" -ex run -ex bt zig-out/bin/lines 2>&1 | tee gdb-break.txt
           grep -q '^Breakpoint 1, .*lines.csm:12' gdb-break.txt
+          # variables (cesiumlang/cesium#143): in a block's own scope, then
+          # out of it, and through a pointer to a struct
+          vsrc="$PWD/bootstrap/tests/s0/vars.csm"
+          gdb -batch -ex "break $vsrc:21" -ex "break $vsrc:33" -ex run -ex "info locals" -ex continue \
+            -ex "info args" -ex "info locals" -ex "print *p" zig-out/bin/vars 2>&1 | tee gdb-vars.txt
+          grep -q '^inner = 84' gdb-vars.txt
+          grep -q '^k = 2' gdb-vars.txt
+          grep -q '^total = 42' gdb-vars.txt
+          grep -q 'a = 40, b = 9' gdb-vars.txt
+          grep -q '^i = 2' gdb-vars.txt
+          ! grep -q '^step = ' gdb-vars.txt
 
       - name: lldb finds the line of a trap
         if: matrix.host == 'aarch64-macos-none'
@@ -77,6 +88,16 @@ jobs:
           # a breakpoint by absolute path, as an editor sets it
           lldb --batch -o "breakpoint set --file $PWD/bootstrap/tests/s0/lines.csm --line 12" -o run -o bt zig-out/bin/lines 2>&1 | tee lldb-break.txt
           grep -q 'stop reason = breakpoint 1' lldb-break.txt
+          # variables (cesiumlang/cesium#143), as gdb checks them
+          vsrc="$PWD/bootstrap/tests/s0/vars.csm"
+          lldb --batch -o "breakpoint set --file $vsrc --line 33" -o "breakpoint set --file $vsrc --line 21" -o run \
+            -o "frame variable" -o continue -o "frame variable" -o "p *p" zig-out/bin/vars 2>&1 | tee lldb-vars.txt
+          grep -q '(int) inner = 84' lldb-vars.txt
+          grep -q '(int) k = 2' lldb-vars.txt
+          grep -q '(int) total = 42' lldb-vars.txt
+          grep -q 'a = 40' lldb-vars.txt
+          grep -q '(int) i = 2' lldb-vars.txt
+          ! grep -q '(int) step = ' lldb-vars.txt
 
       # CodeView (cesiumlang/vscode-cesium#47): cdb, the console form of
       # WinDbg, reads the PDB as Visual Studio's debugger does
@@ -89,11 +110,12 @@ jobs:
           "$cdb" -lines -c "g; kn 1; q" "$exe" 2>&1 | tee cdb.txt
           grep -q 'lines!main+.*lines\.csm @ 12' cdb.txt
           # a breakpoint by absolute path, as an editor sets it, and a step
-          # by source line (line 12 has three ranges, which cdb calls ambiguous)
+          # by source line, past the if not taken (line 12 has three ranges,
+          # which cdb calls ambiguous)
           src=$(cygpath -w "$PWD/bootstrap/tests/s0/lines.csm")
-          "$cdb" -lines -c "l+t; bp \`$src:10\`; g; kn 1; p; kn 1; q" "$exe" 2>&1 | tee cdb-break.txt
+          "$cdb" -lines -c "l+t; bp \`$src:9\`; g; kn 1; p; kn 1; q" "$exe" 2>&1 | tee cdb-break.txt
           grep -q 'Breakpoint 0 hit' cdb-break.txt
-          grep -q 'lines!main+.*lines\.csm @ 10' cdb-break.txt
+          grep -q 'lines!main+.*lines\.csm @ 9' cdb-break.txt
           grep -q 'lines!main+.*lines\.csm @ 12' cdb-break.txt
           # the stack walk, by the unwind data: from a trap two calls deep,
           # through a frame too large to be set after its allocation
@@ -102,6 +124,18 @@ jobs:
           grep -q 'frames!leaf+.*frames\.csm @ 7' cdb-frames.txt
           grep -q 'frames!wide+.*frames\.csm @ 13' cdb-frames.txt
           grep -q 'frames!main+.*frames\.csm @ 17' cdb-frames.txt
+          # variables (cesiumlang/cesium#143): in a block's own scope, then
+          # out of it, and through a pointer to a struct
+          vars=$(cygpath -w "$PWD/zig-out/bin/vars.exe")
+          vsrc=$(cygpath -w "$PWD/bootstrap/tests/s0/vars.csm")
+          "$cdb" -lines -c "bp \`$vsrc:21\`; bp \`$vsrc:33\`; g; dv /t; g; dv /t; dx *p; q" "$vars" 2>&1 | tee cdb-vars.txt
+          grep -q 'int inner = 0n84' cdb-vars.txt
+          grep -q 'int k = 0n2' cdb-vars.txt
+          grep -q 'int total = 0n42' cdb-vars.txt
+          grep -q 'struct Pair \* p = ' cdb-vars.txt
+          grep -Eq '\] a +: 40 ' cdb-vars.txt
+          grep -q 'int i = 0n2' cdb-vars.txt
+          ! grep -q 'int step = 0n2' cdb-vars.txt
           # and a step out of a function, in cesium1
           .devkit/zig/zig build -Dtarget="${{ matrix.host }}"
           cesium1=$(cygpath -w "$PWD/zig-out/bin/cesium1.exe")
