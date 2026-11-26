@@ -82,6 +82,84 @@ void mir_debug_func(CsArena *a, MirDebugFunc *d, const MirFunc *f) {
   cs_buf_free(&w.parents);
 }
 
+void mir_vars_init(MirVars *v, const MirModule *m, const MirTarget *t) {
+  memset(v, 0, sizeof *v);
+  v->m = m;
+  v->prefix = t != NULL && t->format == MIR_MACHO ? "L" : ".L";
+  v->underscore = t != NULL && t->format == MIR_MACHO;
+}
+
+void mir_vars_free(MirVars *v) {
+  cs_buf_free(&v->funcs);
+  cs_arena_free(&v->arena);
+}
+
+static const MirFunc *find_func(const MirModule *m, const char *name) {
+  const MirFunc *f;
+  for (f = m->funcs; f != NULL; f = f->next) {
+    if (!f->is_extern && strcmp(f->name, name) == 0) {
+      return f;
+    }
+  }
+  return NULL;
+}
+
+void mir_vars_begin(MirVars *v, const char *label) {
+  const MirFunc *f = NULL;
+  MirVarsFunc *c;
+  v->cur = NULL;
+  if (v->m != NULL) {
+    f = find_func(v->m, v->underscore && label[0] == '_' ? label + 1 : label);
+  }
+  if (f == NULL) {
+    return;
+  }
+  c = cs_arena_new(&v->arena, sizeof *c);
+  c->id = v->count++;
+  mir_debug_func(&v->arena, &c->d, f);
+  c->vars = cs_arena_new(&v->arena, cs_mul_size(c->d.nlocals + 1, sizeof *c->vars));
+  c->opened = cs_arena_new(&v->arena, cs_mul_size(c->d.nscopes, sizeof *c->opened));
+  c->closed = cs_arena_new(&v->arena, cs_mul_size(c->d.nscopes, sizeof *c->closed));
+  mir_debug_scan_start(&v->scan, c->vars, c->d.nlocals);
+  v->cur = c;
+}
+
+void mir_vars_line(MirVars *v, CsBuf *dst, const char *line, size_t len) {
+  MirVarsFunc *c = v->cur;
+  int k = 0;
+  char kind;
+  if (c == NULL) {
+    return;
+  }
+  kind = mir_debug_scan_line(&v->scan, line, len, &k);
+  if (kind == 0 || k < 1 || (size_t)k >= c->d.nscopes) {
+    return;
+  }
+  if (kind == 'o' && !c->opened[k]) {
+    cs_buf_printf(dst, "%scs_sb%" PRIu32 "_%d:\n", v->prefix, c->id, k);
+    c->opened[k] = true;
+  } else if (kind == 'c' && c->opened[k] && !c->closed[k]) {
+    cs_buf_printf(dst, "%scs_se%" PRIu32 "_%d:\n", v->prefix, c->id, k);
+    c->closed[k] = true;
+  }
+}
+
+MirVarsFunc *mir_vars_end(MirVars *v, CsBuf *out, bool keep) {
+  MirVarsFunc *c = v->cur;
+  size_t k;
+  for (k = 1; c != NULL && k < c->d.nscopes; k++) {
+    if (c->opened[k] && !c->closed[k]) {
+      cs_buf_printf(out, "%scs_se%" PRIu32 "_%d:\n", v->prefix, c->id, (int)k);
+      c->closed[k] = true;
+    }
+  }
+  if (keep) {
+    cs_buf_put(&v->funcs, (const char *)&c, sizeof(MirVarsFunc *));
+  }
+  v->cur = NULL;
+  return c;
+}
+
 void mir_debug_marker(CsBuf *out, char kind, int func, int n) {
   cs_buf_printf(out, ".Lcs_%c%d_%d", kind, func, n);
 }

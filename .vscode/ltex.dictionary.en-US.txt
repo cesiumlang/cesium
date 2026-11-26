@@ -147,3 +147,6 @@ Zig
 adrp
 leaq
 UQUADWORD
+breg
+ndiff
+vsrc

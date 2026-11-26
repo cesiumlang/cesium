@@ -256,7 +256,7 @@ static void end_symbol(CsBuf *out, uint32_t id, int n) {
 }
 
 /* The locals of scope k, then its nested scopes; n numbers the records. */
-static void put_scope(CsBuf *out, MirCvTypes *types, const MirCvFunc *f, const MirTarget *t, int k, int *n) {
+static void put_scope(CsBuf *out, MirCvTypes *types, const MirVarsFunc *f, const MirTarget *t, int k, int *n) {
   size_t i;
   size_t j;
   for (i = 0; i < f->d.nlocals; i++) {
@@ -287,7 +287,7 @@ static void put_scope(CsBuf *out, MirCvTypes *types, const MirCvFunc *f, const M
   }
 }
 
-void mir_cv_put_vars(CsBuf *out, MirCvTypes *types, const MirCvFunc *f, const MirTarget *t) {
+void mir_cv_put_vars(CsBuf *out, MirCvTypes *types, const MirVarsFunc *f, const MirTarget *t) {
   int n = 0;
   put_scope(out, types, f, t, 0, &n);
 }

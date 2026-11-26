@@ -114,6 +114,23 @@ static int reg_of(const char *s, size_t len) {
   return -1;
 }
 
+static bool starts_with(const char *s, size_t len, const char *prefix) {
+  size_t n = strlen(prefix);
+  return len >= n && memcmp(s, prefix, n) == 0;
+}
+
+bool mir_asm_func_label(MirAsmLines *s, const char *line, size_t len) {
+  bool directive = len > 0 && line[0] == '.';
+  bool after_directive = s->was_directive;
+  s->was_directive = directive;
+  if (directive) {
+    s->in_text = starts_with(line, len, ".text") ||
+                 (s->in_text && !starts_with(line, len, ".data") && !starts_with(line, len, ".bss") &&
+                  !starts_with(line, len, ".section"));
+  }
+  return s->in_text && after_directive && len > 1 && line[len - 1] == ':' && line[0] != '\t' && line[0] != '/';
+}
+
 void mir_debug_scan_start(MirDebugScan *s, MirDebugVar *vars, size_t nlocals) {
   size_t i;
   memset(s, 0, sizeof *s);
@@ -203,7 +220,7 @@ char mir_debug_scan_line(MirDebugScan *s, const char *line, size_t len, int *n) 
     scan_add(s, &in);
   } else if (op_is(&in, "mov") && in.nargs == 2) {
     int t = reg_of(in.arg[0], in.arg_len[0]);
-    int64_t v;
+    int64_t v = 0;
     size_t used;
     if (t >= 0) {
       s->imm_known[t] = in.arg[1][0] == '#' && parse_int(in.arg[1] + 1, in.arg_len[1] - 1, &v, &used);

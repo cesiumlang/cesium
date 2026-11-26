@@ -21,6 +21,7 @@
 const std = @import("std");
 const stage1 = @import("stage1.zig");
 const tests = @import("tests.zig");
+const tests_debug = @import("tests_debug.zig");
 const tests_diff = @import("tests_diff.zig");
 const fuzz = @import("fuzz.zig");
 const diagnostics = @import("diagnostics.zig");
@@ -51,6 +52,7 @@ const csmir_sources = [_][]const u8{
     "mir_verify.c",
     "mir_qbe.c",
     "mir_dwarf.c",
+    "mir_dwarf_vars.c",
     "mir_codeview.c",
     "mir_codeview_vars.c",
     "mir_seh.c",
@@ -97,7 +99,7 @@ pub fn build(b: *std.Build) tests_diff.Error!void {
     diagnostics.add(b, test_step, &stage0_sources, &s1.sources);
 
     const lines_step = b.step("lines", "Build bootstrap/tests/s0/lines.csm, frames.csm and vars.csm into zig-out/bin, for a debugger");
-    tests.addLines(b, lines_step, target, optimize, c99.cesium0, c99.csrt);
+    tests_debug.addLines(b, lines_step, target, optimize, c99.cesium0, c99.csrt);
 
     const diff_step = b.step("test-diff", "Compare cesium1 with cesium0 on the generated corpus");
     try tests_diff.add(b, diff_step, target, tool, c99.cesium0, s1.cesium1);
