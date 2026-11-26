@@ -47,8 +47,8 @@ void = low_init(uword nnodes) {
   g_lstack := alloc(nnodes + 2);
 }
 
-void = err_node(uword n, #u8 msg) {
-  err_at(n);
+void = err_node(uword n, #u8 code, #u8 msg) {
+  err_at(n, code);
   err_s(msg);
   err_end();
 }
@@ -142,7 +142,7 @@ void = low_settle(uword at, ~Val v, ~Want w) {
   while (ty_depth(v.ty) > target) {
     uword t = ty_elem(v.ty);
     if (!ty_is_scalar(t)) {
-      err_at(at);
+      err_at(at, "E0401");
       err_s("a ");
       err_ty(t);
       err_s(" is not a value; use one of its ");
@@ -154,19 +154,24 @@ void = low_settle(uword at, ~Val v, ~Want w) {
   }
   if (w.ty != 0) {
     if (v.ty != w.ty) {
-      err_at(at);
+      u8 both_int = ty_is_int(v.ty) && ty_is_int(w.ty);
+      if (both_int) {
+        err_at(at, "E0403");
+      } else {
+        err_at(at, "E0402");
+      }
       err_s("expected ");
       err_ty(w.ty);
       err_s(", found ");
       err_ty(v.ty);
-      if (ty_is_int(v.ty) && ty_is_int(w.ty)) {
+      if (both_int) {
         err_s("; convert it with 'as'");
       }
       err_end();
     }
   } else if (w.ptr_depth > 0) {
     if (!(ty_kind(v.ty) == MT_PTR || (w.or_uword && ty_kind(v.ty) == MT_UWORD))) {
-      err_at(at);
+      err_at(at, "E0404");
       err_s("expected a pointer");
       if (w.or_uword) {
         err_s(" or a uword");
@@ -176,7 +181,7 @@ void = low_settle(uword at, ~Val v, ~Want w) {
       err_end();
     }
   } else if (!ty_is_int(v.ty)) {
-    err_at(at);
+    err_at(at, "E0405");
     err_s("expected a number, found ");
     err_ty(v.ty);
     err_end();
@@ -215,16 +220,18 @@ void = low_place_name(uword e, ~Val p) {
     val_end(p, start, g_name_tab[id].sym_ty);
     return;
   }
-  err_at(e);
   if (sym == SYM_CONST) {
+    err_at(e, "E0501");
     err_s("'");
     err_name(id);
     err_s("' is a constant: it has no address and cannot be assigned");
   } else if (sym == SYM_FUNC) {
+    err_at(e, "E0303");
     err_s("'");
     err_name(id);
     err_s("' is a function");
   } else {
+    err_at(e, "E0304");
     err_s("unknown name '");
     err_name(id);
     err_s("'");
@@ -253,14 +260,14 @@ void = low_place_index(uword e, ~Val p) {
     frag_s(")");
     val_end(~base, start, elem);
   } else {
-    err_at(e);
+    err_at(e, "E0502");
     err_s("a ");
     err_ty(base.ty);
     err_s(" cannot be indexed");
     err_end();
   }
   if (ty_kind(elem) == MT_VOID) {
-    err_node(e, "a pointer to void cannot be indexed");
+    err_node(e, "E0503", "a pointer to void cannot be indexed");
   }
   if (low_is_untyped(g_nodes[e].b)) {
     want_type(~iw, ty_prim(MT_UWORD));
@@ -286,7 +293,7 @@ void = low_place_field(uword e, ~Val p) {
     base.ty = ty_elem(base.ty);
   }
   if (ty_kind(base.ty) != MT_STRUCT) {
-    err_at(e);
+    err_at(e, "E0504");
     err_s("a ");
     err_ty(base.ty);
     err_s(" has no fields");
@@ -309,7 +316,7 @@ void = low_place_field(uword e, ~Val p) {
     }
     i = i + 1;
   }
-  err_at(e);
+  err_at(e, "E0505");
   err_s("struct ");
   err_name(g_structs[sidx].id);
   err_s(" has no field '");
@@ -327,7 +334,7 @@ void = low_place(uword e, ~Val p) {
   } else if (k == EX_FIELD) {
     low_place_field(e, p);
   } else {
-    err_node(e, "this expression is not a variable, an element or a field");
+    err_node(e, "E0506", "this expression is not a variable, an element or a field");
   }
 }
 
@@ -367,7 +374,7 @@ void = low_operands(uword e, uword fallback, ~Val a, ~Val b) {
   Want w;
   if (lu && ru) {
     if (fallback == 0 || !ty_is_int(fallback)) {
-      err_node(e, "the type of these literals is not determined by their context; write 'as T' after one");
+      err_node(e, "E0406", "the type of these literals is not determined by their context; write 'as T' after one");
     }
     want_type(~w, fallback);
     low_expr(an, ~w, a);
@@ -389,7 +396,7 @@ void = low_operands(uword e, uword fallback, ~Val a, ~Val b) {
     low_expr(an, ~w, a);
     low_expr(bn, ~w, b);
     if (a.ty != b.ty) {
-      err_at(e);
+      err_at(e, "E0407");
       err_s("the operands are ");
       err_ty(a.ty);
       err_s(" and ");
@@ -457,10 +464,10 @@ void = low_string(uword e, ~Val v) {
 void = low_call(uword e, ~Want w, ~Val v) {
   uword id = g_nodes[e].id;
   if (id == ID_ALLOC) {
-    err_node(e, "alloc(count) can only initialize or be assigned to a pointer with ':='");
+    err_node(e, "E0507", "alloc(count) can only initialize or be assigned to a pointer with ':='");
   }
   if (g_name_tab[id].sym != SYM_FUNC) {
-    err_at(e);
+    err_at(e, "E0305");
     err_s("unknown function '");
     err_name(id);
     err_s("'");
@@ -468,7 +475,7 @@ void = low_call(uword e, ~Want w, ~Val v) {
   }
   uword f = g_name_tab[id].sym_idx;
   if (g_nodes[e].count != g_funcs[f].nparams) {
-    err_at(e);
+    err_at(e, "E0601");
     err_s("'");
     err_name(id);
     err_s("' takes ");
@@ -509,7 +516,7 @@ void = low_call(uword e, ~Want w, ~Val v) {
   val_end(v, start, ret);
   if (ty_kind(ret) == MT_VOID) {
     if (!w.allow_void) {
-      err_at(e);
+      err_at(e, "E0602");
       err_s("'");
       err_name(id);
       err_s("' returns nothing");
@@ -548,7 +555,7 @@ void = low_as(uword e, ~Want w, ~Val v) {
     if (g_nodes[a].kind == EX_ADDROF || g_nodes[a].kind == EX_STRING) {
       // an explicit address converts to uword only
       if (ty_kind(to) != MT_UWORD) {
-        err_at(e);
+        err_at(e, "E0408");
         err_s("an address converts to uword only, not to ");
         err_ty(to);
         err_end();
@@ -557,7 +564,7 @@ void = low_as(uword e, ~Want w, ~Val v) {
     }
     low_expr(a, ~ow, v);
   } else {
-    err_at(e);
+    err_at(e, "E0409");
     err_s("'as' converts to a number or a pointer type, not to ");
     err_ty(to);
     err_end();
@@ -576,18 +583,19 @@ void = low_as(uword e, ~Want w, ~Val v) {
 
 void = low_int(uword e, ~Want w, ~Val v) {
   if (w.ty == 0 || !ty_is_int(w.ty)) {
-    err_at(e);
     if (w.ty != 0) {
+      err_at(e, "E0410");
       err_s("expected ");
       err_ty(w.ty);
       err_s(", found a number");
     } else {
+      err_at(e, "E0411");
       err_s("the type of this literal is not determined by its context; write 'as T' after it");
     }
     err_end();
   }
   if (!ty_fits(w.ty, g_nodes[e].ival)) {
-    err_at(e);
+    err_at(e, "E0412");
     err_u64(g_nodes[e].ival);
     err_s(" does not fit ");
     err_ty(w.ty);
@@ -605,7 +613,7 @@ void = low_name(uword e, ~Want w, ~Val v) {
   }
   low_place(e, v);
   if (!ty_is_scalar(v.ty)) {
-    err_at(e);
+    err_at(e, "E0414");
     err_s("'");
     err_name(id);
     err_s("' is a ");
@@ -621,14 +629,14 @@ void = low_name(uword e, ~Want w, ~Val v) {
 void = low_addrof(uword e, ~Want w, ~Val v) {
   uword a = g_nodes[e].a;
   if (!low_is_place(a)) {
-    err_node(e, "'#' and '~' take the address of a variable, an element or a field");
+    err_node(e, "E0508", "'#' and '~' take the address of a variable, an element or a field");
   }
   low_place(a, v);
   uword t = ty_ptr(v.ty);
   // an explicit address is never read through
   if (w.ty != 0) {
     if (t != w.ty) {
-      err_at(e);
+      err_at(e, "E0402");
       err_s("expected ");
       err_ty(w.ty);
       err_s(", found ");
@@ -636,7 +644,7 @@ void = low_addrof(uword e, ~Want w, ~Val v) {
       err_end();
     }
   } else if (w.ptr_depth == 0) {
-    err_node(e, "an address is not a number; a pointer is expected only where one is declared");
+    err_node(e, "E0415", "an address is not a number; a pointer is expected only where one is declared");
   }
   v.ty = t;
   v.local = 0;
@@ -676,7 +684,7 @@ void = low_expr(uword e, ~Want w, ~Val v) {
   } else if (k == EX_STRING) {
     low_string(e, v);
     if (w.ty == 0 && w.ptr_depth == 0) {
-      err_node(e, "a string is a #u8, not a number");
+      err_node(e, "E0413", "a string is a #u8, not a number");
     }
     low_settle(e, v, w);
   } else if (k == EX_NAME) {
@@ -684,7 +692,7 @@ void = low_expr(uword e, ~Want w, ~Val v) {
   } else if (k == EX_INDEX || k == EX_FIELD) {
     low_place(e, v);
     if (!ty_is_scalar(v.ty)) {
-      err_at(e);
+      err_at(e, "E0401");
       err_s("a ");
       err_ty(v.ty);
       err_s(" is not a value; use one of its ");
@@ -724,11 +732,11 @@ void = low_expr(uword e, ~Want w, ~Val v) {
 //   as(ptr<T>, call @cs_arena_alloc(mul(n, sizeof(T)), alignof(T)))
 void = low_alloc(uword e, uword to, ~Val v) {
   if (g_nodes[e].count != 1) {
-    err_node(e, "alloc takes one argument, the element count");
+    err_node(e, "E0509", "alloc takes one argument, the element count");
   }
   uword elem = ty_elem(to);
   if (ty_kind(elem) == MT_VOID) {
-    err_node(e, "alloc needs an element type; the pointer is #void");
+    err_node(e, "E0510", "alloc needs an element type; the pointer is #void");
   }
   Want nw;
   Val n;
@@ -752,7 +760,7 @@ void = low_alloc(uword e, uword to, ~Val v) {
 void = low_pointer_value(uword e, uword op, uword to, ~Val v) {
   if (g_nodes[e].kind == EX_CALL && g_nodes[e].id == ID_ALLOC) {
     if (op != TK_OWN) {
-      err_node(e, "alloc returns ownership; receive it with ':='");
+      err_node(e, "E0511", "alloc returns ownership; receive it with ':='");
     }
     low_alloc(e, to, v);
     return;
@@ -795,7 +803,7 @@ void = low_name_free(uword id, uword at, u8 check_locals) {
   if (id != ID_ALLOC && sym == SYM_NONE && !(check_locals && g_name_tab[id].local_on)) {
     return;
   }
-  err_at(at);
+  err_at(at, "E0302");
   err_s("'");
   err_name(id);
   err_s("' is already the name of ");
@@ -836,13 +844,13 @@ void = low_decl(uword s, uword depth) {
   Val init;
   if (g_nodes[s].is_array) {
     if (g_nodes[s].ival == 0) {
-      err_node(s, "an array has at least one element");
+      err_node(s, "E0306", "an array has at least one element");
     }
     t = ty_array(t, g_nodes[s].ival);
   }
   if (op != TK_EOF) {
     if (!ty_is_scalar(t)) {
-      err_at(s);
+      err_at(s, "E0512");
       err_s("a ");
       err_ty(t);
       err_s(" has no initializer in S0; assign its ");
@@ -852,12 +860,12 @@ void = low_decl(uword s, uword depth) {
     }
     if (ty_kind(t) == MT_PTR) {
       if (op == TK_ASSIGN) {
-        err_node(s, "a pointer is initialized with ':=', '#=' or '~='; plain '=' assigns through it");
+        err_node(s, "E0513", "a pointer is initialized with ':=', '#=' or '~='; plain '=' assigns through it");
       }
       low_pointer_value(g_nodes[s].b, op, t, ~init);
     } else {
       if (op != TK_ASSIGN) {
-        err_at(s);
+        err_at(s, "E0514");
         err_tok(op);
         err_s(" is only for pointers; a plain value is initialized with '='");
         err_end();
@@ -887,7 +895,7 @@ void = low_assign(uword s, uword depth) {
   Val p;
   Val v;
   if (!low_is_place(g_nodes[s].a)) {
-    err_node(s, "the left side of an assignment is a variable, an element or a field");
+    err_node(s, "E0515", "the left side of an assignment is a variable, an element or a field");
   }
   low_place(g_nodes[s].a, ~p);
   if (op == TK_ASSIGN) {
@@ -898,7 +906,7 @@ void = low_assign(uword s, uword depth) {
       p.ty = t;
     }
     if (!ty_is_int(p.ty)) {
-      err_at(s);
+      err_at(s, "E0516");
       err_s("a ");
       err_ty(p.ty);
       err_s(" is not assigned as a whole in S0; assign its ");
@@ -910,7 +918,7 @@ void = low_assign(uword s, uword depth) {
     low_expr(g_nodes[s].b, ~vw, ~v);
   } else {
     if (ty_kind(p.ty) != MT_PTR) {
-      err_at(s);
+      err_at(s, "E0517");
       err_tok(op);
       err_s(" sets where a pointer points; the left side is a ");
       err_ty(p.ty);
@@ -936,7 +944,7 @@ void = low_eval(uword s, uword depth) {
   Want w;
   Val v;
   if (g_nodes[g_nodes[s].a].kind != EX_CALL) {
-    err_node(s, "only a call can be a statement");
+    err_node(s, "E0603", "only a call can be a statement");
   }
   want_value(~w);
   w.allow_void = TRUE;
@@ -964,7 +972,7 @@ void = low_return(uword s, uword depth) {
   uword fid = g_funcs[g_fn].id;
   if (g_nodes[s].a == 0) {
     if (ty_kind(ret) != MT_VOID) {
-      err_at(s);
+      err_at(s, "E0605");
       err_s("'");
       err_name(fid);
       err_s("' returns a ");
@@ -976,7 +984,7 @@ void = low_return(uword s, uword depth) {
     return;
   }
   if (ty_kind(ret) == MT_VOID) {
-    err_at(s);
+    err_at(s, "E0602");
     err_s("'");
     err_name(fid);
     err_s("' returns nothing");
@@ -1024,9 +1032,9 @@ void = low_stmt(uword s, uword depth) {
   } else if (k == ST_BREAK || k == ST_CONTINUE) {
     if (g_loops == 0) {
       if (k == ST_BREAK) {
-        err_node(s, "'break' outside a loop");
+        err_node(s, "E0604", "'break' outside a loop");
       }
-      err_node(s, "'continue' outside a loop");
+      err_node(s, "E0604", "'continue' outside a loop");
     }
     out_indent(depth);
     if (k == ST_BREAK) {

@@ -3,8 +3,8 @@
 //!
 //!   diff/<name>.csm          cesium1's core MIR must be cesium0's
 //!   diff/errors/<name>.csm   both must exit with status 1, and the first
-//!                            error of each must be the same message at the
-//!                            same place
+//!                            error of each must be the same code and message
+//!                            at the same place
 //!
 //! The files are found by listing the two directories.
 

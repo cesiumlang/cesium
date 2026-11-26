@@ -313,8 +313,8 @@ void = lex_advance() {
   }
 }
 
-void = lex_fail(u64 line, u64 col, #u8 msg) {
-  err_begin(line, col);
+void = lex_fail(u64 line, u64 col, #u8 code, #u8 msg) {
+  err_begin(line, col, code);
   err_s(msg);
   err_end();
 }
@@ -338,7 +338,7 @@ void = lex_skip_blank() {
       lex_advance();
       while (TRUE) {
         if (lex_at_end()) {
-          lex_fail(line, col, "unterminated comment");
+          lex_fail(line, col, "E0101", "unterminated comment");
         }
         if (lex_peek(0) == '*' && lex_peek(1) == '/') {
           lex_advance();
@@ -364,7 +364,7 @@ void = lex_word(~Token t) {
     return;
   }
   if (id <= ID_LAST_RESERVED) {
-    err_begin(t.line, t.col);
+    err_begin(t.line, t.col, "E0102");
     err_s("'");
     name_put(~g_err, id);
     err_s("' is a Cesium keyword that S0 does not have");
@@ -387,10 +387,10 @@ void = lex_number(~Token t) {
     lex_advance();
   }
   if (lex_is_ident_start(lex_peek(0))) {
-    lex_fail(t.line, t.col, "S0 has decimal integer literals only");
+    lex_fail(t.line, t.col, "E0103", "S0 has decimal integer literals only");
   }
   if (overflow) {
-    lex_fail(t.line, t.col, "integer literal is too large");
+    lex_fail(t.line, t.col, "E0104", "integer literal is too large");
   }
   t.kind = TK_INT;
   t.ival = v;
@@ -439,7 +439,7 @@ void = lex_quoted(~Token t, u8 quote) {
   while (TRUE) {
     u8 ch = lex_peek(0);
     if (lex_at_end() || ch == '\n') {
-      lex_fail(t.line, t.col, "unterminated literal");
+      lex_fail(t.line, t.col, "E0105", "unterminated literal");
     }
     if (ch == quote) {
       lex_advance();
@@ -447,7 +447,7 @@ void = lex_quoted(~Token t, u8 quote) {
     }
     u64 v = lex_char();
     if (v == 256) {
-      lex_fail(t.line, t.col, "unknown escape: stage 0 accepts \\n \\t \\r \\0 \\\\ \\' \\\"");
+      lex_fail(t.line, t.col, "E0106", "unknown escape: stage 0 accepts \\n \\t \\r \\0 \\\\ \\' \\\"");
     }
     buf_putc(~g_strs, v as u8);
     nchars = nchars + 1;
@@ -623,7 +623,7 @@ void = lex_next(~Token t) {
   lex_advance();
   t.kind = lex_punct(c);
   if (t.kind == TK_EOF) {
-    lex_fail(t.line, t.col, "unexpected character");
+    lex_fail(t.line, t.col, "E0107", "unexpected character");
   }
 }
 

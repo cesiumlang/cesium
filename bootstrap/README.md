@@ -22,6 +22,7 @@ The grammar stage 0 accepts is the S0 chapter of the draft specification on cesi
 | `runtime/` | `cs_arena_alloc`, the bump arena behind S0's `alloc(count)` |
 | `stage1/` | `cesium1`, written in S0: a compiler for S0 that emits the same core MIR text as `cesium0` |
 | `tests/` | The test corpus |
+| `diagnostics.md` | The catalog of the error codes both compilers print |
 
 ## Building
 
@@ -43,6 +44,10 @@ cesium0 -o out.s --mir in.mir         # core MIR text to assembly
 ```
 
 `--target` takes a QBE target name (`amd64_sysv`, `amd64_apple`, `amd64_win`, `arm64`, `arm64_apple`, `rv64`) or a triple starting with `<arch>-<os>`; the default is the machine `cesium0` runs on. Stage 0 does not spawn processes: the build system assembles and links, with the devkit's `zig cc`, adding `libcsrt` for `alloc`.
+
+## Diagnostics
+
+`cesium0` reports every error it finds in S0 source on standard error as `file:line:col: error[E0101]: message`. The code, `E` and four digits, names the message: [`diagnostics.md`](diagnostics.md) lists every code with its message and what it means, and a code is never reused for another message (cesiumlang/cesium#82). `cesium1` gives the same codes and messages. The messages of `libcsmir` (its MIR text parser and verifier, `cesium0: error: ...` and `<file>: error: ...`), the I/O messages and the limits of `cesium1` itself (`error: internal: ...`) have no code yet.
 
 ## The pipeline
 
@@ -131,7 +136,7 @@ cat a.csm b.csm | cesium1 out.s      # assembly, through cs_compile_mir (and out
 
 `zig build` installs `cesium1` to `zig-out/bin`, next to `cesium0`: `cesium0` compiles `stage1/` and the result is linked with `libcsrt`, `libcsmir` and `libqbe.a` (`build-src/stage1.zig`). It is the same build of `cesium1` the tests check.
 
-Several files make one unit by being given one after another on standard input; MIR text has no line numbers, so this is the same unit `cesium0 a.csm b.csm` compiles. The exit status is 0 on success, 1 on an error in the source and 2 when a limit of `cesium1` is reached. An error is printed as `line:col: error: message` on standard output, with lines counted from the start of the input, and nothing else is printed before the whole unit is checked. Linking `cesium1` needs `libcsmir` and the devkit's `libqbe.a` besides `libcsrt`.
+Several files make one unit by being given one after another on standard input; MIR text has no line numbers, so this is the same unit `cesium0 a.csm b.csm` compiles. The exit status is 0 on success, 1 on an error in the source and 2 when a limit of `cesium1` is reached. An error is printed as `line:col: error[E0101]: message` on standard output, with the code and message of `cesium0` (see [Diagnostics](#diagnostics)) and lines counted from the start of the input, and nothing else is printed before the whole unit is checked. The two checks of `libcsmir`'s verifier that `cesium1` makes itself print `line:col: error: message`, without a code, like the verifier's own messages. Linking `cesium1` needs `libcsmir` and the devkit's `libqbe.a` besides `libcsrt`.
 
 | File | Holds |
 | --- | --- |
@@ -168,5 +173,6 @@ What S1 adds to S0 is not decided ("candidate S1 features, to be confirmed when 
 - `mir/<name>.mir` with `<name>.expected`: MIR text printed back unchanged, then compiled and run. `integers.mir` covers the sub-word integer types S0 does not have; `layout.mir` checks sizes, alignments and field offsets.
 - `mir/errors/`: MIR the verifier or parser must reject.
 - `cesium1`, built by `cesium0`, on the same corpus: for every `s0/<name>.csm` run test its core MIR must be what `cesium0 --emit-mir` prints for the same files, and it must reject every program in `s0/errors/` with the same message. On its own source its MIR must be `cesium0`'s too, and the `cesium1` it builds from that source with `cesium1 out.s` must print that MIR again: the fixed point. `build-src/stage1_tool.c` joins the files of a unit and compares the outputs.
+- The catalog of codes, `diagnostics.md`, against the sources (`build-src/diagnostics.zig`): every code (a string literal `"E0101"`) in `stage0/*.c` and `stage1/*.csm` must be in the catalog, and every code of the catalog must be used by both compilers, unless its entry says `cesium0 only` or `cesium1 only`.
 
 `zig build test-diff` runs a second corpus, `diff/`: 246 generated S0 programs (see `diff/README.md`), each given to both compilers (`build-src/tests_diff.zig`). For the 97 in `diff/` the core MIR of `cesium1` must be what `cesium0 --emit-mir` prints; for the 149 in `diff/errors/` both must exit with status 1 and their first errors must be the same message at the same line and column (for the two verifier checks `cesium1` makes itself, the same message and line). The step finds the files by listing the two directories, so a case is added by adding its file. It is not part of `zig build test`, which stays fast on every host; CI runs it on Linux x86_64 only (#67, item 3).
