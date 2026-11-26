@@ -489,20 +489,11 @@ static const char *first_loc_file(const MirStmt *s) {
   return NULL;
 }
 
-/* The name escaped as the assembler reads it: \\, \" and \ooo. */
+/* QBE passes the string to the assembler as written. */
 static void gen_dbgfile(Q *q, const char *file) {
-  const unsigned char *c;
-  emit(q, "dbgfile \"");
-  for (c = (const unsigned char *)file; *c != '\0'; c++) {
-    if (*c == '"' || *c == '\\') {
-      emit(q, "\\%c", *c);
-    } else if (*c >= 0x20 && *c <= 0x7e) {
-      emit(q, "%c", *c);
-    } else {
-      emit(q, "\\%03o", (unsigned)*c);
-    }
-  }
-  emit(q, "\"\n");
+  emit(q, "dbgfile ");
+  mir_asm_string(q->out, file);
+  emit(q, "\n");
 }
 
 /* QBE cannot change files within a function: a statement located in
@@ -720,10 +711,11 @@ static void gen_global(Q *q, MirGlobal *g) {
   emit(q, " }\n");
 }
 
-void mir_lower_qbe(CsBuf *out, MirModule *m, const MirTarget *t) {
+const char *mir_lower_qbe(CsBuf *out, MirModule *m, const MirTarget *t) {
   Q q;
   MirGlobal *g;
   MirFunc *f;
+  const char *first_file = NULL;
   if (!m->verified) {
     CS_BUG("lowering an unverified module");
   }
@@ -740,6 +732,10 @@ void mir_lower_qbe(CsBuf *out, MirModule *m, const MirTarget *t) {
   for (f = m->funcs; f != NULL; f = f->next) {
     if (!f->is_extern) {
       gen_func(&q, f);
+      if (first_file == NULL) {
+        first_file = q.file;
+      }
     }
   }
+  return first_file;
 }

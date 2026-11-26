@@ -57,6 +57,34 @@ const MirTarget *csmir_target(const char *triple) {
   return NULL;
 }
 
+/* What goes after QBE's assembly; QBE ends the process without closing its
+ * output, so it is written to the same stream at exit. */
+static CsBuf dwarf_tail = {NULL, 0, 0};
+
+static void write_dwarf_tail(void) {
+  fwrite(dwarf_tail.data, 1, dwarf_tail.len, stdout);
+}
+
+/* Makes QBE write to stdout, opened on out_path, between a DWARF head and
+ * tail. Returns false with the error set. */
+static bool wrap_in_dwarf(const MirTarget *t, const char *out_path, const char *file) {
+  CsBuf head = {NULL, 0, 0};
+  /* "-" is stdout for QBE too */
+  if (strcmp(out_path, "-") != 0 && freopen(out_path, "w", stdout) == NULL) {
+    set_error("cannot write %s", out_path);
+    return false;
+  }
+  mir_dwarf_head(&head, t);
+  fwrite(head.data, 1, head.len, stdout);
+  cs_buf_free(&head);
+  mir_dwarf_tail(&dwarf_tail, t, file);
+  if (atexit(write_dwarf_tail) != 0) {
+    set_error("cannot register the DWARF tail of %s", out_path);
+    return false;
+  }
+  return true;
+}
+
 int csmir_emit_qbe(MirModule *m, const MirTarget *t, const char *out_path) {
   CsBuf il = {NULL, 0, 0};
   CsBuf il_path = {NULL, 0, 0};
@@ -66,11 +94,13 @@ int csmir_emit_qbe(MirModule *m, const MirTarget *t, const char *out_path) {
   char arg_o[] = "-o";
   char *target;
   char *out;
+  const char *file;
+  int argc = 6;
   if (!mir_verify(m)) {
     set_error("MIR: %s", m->err);
     return 1;
   }
-  mir_lower_qbe(&il, m, t);
+  file = mir_lower_qbe(&il, m, t);
   cs_buf_printf(&il_path, "%s.ssa", out_path);
   if (!cs_write_file(il_path.data, il.data == NULL ? "" : il.data, il.len)) {
     set_error("cannot write %s", il_path.data);
@@ -91,7 +121,17 @@ int csmir_emit_qbe(MirModule *m, const MirTarget *t, const char *out_path) {
   argv[6] = NULL;
   fflush(stdout);
   fflush(stderr);
-  return qbe_main(6, argv);
+  if (file != NULL && mir_dwarf_target(t)) {
+    if (!wrap_in_dwarf(t, out_path, file)) {
+      cs_buf_free(&il_path);
+      return 1;
+    }
+    /* no -o: QBE writes to stdout */
+    argv[3] = il_path.data;
+    argv[4] = NULL;
+    argc = 4;
+  }
+  return qbe_main(argc, argv);
 }
 
 int cs_compile_mir(const char *mir, size_t len, int backend, const char *triple, const char *cpu,

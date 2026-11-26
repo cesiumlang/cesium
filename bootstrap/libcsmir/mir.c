@@ -306,7 +306,8 @@ void mir_stmt_loc(MirModule *m, MirStmt *s, const char *file, uint32_t line, uin
 /* The targets of the pinned QBE. All are LP64-style: 8-byte pointers, and
  * every scalar aligned to its size. */
 static const MirTarget targets[] = {
-    {"amd64_sysv", 8}, {"amd64_apple", 8}, {"amd64_win", 8}, {"arm64", 8}, {"arm64_apple", 8}, {"rv64", 8},
+    {"amd64_sysv", 8, MIR_ELF}, {"amd64_apple", 8, MIR_MACHO}, {"amd64_win", 8, MIR_COFF},
+    {"arm64", 8, MIR_ELF},      {"arm64_apple", 8, MIR_MACHO}, {"rv64", 8, MIR_ELF},
 };
 
 const MirTarget *mir_target_by_name(const char *name) {

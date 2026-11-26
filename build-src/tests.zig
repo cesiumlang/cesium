@@ -7,7 +7,10 @@
 //!                                     run from the repository root
 //!   s0/errors/<name>.csm              cesium0 must reject it with the message
 //!   s0/lines.csm                      the assembly of both compilers must
-//!                                     have its file and the line of a trap
+//!                                     have its file and the line of a trap,
+//!                                     and a DWARF compile unit for ELF and
+//!                                     Mach-O (the host's, and cesium0's for
+//!                                     x86_64-linux and aarch64-macos)
 //!   mir/<name>.mir + <name>.expected  core MIR text: print it back unchanged,
 //!                                     compile it, run, compare stdout
 //!   mir/errors/<name>.mir             libcsmir must reject it with the message
@@ -188,14 +191,24 @@ pub fn add(
         step.dependOn(&run.step);
     }
 
-    // line information: both compilers' assembly names the file and the line
+    // line information: both compilers' assembly names the file and the line,
+    // with a DWARF compile unit where the host's objects get one
     for ([_]*std.Build.Step.Compile{ cesium0, stage1.cesium1 }) |compiler| {
         const compile = runFromRoot(b, compiler, lines.name);
         compile.addArg("-o");
         const asm_out = compile.addOutputFileArg(b.fmt("{s}-{s}.s", .{ lines.name, compiler.name }));
         compile.addArg(s0_dir ++ lines.name ++ ".csm");
         compile.expectExitCode(0);
-        step.dependOn(&b.addCheckFile(asm_out, .{ .expected_matches = &lines.matches }).step);
+        step.dependOn(&b.addCheckFile(asm_out, .{ .expected_matches = lines.forFormat(target.result.ofmt) }).step);
+    }
+    // and for an ELF and a Mach-O target on every host
+    for (lines.cross) |cross| {
+        const compile = runFromRoot(b, cesium0, lines.name);
+        compile.addArgs(&.{ "--target", cross.triple, "-o" });
+        const asm_out = compile.addOutputFileArg(b.fmt("{s}-{s}.s", .{ lines.name, cross.triple }));
+        compile.addArg(s0_dir ++ lines.name ++ ".csm");
+        compile.expectExitCode(0);
+        step.dependOn(&b.addCheckFile(asm_out, .{ .expected_matches = lines.forFormat(cross.ofmt) }).step);
     }
 
     addStage1(b, step, target, cesium0, csrt, csmir, stage1, tool, devkit);
@@ -210,7 +223,58 @@ const lines = struct {
         // no line ending: QBE writes a text stream, "\r\n" on Windows
         "\t.loc 1 12 3",
     };
+    /// The compile unit libcsmir adds (bootstrap/libcsmir/mir_dwarf.c).
+    const unit = [_][]const u8{
+        "\t.short 4",
+        "\t.asciz \"libcsmir\"",
+        "\t.asciz \"" ++ s0_dir ++ name ++ ".csm\"",
+        "\t.set ",
+    };
+    const elf = matches ++ unit ++ [_][]const u8{
+        ".Lcs_text_start:",
+        ".Lcs_text_end:",
+        ".section .debug_info,\"\",@progbits",
+        "\t.long .Lcs_line",
+        "\t.quad .Lcs_text_start",
+    };
+    const macho = matches ++ unit ++ [_][]const u8{
+        "\nLcs_text_start:",
+        "\nLcs_text_end:",
+        ".section __DWARF,__debug_info,regular,debug",
+        "\t.quad Lcs_text_start",
+    };
+    const cross = [_]struct { triple: []const u8, ofmt: std.Target.ObjectFormat }{
+        .{ .triple = "x86_64-linux", .ofmt = .elf },
+        .{ .triple = "aarch64-macos", .ofmt = .macho },
+    };
+
+    /// What the assembly for objects of the format must have: COFF gets no
+    /// compile unit.
+    fn forFormat(ofmt: std.Target.ObjectFormat) []const []const u8 {
+        return switch (ofmt) {
+            .elf => &elf,
+            .macho => &macho,
+            else => &matches,
+        };
+    }
 };
+
+/// s0/lines.csm as a program, compiled as the tests compile it, for the
+/// debuggers to run (the gdb and lldb steps of CI).
+pub fn addLines(
+    b: *std.Build,
+    step: *std.Build.Step,
+    target: std.Build.ResolvedTarget,
+    cesium0: *std.Build.Step.Compile,
+    csrt: *std.Build.Step.Compile,
+) void {
+    const compile = runFromRoot(b, cesium0, lines.name);
+    compile.addArg("-o");
+    const asm_out = compile.addOutputFileArg(lines.name ++ ".s");
+    compile.addArg(s0_dir ++ lines.name ++ ".csm");
+    const exe = link.linkProgram(b, target, csrt, lines.name, asm_out);
+    step.dependOn(&b.addInstallArtifact(exe, .{}).step);
+}
 
 /// Runs a compiler from the repository root, given the source path as
 /// written, so that its locations are the same on every host.
