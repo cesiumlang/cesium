@@ -141,7 +141,7 @@ sanitize () { # <compiler>
   # cesium1's own source: the largest S0 program there is
   expect 0 "stage1 (QBE IL)" "$c0" --emit-qbe -o "$dir/cesium1.ssa" \
     "$B"/stage1/util.csm "$B"/stage1/lex.csm "$B"/stage1/parse.csm "$B"/stage1/types.csm \
-    "$B"/stage1/habit.csm "$B"/stage1/lower.csm "$B"/stage1/decl.csm "$B"/stage1/main.csm
+    "$B"/stage1/habit.csm "$B"/stage1/lower.csm "$B"/stage1/decl.csm "$B"/stage1/loc.csm "$B"/stage1/main.csm
   n=$((n + 1))
   echo "ok: $n runs of cesium0 built by $cc with $SANITIZE_FLAGS, no report"
 }
