@@ -179,6 +179,23 @@ void = parse_expect(uword kind) {
   }
 }
 
+// The next token starts right after the current one, a one-character token.
+u8 = parse_joined() {
+  return g_peek.line == g_tok.line && g_peek.col == g_tok.col + 1;
+}
+
+// At `++` or `--`, which S0 does not have.
+u8 = parse_at_step() {
+  if (!parse_at(TK_PLUS) && !parse_at(TK_MINUS)) {
+    return FALSE;
+  }
+  return g_peek.kind == g_tok.kind && parse_joined();
+}
+
+void = parse_fail_step() {
+  parse_fail("E0219", "'++' and '--' are not decided for S0; write x = x + 1");
+}
+
 uword = parse_expect_ident() {
   if (!parse_at(TK_IDENT)) {
     parse_fail_found("E0202", "expected a name");
@@ -306,8 +323,20 @@ uword = parse_primary() {
     g_nodes[e].id = id;
     return e;
   }
+  if (parse_at_step()) {
+    parse_fail_step();
+  }
   if (parse_at(TK_MINUS)) {
     parse_fail("E0207", "S0 has no unary minus; write 0 - x");
+  }
+  if (parse_at(TK_AMP)) {
+    parse_fail("E0216", "expected an expression, found '&'; an address is taken with '#'");
+  }
+  if (parse_at(TK_STAR)) {
+    parse_err("E0217");
+    err_s("expected an expression, found '*'; ");
+    err_s("there is no dereference operator: p, p[i] and p.f read through a pointer");
+    err_end();
   }
   parse_fail_found("E0208", "expected an expression");
   return e;
@@ -415,6 +444,15 @@ uword = parse_level(uword kind) {
   return 0;
 }
 
+// A binary operator that is also a compound assignment before "="
+// (lex.op.compound); S0 does not have those.
+u8 = parse_is_compound_op(uword kind) {
+  if (kind == TK_PLUS || kind == TK_MINUS || kind == TK_STAR || kind == TK_SLASH || kind == TK_PERCENT) {
+    return TRUE;
+  }
+  return kind == TK_AMP || kind == TK_PIPE || kind == TK_XOR || kind == TK_SHL || kind == TK_SHR;
+}
+
 uword = parse_binary(uword min_level) {
   uword depth = g_depth;
   uword lhs = parse_cast();
@@ -426,6 +464,12 @@ uword = parse_binary(uword min_level) {
     }
     // a chain a + b + c + ... nests to the left
     parse_enter();
+    if (parse_is_compound_op(g_tok.kind) && g_peek.kind == TK_ASSIGN) {
+      parse_fail("E0218", "compound assignment is not decided for S0; write x = x + y");
+    }
+    if (parse_at_step()) {
+      parse_fail_step();
+    }
     uword n = node_here(EX_BINARY);
     g_nodes[n].op = g_tok.kind;
     parse_advance();
@@ -693,11 +737,19 @@ void = parse_func_or_global() {
     g_nodes[d].kind = DK_FUNC;
     g_nodes[d].id = parse_expect_ident();
     parse_params(d);
+    if (parse_at(TK_MINUS) && g_peek.kind == TK_GT && parse_joined()) {
+      parse_fail("E0215", "expected '{', found '->'; the return type comes first: 'T = name(parameters)'");
+    }
     g_nodes[d].body = parse_block();
   } else {
     if (g_nodes[d].tbase == BT_VOID) {
       err_at(d, "E0205");
       err_s("'void' is only a return type in S0");
+      err_end();
+    }
+    if (parse_at(TK_IDENT) && g_peek.kind == TK_LPAREN) {
+      err_begin(g_peek.line, g_peek.col, "E0214");
+      err_s("expected ';', found '('; a function is written 'T = name(parameters) { ... }'");
       err_end();
     }
     parse_declarator(d, TRUE);

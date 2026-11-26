@@ -1,0 +1,6 @@
+// Floating point is not in S0.
+// spec: s0.excluded
+i32 = main(i32 argc, ##u8 argv) {
+  double x = 1;
+  return 0;
+}

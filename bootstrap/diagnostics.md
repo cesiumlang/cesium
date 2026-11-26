@@ -2,7 +2,7 @@
 
 The errors `cesium0` and `cesium1` report in S0 source, by code (cesiumlang/cesium#82). `cesium0` prints `file:line:col: error[E0101]: message` on standard error; `cesium1` prints `line:col: error[E0101]: message` on standard output, with lines counted from the start of its input. Both give the same code and the same message for the same error.
 
-Each code is stable once released: what it means does not change, and a code is never reused for another message. A message is shown as a template, in which the parts in angle brackets (`<name>`, `<type>`, `<token>`, `<n>`) are filled in by the compiler. The first two digits of a code are its group; the last two count within the group, in the order of first appearance in the source of `cesium0`. `zig build test` checks that every code here is used, and that every code the compilers use is here and is used by both (`build-src/diagnostics.zig`).
+Each code is stable once released: what it means does not change, and a code is never reused for another message. A message is shown as a template, in which the parts in angle brackets (`<name>`, `<type>`, `<token>`, `<n>`) are filled in by the compiler. The first two digits of a code are its group; the last two count within the group, first in the order of first appearance in the source of `cesium0`, and a code added later takes the next free number of its group. `zig build test` checks that every code here is used, and that every code the compilers use is here and is used by both (`build-src/diagnostics.zig`).
 
 Not covered yet, and printed without a code: the messages of `libcsmir`, its MIR text parser and its verifier (`cesium0: error: ...`, and in `cesium1`, for the two verifier checks it makes itself, `line:col: error: ...`); the I/O messages of `cesium0`; and the limits of `cesium1` itself (`error: internal: ...`, exit status 2).
 
@@ -56,7 +56,7 @@ The character begins no token of S0, such as `^`, `@`, `?` or `$`. Exclusive or 
 
 `expected <token>, found <token>`
 
-The parser needed a particular token, such as `;`, `)` or `=`, and found another. A C-style function header such as `i32 main() {` gives this error: an S0 function is declared `i32 = main() { ... }`, with `=` after the return type.
+The parser needed a particular token, such as `;`, `)` or `=`, and found another. Where the token found is a habit from another language, the message says so: E0214 for a C-style function header, E0215 for a return type after `->`.
 
 ### E0202
 
@@ -98,7 +98,7 @@ Unary minus is not among the operators of S0 and has no place in the precedence 
 
 `expected an expression, found <token>`
 
-An operand is missing, as in `a + ;` or `f(1, )`, or a statement begins with a token that begins no statement.
+An operand is missing, as in `a + ;` or `f(1, )`, or a statement begins with a token that begins no statement. Prefix `&` and `*`, compound assignment and `++` and `--` have messages of their own: E0216 to E0219.
 
 ### E0209
 
@@ -130,13 +130,49 @@ A `{ ... }` block is only the body of a function, an `if`, an `else` or a `while
 
 The `import` of an `extern` block names its library in quotes, as in `extern libc = import('c') { ... }`.
 
+### E0214
+
+`expected ';', found '('; a function is written 'T = name(parameters) { ... }'`
+
+A declaration at the top level, such as `int main() {` or `fn main() {`, continues with a parameter list, so it reads as a global named `main` followed by `(`. An S0 function is declared with its return type, `=`, its name and its parameters: `i32 = main(i32 argc, ##u8 argv) { ... }` (rule `s0.func`).
+
+### E0215
+
+`expected '{', found '->'; the return type comes first: 'T = name(parameters)'`
+
+A function header continues with `->` and a return type after its parameters, as in Rust or Zig. In S0 the return type comes before the name, followed by `=`: `i32 = main() { ... }`, and `void = f()` for a function that returns nothing (rule `s0.func`).
+
+### E0216
+
+`expected an expression, found '&'; an address is taken with '#'`
+
+An expression begins with `&`, C's address-of. In S0 `&` is the bitwise and of two operands only; an address is taken with `#`, as in `f(#x)` for a pointer parameter (rule `s0.expr`).
+
+### E0217
+
+`expected an expression, found '*'; there is no dereference operator: p, p[i] and p.f read through a pointer`
+
+An expression begins with `*`, C's dereference. S0 has no dereference operator: a pointer is read through by default, so `p` where a number is expected is the value it points at, and `p[i]` and `p.f` reach through it (rule `s0.expr.deref`). Write `return p;` for C's `return *p;`, and `p = 1;` for `*p = 1;`, since plain `=` assigns through a pointer.
+
+### E0218
+
+`compound assignment is not decided for S0; write x = x + y`
+
+An operator such as `+`, `-`, `<<` or `><` is followed by `=`, as in `x += 1`. The compound assignments are operators of full Cesium by the direction of cesiumlang/cesium#15 (rule `lex.op.compound`), but whether S0 has them is open, so stage 0 rejects them. Write the assignment out: `x = x + 1`.
+
+### E0219
+
+`'++' and '--' are not decided for S0; write x = x + 1`
+
+Two `+` or two `-` with nothing between them stand before or after an operand, as in `i++` or `--i`. Increment and decrement are operators of full Cesium by the direction of cesiumlang/cesium#15 (rule `lex.op.increment`), but whether S0 has them is open, so stage 0 rejects them. Write `i = i + 1` or `i = i - 1`.
+
 ## Names and declarations (E03xx)
 
 ### E0301
 
 `unknown type '<name>'`
 
-The name is neither a number type of S0 nor a struct of the unit. The types of C are not S0's: write `i32` for `int`, `u8` for `char`, `uword` for `size_t`, and `#T` for `T *`.
+The name is neither a number type of S0 nor a struct of the unit. The type names of C have messages of their own: E0320 to E0322.
 
 ### E0302
 
@@ -154,7 +190,7 @@ A function's name stands where a variable is needed: as a value, on the left of 
 
 `unknown name '<name>'`
 
-No local, parameter, global or constant of this name is in scope here. Check the spelling, and that a local is declared before its use. S0 has no `true` and `false` (cesiumlang/cesium#38): declare constants such as `const u8 TRUE = 1;`.
+No local, parameter, global or constant of this name is in scope here. Check the spelling, and that a local is declared before its use. For `true` and `false`, the message is E0323.
 
 ### E0305
 
@@ -245,6 +281,30 @@ The names of the parameters of a function are distinct. Rename one.
 `'cs_arena_alloc' is the runtime function behind alloc and cannot be declared`
 
 The unit uses `alloc`, which calls the runtime function `cs_arena_alloc`, and also declares a function of that name. Rename that function.
+
+### E0320
+
+`unknown type '<name>'; the integer types of S0 are u8, i32, u32, i64, u64 and uword`
+
+The type is one of C's integer types, `int`, `long`, `short`, `char`, `unsigned`, `signed` or `size_t`, and no struct of the unit has its name. S0 names its integer types by sign and width (rule `s0.type.integers`): write `i32` for `int`, `u8` for `char`, `uword` for `size_t`, and `#T` for `T *`.
+
+### E0321
+
+`unknown type 'bool'; there is no bool type: a condition is an integer, nonzero is true`
+
+Cesium has no `bool` type, by the direction of cesiumlang/cesium#38 (rule `lex.predeclared.truth`): the condition of an `if` or a `while` is an integer, and nonzero is true (rule `s0.condition`). Declare a flag as a `u8`; a comparison such as `a < b` gives 1 or 0.
+
+### E0322
+
+`unknown type '<name>'; S0 has no floating point`
+
+The type is `float` or `double`, and floating point is not in S0 (rule `s0.excluded`). Stage 0 and stage 1 compute with integers only.
+
+### E0323
+
+`unknown name '<name>'; true and false are not decided for S0: write 1 or 0`
+
+The name is `true` or `false`, and no constant of the unit has it. Full Cesium is to have them as built-in `u8` constants with the values 1 and 0, by the direction of cesiumlang/cesium#38 (rule `lex.predeclared.truth`), but whether S0 has them is open, so stage 0 does not. Write `1` or `0`, or declare constants such as `const u8 TRUE = 1;`.
 
 ## Types and conversions (E04xx)
 

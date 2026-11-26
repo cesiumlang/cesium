@@ -1,0 +1,10 @@
+// There is no dereference operator: a pointer is read through by default.
+// spec: s0.expr.deref
+i32 = get(#i32 p) {
+  return *p;
+}
+
+i32 = main(i32 argc, ##u8 argv) {
+  i32 x = 0;
+  return get(#x);
+}

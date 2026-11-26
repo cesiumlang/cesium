@@ -81,6 +81,16 @@ const s0_rejects = [_]Reject{
     .{ .name = "missing_return", .message = "does not return a value on every path" },
     .{ .name = "deep_expression", .message = "nested too deeply (the limit is 128 levels)" },
     .{ .name = "deep_blocks", .message = "nested too deeply (the limit is 128 levels)" },
+    .{ .name = "c_function_header", .message = "[E0214]: expected ';', found '('; a function is written 'T = name(parameters) { ... }'" },
+    .{ .name = "arrow_return_type", .message = "[E0215]: expected '{', found '->'; the return type comes first" },
+    .{ .name = "c_address_of", .message = "[E0216]: expected an expression, found '&'; an address is taken with '#'" },
+    .{ .name = "c_dereference", .message = "[E0217]: expected an expression, found '*'; there is no dereference operator" },
+    .{ .name = "compound_assign", .message = "[E0218]: compound assignment is not decided for S0; write x = x + y" },
+    .{ .name = "increment", .message = "[E0219]: '++' and '--' are not decided for S0; write x = x + 1" },
+    .{ .name = "c_int_type", .message = "[E0320]: unknown type 'int'; the integer types of S0 are u8, i32, u32, i64, u64 and uword" },
+    .{ .name = "bool_type", .message = "[E0321]: unknown type 'bool'; there is no bool type: a condition is an integer" },
+    .{ .name = "float_type", .message = "[E0322]: unknown type 'double'; S0 has no floating point" },
+    .{ .name = "true_false", .message = "[E0323]: unknown name 'true'; true and false are not decided for S0: write 1 or 0" },
 };
 
 const mir_runs = [_]Run{

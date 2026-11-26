@@ -47,7 +47,7 @@ cesium0 -o out.s --mir in.mir         # core MIR text to assembly
 
 ## Diagnostics
 
-`cesium0` reports every error it finds in S0 source on standard error as `file:line:col: error[E0101]: message`. The code, `E` and four digits, names the message: [`diagnostics.md`](diagnostics.md) lists every code with its message and what it means, and a code is never reused for another message (cesiumlang/cesium#82). `cesium1` gives the same codes and messages. The messages of `libcsmir` (its MIR text parser and verifier, `cesium0: error: ...` and `<file>: error: ...`), the I/O messages and the limits of `cesium1` itself (`error: internal: ...`) have no code yet.
+`cesium0` reports every error it finds in S0 source on standard error as `file:line:col: error[E0101]: message`. The code, `E` and four digits, names the message: [`diagnostics.md`](diagnostics.md) lists every code with its message and what it means, and a code is never reused for another message (cesiumlang/cesium#82). `cesium1` gives the same codes and messages. Where a habit from C or another language causes the error, such as `int x`, `&x`, `*p`, `x += 1` or a return type after `->`, the message names the Cesium form, or says that the form is not decided for S0, under a code of its own. The messages of `libcsmir` (its MIR text parser and verifier, `cesium0: error: ...` and `<file>: error: ...`), the I/O messages and the limits of `cesium1` itself (`error: internal: ...`) have no code yet.
 
 ## The pipeline
 
@@ -144,6 +144,7 @@ Several files make one unit by being given one after another on standard input; 
 | `lex.csm` | Interned names and the lexer |
 | `parse.csm` | The syntax tree and the parser |
 | `types.csm` | Core MIR types and the tables of structs and functions |
+| `habit.csm` | The messages for C type names and `true` and `false`, as `stage0/s0_habit.c` |
 | `lower.csm` | Checking expressions and statements, and their MIR text |
 | `decl.csm` | Checking declarations, and the text of the unit |
 | `main.csm` | The driver |

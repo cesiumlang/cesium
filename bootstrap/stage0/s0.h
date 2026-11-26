@@ -1,7 +1,8 @@
 /* Stage 0: the S0 frontend (cesiumlang/cesium#9).
  *
  * S0 source files -> tokens (s0_lex.c) -> syntax tree (s0_parse.c) ->
- * checked core MIR (s0_lower.c). libcsmir verifies and lowers the MIR.
+ * checked core MIR (s0_lower.c, with s0_habit.c for the messages that name
+ * the Cesium form of a habit from C). libcsmir verifies and lowers the MIR.
  *
  * Where the design leaves a question open, stage 0 rejects the program
  * instead of picking an answer, so that no S0 source can depend on a rule
@@ -237,5 +238,11 @@ void s0_parse_file(CsArena *arena, S0Diag *diag, const char *file, const char *s
 /* Checks the whole unit and builds its core MIR. Returns NULL after
  * reporting errors. The caller frees the module. */
 MirModule *s0_lower(CsArena *arena, S0Diag *diag, S0Decl *decls);
+
+/* Habits from C and other languages (s0_habit.c): each reports the message
+ * that names the Cesium form and returns true, or returns false when the
+ * name is not one of them. For an unknown type and an unknown name. */
+bool s0_habit_type(S0Diag *diag, S0Loc loc, const char *name);
+bool s0_habit_name(S0Diag *diag, S0Loc loc, const char *name);
 
 #endif

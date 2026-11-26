@@ -278,6 +278,7 @@ uword = ty_resolve(uword n) {
   } else if (base == BT_STRUCT) {
     uword id = g_nodes[n].tid;
     if (g_name_tab[id].sym != SYM_STRUCT) {
+      habit_type(id, g_nodes[n].tline, g_nodes[n].tcol);
       err_begin(g_nodes[n].tline, g_nodes[n].tcol, "E0301");
       err_s("unknown type '");
       err_name(id);
