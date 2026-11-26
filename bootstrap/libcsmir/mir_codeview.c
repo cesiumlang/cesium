@@ -158,7 +158,12 @@ static void put_tail(CsBuf *out, const CsBuf *names) {
 void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
   static const char end_fn[] = "/* end function ";
   CsBuf names = {NULL, 0, 0};
-  CsBuf loc = {NULL, 0, 0}; /* the last .loc, not yet written */
+  CsBuf loc = {NULL, 0, 0};  /* the last .loc, not yet written */
+  CsBuf body = {NULL, 0, 0}; /* a prologue, held */
+  CsBuf *dst = out;
+  bool held = false;
+  bool in_text = false;
+  bool was_directive = false;
   bool has_id = false;
   uint32_t next_id = 0;
   size_t i = 0;
@@ -169,16 +174,43 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
     size_t n = nl == NULL ? len - i : (size_t)(nl - line);
     size_t text = n > 0 && line[n - 1] == '\r' ? n - 1 : n; /* without the line ending */
     i += nl == NULL ? n : n + 1;
+    bool directive = text > 0 && line[0] == '.';
+    bool after_directive = was_directive;
+    was_directive = directive;
     if (starts_with(line, text, ".file ")) {
       cs_buf_puts(out, ".cv_file ");
       cs_buf_put(out, line + 6, n - 6);
       cs_buf_putc(out, '\n');
       continue;
     }
+    if (directive) {
+      in_text = starts_with(line, text, ".text") ||
+                (in_text && !starts_with(line, text, ".data") && !starts_with(line, text, ".bss") &&
+                 !starts_with(line, text, ".section"));
+    }
+    /* a function's label: in the text, right after its directives; its
+     * prologue is held until the function's first line is known */
+    if (in_text && after_directive && !held && !has_id && text > 1 && line[text - 1] == ':' && line[0] != '\t' &&
+        line[0] != '/') {
+      cs_buf_put(out, line, n);
+      cs_buf_putc(out, '\n');
+      body.len = 0;
+      held = true;
+      continue;
+    }
     if (starts_with(line, text, "\t.loc ")) {
       if (!has_id) {
         cs_buf_printf(out, "\t.cv_func_id %" PRIu32 "\n", next_id);
         has_id = true;
+        /* the entry gets the line of the first statement, as debuggers
+         * stop there when stepping in */
+        if (held) {
+          cs_buf_printf(out, "\t.cv_loc %" PRIu32 " ", next_id);
+          cs_buf_put(out, line + 6, n - 6);
+          cs_buf_putc(out, '\n');
+          cs_buf_put(out, body.data == NULL ? "" : body.data, body.len);
+          held = false;
+        }
       }
       /* of several in a row, the last is the line of the code after them */
       loc.len = 0;
@@ -187,8 +219,14 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
       cs_buf_putc(&loc, '\n');
       continue;
     }
+    dst = held ? &body : out;
     if (starts_with(line, text, end_fn) && text >= sizeof end_fn + 3 && memcmp(line + text - 3, " */", 3) == 0) {
       loc.len = 0;
+      if (held) {
+        cs_buf_put(out, body.data == NULL ? "" : body.data, body.len);
+        held = false;
+        dst = out;
+      }
       if (has_id) {
         cs_buf_printf(out, ".Lcs_cv_end%" PRIu32 ":\n", next_id);
         /* the name, between the prefix and the comment's end */
@@ -198,17 +236,21 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
         next_id++;
       }
     } else if (loc.len != 0) {
-      cs_buf_put(out, loc.data, loc.len);
+      cs_buf_put(dst, loc.data, loc.len);
       loc.len = 0;
     }
-    cs_buf_put(out, line, n);
+    cs_buf_put(dst, line, n);
     if (nl != NULL) {
-      cs_buf_putc(out, '\n');
+      cs_buf_putc(dst, '\n');
     }
+  }
+  if (held) {
+    cs_buf_put(out, body.data == NULL ? "" : body.data, body.len);
   }
   if (next_id != 0) {
     put_tail(out, &names);
   }
+  cs_buf_free(&body);
   cs_buf_free(&loc);
   cs_buf_free(&names);
 }
