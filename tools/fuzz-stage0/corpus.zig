@@ -38,7 +38,7 @@ pub const Seed = struct {
 
 pub const Error = Io.Dir.OpenError || Io.Dir.Iterator.Error || Io.Dir.ReadFileAllocError || error{NoCorpus};
 
-const stage1 = [_][]const u8{ "util.csm", "lex.csm", "parse.csm", "types.csm", "habit.csm", "lower.csm", "decl.csm", "main.csm" };
+const stage1 = [_][]const u8{ "util.csm", "lex.csm", "parse.csm", "types.csm", "habit.csm", "lower.csm", "decl.csm", "loc.csm", "main.csm" };
 
 /// The corpus under `root`/bootstrap, `root` an absolute path.
 pub fn load(a: Allocator, io: Io, root: []const u8) Error![]const Seed {
