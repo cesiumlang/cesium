@@ -37,7 +37,7 @@ The banned functions are modeled on git's [`banned.h`](https://github.com/git/gi
 11. Optional or weakly supported standard features: variable-length arrays (`-Wvla`), `_Complex`, `<threads.h>`, `<stdatomic.h>` and `_Atomic`, `_Thread_local`, `_Generic`, `_Alignas` and `_Alignof`, `_Noreturn`, Annex K (the `*_s` functions), Annex L.
 12. Static assertions only through one project macro, `CS_STATIC_ASSERT`, defined in a single header, so that its implementation can be swapped if a compiler lacks `_Static_assert`.
 13. Compiler extensions: `__attribute__`, `__declspec`, `__builtin_*`, statement expressions, `typeof` and `__typeof__` (standard only from C23), computed `goto`, case ranges, zero-length and one-element trailing arrays (flexible array members instead), nested functions, `__int128`, inline assembly, `alloca`, `#pragma` (including `#pragma once`).
-14. Non-ISO libraries: no POSIX or Win32 calls in stage 0. File I/O uses `fopen`, `fread` and `fwrite`; the arena allocates large blocks with `malloc`.
+14. Non-ISO libraries: no POSIX or Win32 calls in stage 0, except through platform wrappers in one translation unit, `libcsmir/cs_platform.c`, the only code that calls the platform for what ISO C cannot do. The first is the current directory, for absolute source paths in debug information: `GetCurrentDirectoryW` on Windows, `getcwd` elsewhere (direction of emanspeaks, 2026-11-26: the capability matters more than strict ISO C, the dependence on libc is to be reduced as far as possible, and platform-specific wrappers will be needed; cesiumlang/vscode-cesium#47). File I/O uses `fopen`, `fread` and `fwrite`; the arena allocates large blocks with `malloc`.
 15. Floating point is not needed in stage 0 and is avoided; `long double` entirely.
 16. No implicit `switch` fall-through: every non-empty `case` ends in `break`, `return`, `continue` or `goto`. The portable fall-through annotations are an attribute or C23 syntax, neither of which is allowed, so there is no fall-through at all.
 
@@ -111,6 +111,7 @@ The record lists none. The amendments raise these, for emanspeaks:
 2. The three differences from the text in the enforcement comment of 2026-11-17: MSVC warning C4996 disabled; GCC compiling but not linking; fuzzing (since done, 2026-11-18).
 3. The nesting limits chosen without guidance (2026-11-18): 128 levels for S0, 1024 for MIR text.
 4. Whether the `llvm-c` headers need the confinement of point 29, which the record leaves to the first build with them.
+5. Absolute source paths (point 14, 2026-11-26) make the debug information of Windows targets depend on the directory the compiler runs in, which point 19 rules out for stage 0's output: whether that is accepted for debug information, or the build directory can be overridden (as clang's `-fdebug-compilation-dir` does) for the reproducibility check of #5.
 
 ## What changed since the record
 
@@ -125,5 +126,7 @@ The record lists none. The amendments raise these, for emanspeaks:
 1. MSVC warning C4996 is disabled: it deprecates `fopen` and other ISO C functions in favor of the Annex K variants this dialect bans.
 2. GCC compiles but does not link, because the devkit's `libqbe.a` is built by `zig cc`. The record says "build" for GCC.
 3. Fuzzing the MIR text parser is not done.
+
+**2026-11-26: the current directory (cesiumlang/vscode-cesium#47).** Debugging on Windows needs CodeView line tables whose source paths are absolute, with backslashes: the linker makes a relative path absolute with forward slashes, which the Windows debugger engine does not match against a breakpoint's path. ISO C cannot ask for the current directory, and `zig cc` refuses the linker option that would set it. The record's rule (point 14) was the agents' guidance, not a decision; emanspeaks directed the exception now in point 14, confined to one file that the source check names (open question 5).
 
 **2026-11-18: fuzzing (#69, merged into `dev`).** A mutation fuzzer for the MIR text parser and the S0 front end runs in CI on a build with ASan and UBSan. It found one bug: deeply nested S0 source overflowed the stack. The fix is a nesting limit, 128 levels for S0 (in `cesium0` and `cesium1`, with the same message) and 1024 for MIR text. The numbers were chosen without guidance (#9 names no limits) and are listed as such in #69 and in `bootstrap/README.md`.

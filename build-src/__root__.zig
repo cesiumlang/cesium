@@ -51,6 +51,8 @@ const csmir_sources = [_][]const u8{
     "mir_verify.c",
     "mir_qbe.c",
     "mir_dwarf.c",
+    "mir_codeview.c",
+    "cs_platform.c",
     "csmir_api.c",
 };
 

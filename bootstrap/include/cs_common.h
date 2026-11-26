@@ -81,6 +81,12 @@ int cs_vsnprintf(char *buf, size_t size, const char *fmt, va_list ap);
 bool cs_read_file(const char *path, char **out, size_t *len);
 bool cs_write_file(const char *path, const char *data, size_t len);
 
+/* ---- the platform (libcsmir/cs_platform.c) ----------------------------- */
+
+/* Appends the current directory, in UTF-8. Returns false if the platform
+ * cannot give it. */
+bool cs_current_dir(CsBuf *out);
+
 /* ---- internal errors --------------------------------------------------- */
 
 /* An impossible state in the compiler itself: prints and aborts. */

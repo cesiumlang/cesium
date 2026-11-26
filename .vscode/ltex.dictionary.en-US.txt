@@ -133,3 +133,9 @@ WINSYS
 yyjson
 Zig
 emanspeaks
+CodeView
+WinDbg
+cppvsdbg
+GPROC
+MSYS
+cdb

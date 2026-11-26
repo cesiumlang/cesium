@@ -324,4 +324,13 @@ void mir_dwarf_head(CsBuf *out, const MirTarget *t);
  * assembler writes for QBE's .file and .loc. */
 void mir_dwarf_tail(CsBuf *out, const MirTarget *t, const char *file);
 
+/* Whether the target's objects get CodeView line tables instead: COFF. */
+bool mir_codeview_target(const MirTarget *t);
+/* Appends file as an absolute path with backslashes, without . and ..
+ * components; relative to the current directory if it is relative. */
+void mir_codeview_path(CsBuf *out, const char *file);
+/* Appends QBE's assembly with its .file and .loc made CodeView directives,
+ * and the .debug$S section of their line tables. */
+void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len);
+
 #endif

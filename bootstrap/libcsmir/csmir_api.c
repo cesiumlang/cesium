@@ -85,6 +85,46 @@ static bool wrap_in_dwarf(const MirTarget *t, const char *out_path, const char *
   return true;
 }
 
+/* COFF: QBE writes to a file beside the output, which at exit is rewritten
+ * with CodeView line tables into the output (mir_codeview.c). */
+static CsBuf qbe_path = {NULL, 0, 0};
+static CsBuf cv_path = {NULL, 0, 0};
+
+static void write_codeview(void) {
+  char *data = NULL;
+  size_t len = 0;
+  CsBuf out = {NULL, 0, 0};
+  bool ok = fclose(stdout) == 0 && cs_read_file(qbe_path.data, &data, &len);
+  if (ok) {
+    mir_codeview_rewrite(&out, data, len);
+    ok = cs_write_file(cv_path.data, out.data == NULL ? "" : out.data, out.len);
+  }
+  remove(qbe_path.data);
+  free(data);
+  cs_buf_free(&out);
+  if (!ok) {
+    fprintf(stderr, "cannot write %s\n", cv_path.data);
+    /* exit() may not be called again from a handler it runs */
+    _Exit(1);
+  }
+}
+
+/* Makes QBE write to stdout, opened on a file beside out_path, which is
+ * rewritten into out_path at exit. Returns false with the error set. */
+static bool wrap_in_codeview(const char *out_path) {
+  cs_buf_puts(&cv_path, out_path);
+  cs_buf_printf(&qbe_path, "%s.qbe.s", out_path);
+  if (freopen(qbe_path.data, "wb", stdout) == NULL) {
+    set_error("cannot write %s", qbe_path.data);
+    return false;
+  }
+  if (atexit(write_codeview) != 0) {
+    set_error("cannot register the CodeView rewrite of %s", out_path);
+    return false;
+  }
+  return true;
+}
+
 int csmir_emit_qbe(MirModule *m, const MirTarget *t, const char *out_path) {
   CsBuf il = {NULL, 0, 0};
   CsBuf il_path = {NULL, 0, 0};
@@ -121,8 +161,9 @@ int csmir_emit_qbe(MirModule *m, const MirTarget *t, const char *out_path) {
   argv[6] = NULL;
   fflush(stdout);
   fflush(stderr);
-  if (file != NULL && mir_dwarf_target(t)) {
-    if (!wrap_in_dwarf(t, out_path, file)) {
+  /* "-" (stdout) gets no CodeView: there is no file to rewrite */
+  if (file != NULL && ((mir_codeview_target(t) && strcmp(out_path, "-") != 0) || mir_dwarf_target(t))) {
+    if (!(mir_codeview_target(t) ? wrap_in_codeview(out_path) : wrap_in_dwarf(t, out_path, file))) {
       cs_buf_free(&il_path);
       return 1;
     }
