@@ -210,6 +210,15 @@ pub fn add(
         compile.expectExitCode(0);
         step.dependOn(&b.addCheckFile(asm_out, .{ .expected_matches = lines.forFormat(cross.ofmt) }).step);
     }
+    // the unwind data of a COFF target, on every host
+    {
+        const compile = runFromRoot(b, cesium0, frames.name);
+        compile.addArgs(&.{ "--target", "x86_64-windows", "-o" });
+        const asm_out = compile.addOutputFileArg(frames.name ++ "-x86_64-windows.s");
+        compile.addArg(s0_dir ++ frames.name ++ ".csm");
+        compile.expectExitCode(0);
+        step.dependOn(&b.addCheckFile(asm_out, .{ .expected_matches = &frames.coff }).step);
+    }
 
     addStage1(b, step, target, cesium0, csrt, csmir, stage1, tool, devkit);
 }
@@ -250,9 +259,11 @@ const lines = struct {
         ".cv_file 1 \"",
         "\\\\bootstrap\\\\tests\\\\s0\\\\" ++ name ++ ".csm\"",
         // the entry has the line of the first statement, for stepping in
-        "main:\n\t.cv_func_id 0\n\t.cv_loc 0 1 7 3\n\tendbr64",
+        "main:\n\t.cv_func_id 0\n\t.cv_loc 0 1 7 3\n.seh_proc main\n\tendbr64",
         "\t.cv_loc 0 1 12 3",
-        ".Lcs_cv_end0:",
+        // unwind data (bootstrap/libcsmir/mir_seh.c)
+        "\t.seh_endprologue",
+        "\t.seh_endproc\n.Lcs_cv_end0:",
         ".section .debug$S,\"dr\"",
         "\t.short 0x1110",
         "\t.secrel32 main",
@@ -275,8 +286,24 @@ const lines = struct {
     }
 };
 
-/// s0/lines.csm as a program, compiled as the tests compile it, for the
-/// debuggers to run (the gdb and lldb steps of CI).
+/// s0/frames.csm traps two calls deep, below a frame too large for an unwind
+/// record's frame offset; its COFF assembly must describe each prologue
+/// (bootstrap/libcsmir/mir_seh.c).
+const frames = struct {
+    const name = "frames";
+    const coff = [_][]const u8{
+        ".seh_proc leaf",
+        // the frame set at once, as it is too large to be set after the
+        // allocation
+        ".seh_proc wide\n\tendbr64\n\tpushq %rbp\n\t.seh_pushreg %rbp\n\tmovq %rsp, %rbp\n" ++
+            "\t.seh_setframe %rbp, 0\n\t.seh_endprologue\n\tsubq $512, %rsp",
+        ".seh_proc main",
+        "\t.seh_endproc\n.Lcs_cv_end2:",
+    };
+};
+
+/// s0/lines.csm and s0/frames.csm as programs, compiled as the tests compile
+/// them, for the debuggers to run (the gdb, lldb and cdb steps of CI).
 pub fn addLines(
     b: *std.Build,
     step: *std.Build.Step,
@@ -284,12 +311,14 @@ pub fn addLines(
     cesium0: *std.Build.Step.Compile,
     csrt: *std.Build.Step.Compile,
 ) void {
-    const compile = runFromRoot(b, cesium0, lines.name);
-    compile.addArg("-o");
-    const asm_out = compile.addOutputFileArg(lines.name ++ ".s");
-    compile.addArg(s0_dir ++ lines.name ++ ".csm");
-    const exe = link.linkProgram(b, target, csrt, lines.name, asm_out);
-    step.dependOn(&b.addInstallArtifact(exe, .{}).step);
+    for ([_][]const u8{ lines.name, frames.name }) |name| {
+        const compile = runFromRoot(b, cesium0, name);
+        compile.addArg("-o");
+        const asm_out = compile.addOutputFileArg(b.fmt("{s}.s", .{name}));
+        compile.addArg(b.fmt(s0_dir ++ "{s}.csm", .{name}));
+        const exe = link.linkProgram(b, target, csrt, name, asm_out);
+        step.dependOn(&b.addInstallArtifact(exe, .{}).step);
+    }
 }
 
 /// Runs a compiler from the repository root, given the source path as

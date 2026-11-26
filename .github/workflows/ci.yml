@@ -80,7 +80,7 @@ jobs:
 
       # CodeView (cesiumlang/vscode-cesium#47): cdb, the console form of
       # WinDbg, reads the PDB as Visual Studio's debugger does
-      - name: cdb finds the line of a trap
+      - name: cdb finds lines, breakpoints and callers
         if: matrix.host == 'x86_64-windows-gnu'
         run: |
           .devkit/zig/zig build lines -Dtarget="${{ matrix.host }}"
@@ -95,6 +95,18 @@ jobs:
           grep -q 'Breakpoint 0 hit' cdb-break.txt
           grep -q 'lines!main+.*lines\.csm @ 10' cdb-break.txt
           grep -q 'lines!main+.*lines\.csm @ 12' cdb-break.txt
+          # the stack walk, by the unwind data: from a trap two calls deep,
+          # through a frame too large to be set after its allocation
+          frames=$(cygpath -w "$PWD/zig-out/bin/frames.exe")
+          "$cdb" -lines -c "g; kn 4; q" "$frames" 2>&1 | tee cdb-frames.txt
+          grep -q 'frames!leaf+.*frames\.csm @ 7' cdb-frames.txt
+          grep -q 'frames!wide+.*frames\.csm @ 13' cdb-frames.txt
+          grep -q 'frames!main+.*frames\.csm @ 17' cdb-frames.txt
+          # and a step out of a function, in cesium1
+          .devkit/zig/zig build -Dtarget="${{ matrix.host }}"
+          cesium1=$(cygpath -w "$PWD/zig-out/bin/cesium1.exe")
+          "$cdb" -lines -c "l+t; bp cesium1!loc_args; g; p; gu; kn 1; q" "$cesium1" -o out1.s bootstrap/tests/s0/tokens.csm 2>&1 | tee cdb-out.txt
+          grep -q 'cesium1!main+.*main\.csm @' cdb-out.txt
 
       # the generated corpus (bootstrap/tests/diff), on one host only
       - name: Compare cesium1 with cesium0 on the generated corpus

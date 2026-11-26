@@ -1,0 +1,18 @@
+// Unwind data (cesiumlang/vscode-cesium#47): run without arguments, this
+// program divides by zero in leaf, called by wide, whose frame is too large
+// for an unwind record's frame offset, called by main; a debugger's stack
+// walk from the trap must find all three (zig build lines, CI's cdb step).
+// spec: s0.entry, s0.expr.arithmetic, s0.type.array
+i32 = leaf(i32 d) {
+  return 7 / d;
+}
+
+i32 = wide(i32 d) {
+  i32 buf[128];
+  buf[d] = 1;
+  return leaf(d) + buf[0];
+}
+
+i32 = main(i32 argc, ##u8 argv) {
+  return wide(argc - 1);
+}
