@@ -111,8 +111,8 @@ uword = node_here(uword kind) {
   return node_new(kind, g_tok.line, g_tok.col);
 }
 
-void = err_at(uword n) {
-  err_begin(g_nodes[n].line, g_nodes[n].col);
+void = err_at(uword n, #u8 code) {
+  err_begin(g_nodes[n].line, g_nodes[n].col, code);
 }
 
 void = tok_copy(~Token to, #Token from) {
@@ -143,12 +143,12 @@ u8 = parse_accept(uword kind) {
 }
 
 // Starts an error message at the current token.
-void = parse_err() {
-  err_begin(g_tok.line, g_tok.col);
+void = parse_err(#u8 code) {
+  err_begin(g_tok.line, g_tok.col, code);
 }
 
-void = parse_fail(#u8 msg) {
-  parse_err();
+void = parse_fail(#u8 code, #u8 msg) {
+  parse_err(code);
   err_s(msg);
   err_end();
 }
@@ -156,12 +156,12 @@ void = parse_fail(#u8 msg) {
 void = parse_enter() {
   g_depth = g_depth + 1;
   if (g_depth > MAX_NESTING) {
-    parse_fail("nested too deeply (the limit is 128 levels)");
+    parse_fail("E0901", "nested too deeply (the limit is 128 levels)");
   }
 }
 
-void = parse_fail_found(#u8 what) {
-  parse_err();
+void = parse_fail_found(#u8 code, #u8 what) {
+  parse_err(code);
   err_s(what);
   err_s(", found ");
   err_tok(g_tok.kind);
@@ -170,7 +170,7 @@ void = parse_fail_found(#u8 what) {
 
 void = parse_expect(uword kind) {
   if (!parse_accept(kind)) {
-    parse_err();
+    parse_err("E0201");
     err_s("expected ");
     err_tok(kind);
     err_s(", found ");
@@ -181,7 +181,7 @@ void = parse_expect(uword kind) {
 
 uword = parse_expect_ident() {
   if (!parse_at(TK_IDENT)) {
-    parse_fail_found("expected a name");
+    parse_fail_found("E0202", "expected a name");
   }
   uword id = g_tok.id;
   parse_advance();
@@ -201,11 +201,11 @@ void = parse_type(uword n, u8 allow_owned, u8 allow_void) {
   g_nodes[n].tcol = g_tok.col;
   if (parse_at(TK_COLON)) {
     if (!allow_owned) {
-      parse_fail("':' marks an owned parameter, return value or field; it cannot be used here");
+      parse_fail("E0203", "':' marks an owned parameter, return value or field; it cannot be used here");
     }
     parse_advance();
     if (!parse_at(TK_HASH) && !parse_at(TK_TILDE)) {
-      parse_fail("':' must be followed by a pointer type");
+      parse_fail("E0204", "':' must be followed by a pointer type");
     }
   }
   while (parse_at(TK_HASH) || parse_at(TK_TILDE)) {
@@ -214,14 +214,14 @@ void = parse_type(uword n, u8 allow_owned, u8 allow_void) {
   }
   if (parse_at(TK_VOID)) {
     if (!allow_void || g_nodes[n].tdepth != 0) {
-      parse_fail("'void' is only a return type in S0");
+      parse_fail("E0205", "'void' is only a return type in S0");
     }
     parse_advance();
     g_nodes[n].tbase = BT_VOID;
     return;
   }
   if (!parse_at(TK_IDENT)) {
-    parse_fail_found("expected a type");
+    parse_fail_found("E0206", "expected a type");
   }
   if (parse_is_base_type(g_tok.id)) {
     // the primitive names are interned in the order of BT_U8 ... BT_UWORD
@@ -243,7 +243,7 @@ uword = parse_call(uword id, u64 line, u64 col) {
   parse_advance();
   while (!parse_at(TK_RPAREN)) {
     if (n == MAX_ARGS) {
-      parse_fail("too many arguments");
+      parse_fail("E0902", "too many arguments");
     }
     uword arg = parse_expr();
     if (tail != 0) {
@@ -307,9 +307,9 @@ uword = parse_primary() {
     return e;
   }
   if (parse_at(TK_MINUS)) {
-    parse_fail("S0 has no unary minus; write 0 - x");
+    parse_fail("E0207", "S0 has no unary minus; write 0 - x");
   }
-  parse_fail_found("expected an expression");
+  parse_fail_found("E0208", "expected an expression");
   return e;
 }
 
@@ -334,7 +334,7 @@ uword = parse_postfix() {
       g_nodes[n].id = parse_expect_ident();
       e = n;
     } else if (parse_at(TK_LPAREN)) {
-      parse_fail("only a function name can be called in S0");
+      parse_fail("E0209", "only a function name can be called in S0");
     } else {
       g_depth = depth;
       return e;
@@ -455,7 +455,7 @@ void = parse_declarator(uword s, u8 allow_init) {
   g_nodes[s].id = parse_expect_ident();
   if (parse_accept(TK_LBRACKET)) {
     if (!parse_at(TK_INT)) {
-      parse_fail("an array length is an integer literal in S0");
+      parse_fail("E0210", "an array length is an integer literal in S0");
     }
     g_nodes[s].is_array = TRUE;
     g_nodes[s].ival = g_tok.ival;
@@ -465,7 +465,7 @@ void = parse_declarator(uword s, u8 allow_init) {
   g_nodes[s].op = TK_EOF;
   if (parse_is_assign_op(g_tok.kind)) {
     if (!allow_init) {
-      parse_fail("a struct field has no initializer");
+      parse_fail("E0211", "a struct field has no initializer");
     }
     g_nodes[s].op = g_tok.kind;
     parse_advance();
@@ -543,7 +543,7 @@ uword = parse_stmt_at_depth() {
     return s;
   }
   if (parse_at(TK_LBRACE)) {
-    parse_fail("a block is not a statement by itself in S0");
+    parse_fail("E0212", "a block is not a statement by itself in S0");
   }
   if (parse_at_declaration()) {
     s = node_new(ST_DECL, line, col);
@@ -602,7 +602,7 @@ void = parse_params(uword d) {
   parse_expect(TK_LPAREN);
   while (!parse_at(TK_RPAREN)) {
     if (n == MAX_ARGS) {
-      parse_fail("too many parameters");
+      parse_fail("E0903", "too many parameters");
     }
     uword p = node_here(NK_PARAM);
     parse_type(p, TRUE, FALSE);
@@ -656,7 +656,7 @@ void = parse_extern() {
   if (parse_at(TK_LIBNAME) || parse_at(TK_CHAR) || parse_at(TK_STRING)) {
     parse_advance();
   } else {
-    parse_fail("expected a library name such as 'c'");
+    parse_fail("E0213", "expected a library name such as 'c'");
   }
   parse_expect(TK_RPAREN);
   parse_expect(TK_LBRACE);
@@ -696,7 +696,7 @@ void = parse_func_or_global() {
     g_nodes[d].body = parse_block();
   } else {
     if (g_nodes[d].tbase == BT_VOID) {
-      err_at(d);
+      err_at(d, "E0205");
       err_s("'void' is only a return type in S0");
       err_end();
     }

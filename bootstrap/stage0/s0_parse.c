@@ -26,7 +26,7 @@ static void advance(Parser *p) {
 }
 
 /* Reports the first syntax error of the file and stops consuming input. */
-static void fail(Parser *p, S0Loc loc, const char *fmt, ...) {
+static void fail(Parser *p, S0Loc loc, const char *code, const char *fmt, ...) {
   va_list ap;
   char msg[256];
   if (p->failed) {
@@ -36,7 +36,7 @@ static void fail(Parser *p, S0Loc loc, const char *fmt, ...) {
   va_start(ap, fmt);
   cs_vsnprintf(msg, sizeof msg, fmt, ap);
   va_end(ap);
-  s0_error(p->diag, loc, "%s", msg);
+  s0_error(p->diag, loc, code, "%s", msg);
   p->lx.pos = p->lx.len;
   p->tok.kind = TK_EOF;
   p->peek.kind = TK_EOF;
@@ -51,7 +51,7 @@ static void fail(Parser *p, S0Loc loc, const char *fmt, ...) {
 static void enter(Parser *p) {
   p->depth++;
   if (p->depth > MAX_NESTING) {
-    fail(p, p->tok.loc, "nested too deeply (the limit is %d levels)", MAX_NESTING);
+    fail(p, p->tok.loc, "E0901", "nested too deeply (the limit is %d levels)", MAX_NESTING);
   }
 }
 
@@ -69,7 +69,7 @@ static bool accept(Parser *p, S0Tok kind) {
 
 static void expect(Parser *p, S0Tok kind) {
   if (!accept(p, kind)) {
-    fail(p, p->tok.loc, "expected %s, found %s", s0_tok_name(kind), s0_tok_name(p->tok.kind));
+    fail(p, p->tok.loc, "E0201", "expected %s, found %s", s0_tok_name(kind), s0_tok_name(p->tok.kind));
   }
 }
 
@@ -79,7 +79,7 @@ static const char *expect_ident(Parser *p) {
     name = p->tok.text;
     advance(p);
   } else {
-    fail(p, p->tok.loc, "expected a name, found %s", s0_tok_name(p->tok.kind));
+    fail(p, p->tok.loc, "E0202", "expected a name, found %s", s0_tok_name(p->tok.kind));
   }
   return name;
 }
@@ -117,12 +117,12 @@ static S0TypeSyn parse_type(Parser *p, bool allow_owned, bool allow_void) {
   t.loc = p->tok.loc;
   if (at(p, TK_COLON)) {
     if (!allow_owned) {
-      fail(p, p->tok.loc, "':' marks an owned parameter, return value or field; it cannot be used here");
+      fail(p, p->tok.loc, "E0203", "':' marks an owned parameter, return value or field; it cannot be used here");
       return t;
     }
     advance(p);
     if (!at(p, TK_HASH) && !at(p, TK_TILDE)) {
-      fail(p, p->tok.loc, "':' must be followed by a pointer type");
+      fail(p, p->tok.loc, "E0204", "':' must be followed by a pointer type");
       return t;
     }
   }
@@ -132,7 +132,7 @@ static S0TypeSyn parse_type(Parser *p, bool allow_owned, bool allow_void) {
   }
   if (at(p, TK_VOID)) {
     if (!allow_void || t.depth != 0) {
-      fail(p, p->tok.loc, "'void' is only a return type in S0");
+      fail(p, p->tok.loc, "E0205", "'void' is only a return type in S0");
       return t;
     }
     advance(p);
@@ -140,7 +140,7 @@ static S0TypeSyn parse_type(Parser *p, bool allow_owned, bool allow_void) {
     return t;
   }
   if (!at(p, TK_IDENT)) {
-    fail(p, p->tok.loc, "expected a type, found %s", s0_tok_name(p->tok.kind));
+    fail(p, p->tok.loc, "E0206", "expected a type, found %s", s0_tok_name(p->tok.kind));
     return t;
   }
   if (!base_type_by_name(p->tok.text, &t.base)) {
@@ -203,7 +203,7 @@ static S0Expr *parse_primary(Parser *p) {
       advance(p);
       while (!at(p, TK_RPAREN) && !p->failed) {
         if (n == MAX_ARGS) {
-          fail(p, p->tok.loc, "too many arguments");
+          fail(p, p->tok.loc, "E0902", "too many arguments");
           break;
         }
         args[n++] = parse_expr(p);
@@ -226,9 +226,9 @@ static S0Expr *parse_primary(Parser *p) {
     return e;
   }
   if (at(p, TK_MINUS)) {
-    fail(p, loc, "S0 has no unary minus; write 0 - x");
+    fail(p, loc, "E0207", "S0 has no unary minus; write 0 - x");
   } else {
-    fail(p, loc, "expected an expression, found %s", s0_tok_name(p->tok.kind));
+    fail(p, loc, "E0208", "expected an expression, found %s", s0_tok_name(p->tok.kind));
   }
   return new_expr(p, EX_INT, loc);
 }
@@ -258,7 +258,7 @@ static S0Expr *parse_postfix(Parser *p) {
       n->name = expect_ident(p);
       e = n;
     } else if (at(p, TK_LPAREN)) {
-      fail(p, loc, "only a function name can be called in S0");
+      fail(p, loc, "E0209", "only a function name can be called in S0");
       p->depth = depth;
       return e;
     } else {
@@ -392,7 +392,7 @@ static void parse_declarator(Parser *p, S0Stmt *s, bool allow_init) {
   s->name = expect_ident(p);
   if (accept(p, TK_LBRACKET)) {
     if (!at(p, TK_INT)) {
-      fail(p, p->tok.loc, "an array length is an integer literal in S0");
+      fail(p, p->tok.loc, "E0210", "an array length is an integer literal in S0");
       return;
     }
     s->is_array = true;
@@ -403,7 +403,7 @@ static void parse_declarator(Parser *p, S0Stmt *s, bool allow_init) {
   s->op = TK_EOF;
   if (is_assign_op(p->tok.kind)) {
     if (!allow_init) {
-      fail(p, p->tok.loc, "a struct field has no initializer");
+      fail(p, p->tok.loc, "E0211", "a struct field has no initializer");
       return;
     }
     s->op = p->tok.kind;
@@ -479,7 +479,7 @@ static S0Stmt *parse_stmt_at_depth(Parser *p) {
     return s;
   }
   if (at(p, TK_LBRACE)) {
-    fail(p, loc, "a block is not a statement by itself in S0");
+    fail(p, loc, "E0212", "a block is not a statement by itself in S0");
     return new_stmt(p, ST_BREAK, loc);
   }
   if (at_declaration(p)) {
@@ -548,7 +548,7 @@ static void parse_params(Parser *p, S0Decl *d) {
   expect(p, TK_LPAREN);
   while (!at(p, TK_RPAREN) && !p->failed) {
     if (n == MAX_PARAMS) {
-      fail(p, p->tok.loc, "too many parameters");
+      fail(p, p->tok.loc, "E0903", "too many parameters");
       break;
     }
     params[n].loc = p->tok.loc;
@@ -600,7 +600,7 @@ static void parse_extern(Parser *p, S0Decl **head, S0Decl **tail) {
     lib = p->tok.text;
     advance(p);
   } else {
-    fail(p, p->tok.loc, "expected a library name such as 'c'");
+    fail(p, p->tok.loc, "E0213", "expected a library name such as 'c'");
   }
   expect(p, TK_RPAREN);
   expect(p, TK_LBRACE);
@@ -658,7 +658,7 @@ void s0_parse_file(CsArena *arena, S0Diag *diag, const char *file, const char *s
         S0Stmt tmp;
         memset(&tmp, 0, sizeof tmp);
         if (type.base == BT_VOID) {
-          fail(&p, loc, "'void' is only a return type in S0");
+          fail(&p, loc, "E0205", "'void' is only a return type in S0");
         }
         parse_declarator(&p, &tmp, true);
         d->type = type;

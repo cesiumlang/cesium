@@ -10,7 +10,7 @@
 // the same unit, byte for byte.
 //
 // Exit status: 0 on success; 1 on an error in the source, reported as
-// "line:col: error: message" on standard output (lines count from the start
+// "line:col: error[E0101]: message" on standard output (lines count from the start
 // of the input), or when libcsmir fails; 2 when a limit of cesium1 is
 // reached. Nothing else is printed before the whole unit has been checked.
 

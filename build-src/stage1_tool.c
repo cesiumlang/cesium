@@ -13,8 +13,8 @@
  *                                                 stream writes it on Windows
  *   stage1_tool error <cesium0-stderr> <cesium1-stdout>
  *                                                 fails unless the first error
- *                                                 of each is the same message at
- *                                                 the same place
+ *                                                 of each is the same code and
+ *                                                 message at the same place
  *
  * Exit status: 0 on success, 1 on a difference or an I/O error.
  */
@@ -144,8 +144,9 @@ static int same_verifier_error(const char *e0, const char *e1) {
   return strncmp(e0, e1, digits) == 0 && strncmp(e0 + digits, ": ", 2) == 0 && strcmp(e0 + digits + 2, tag + 9) == 0;
 }
 
-/* cesium0 prints "<file>:L:C: error: M", or "cesium0: error: " and a
- * verifier message; cesium1 prints "L:C: error: M". */
+/* cesium0 prints "<file>:L:C: error[CODE]: M", or "cesium0: error: " and a
+ * verifier message; cesium1 prints "L:C: error[CODE]: M", or "L:C: error: M"
+ * for a verifier check. Code and message must be the same. */
 static int same_error(const char *path0, const char *path1) {
   char *e0 = first_line(path0);
   char *e1 = first_line(path1);

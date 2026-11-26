@@ -25,8 +25,9 @@ typedef struct S0Diag {
   int errors;
 } S0Diag;
 
-/* Prints "file:line:col: error: message" to stderr and counts it. */
-void s0_error(S0Diag *d, S0Loc loc, const char *fmt, ...);
+/* Prints "file:line:col: error[code]: message" to stderr and counts it. The
+ * code, such as "E0101", is the message's entry in bootstrap/diagnostics.md. */
+void s0_error(S0Diag *d, S0Loc loc, const char *code, const char *fmt, ...);
 
 /* ---- tokens ------------------------------------------------------------ */
 
