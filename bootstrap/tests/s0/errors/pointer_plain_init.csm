@@ -1,5 +1,6 @@
 // Plain "=" assigns through a pointer and never initializes one
 // (cesiumlang/cesium#11, rule 5).
+// spec: s0.assign.pointer, s0.check.address-context
 i32 = main(i32 argc, ##u8 argv) {
   i32 x = 1;
   #i32 p = #x;

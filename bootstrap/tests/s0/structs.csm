@@ -1,5 +1,6 @@
 // Structs: fields only, assigned one at a time; nested structs, array fields,
 // pointer fields, and a linked list built from alloc.
+// spec: s0.struct, s0.struct.no-literal, s0.type.array, s0.expr.alloc, s0.expr.sizeof, s0.assign.pointer
 struct Point {
   i32 x;
   i32 y;

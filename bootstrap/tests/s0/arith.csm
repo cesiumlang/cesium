@@ -1,5 +1,6 @@
 // Integer arithmetic with core MIR's defined semantics (cesiumlang/cesium#8):
 // wrapping, shifts modulo the width, conversions.
+// spec: s0.expr, s0.expr.left, s0.expr.arithmetic, s0.type.integers, lex.lit.int.decimal
 u8 calls = 0;
 
 u8 = touch(u8 result) {

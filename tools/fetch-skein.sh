@@ -49,6 +49,11 @@ if [[ $version =~ ^[0-9a-f]{40}$ ]]; then
   zig=${ZIG:-}
   [ -n "$zig" ] || { [ -x "$ROOT/.devkit/zig/zig" ] && zig=$ROOT/.devkit/zig/zig; } || true
   [ -n "$zig" ] || zig=$(command -v zig) || die "a commit of skein is built with Zig 0.17.1: set ZIG, or fetch the devkit"
+  # the build runs in another directory: a relative path is made absolute
+  case $zig in
+    /*) ;;
+    */*) zig=$(cd "$(dirname "$zig")" && pwd)/$(basename "$zig") ;;
+  esac
   git -C "$work" init --quiet src
   git -C "$work/src" fetch --quiet --depth 1 "$REPO" "$version"
   git -C "$work/src" checkout --quiet FETCH_HEAD

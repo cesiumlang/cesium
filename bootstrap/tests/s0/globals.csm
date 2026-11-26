@@ -1,5 +1,6 @@
 // Globals and constants: shared by every file of the unit; globals without
 // an initializer start as zero.
+// spec: s0.unit, s0.const, s0.type.integers
 const i64 LIMIT = 3;
 const i64 SAME = LIMIT;
 const u8 NEWLINE = '\n';

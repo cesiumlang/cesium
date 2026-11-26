@@ -1,6 +1,7 @@
 // Pointers under the ownership design (cesiumlang/cesium#11): dereference by
 // default, address-context operators, explicit addresses for plain values.
 // Stage 0 parses these forms and enforces none of the ownership rules.
+// spec: s0.type.pointer, s0.type.borrow, s0.expr.deref, s0.expr.expected, s0.assign.pointer, s0.check.address-context, s0.check.pointer-argument
 
 // p is read through and assigned through (rules 5 and 29)
 void = increment(~i32 p) {

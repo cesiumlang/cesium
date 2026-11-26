@@ -1,5 +1,6 @@
 // A plain value passed to a pointer parameter needs its address taken
 // explicitly (cesiumlang/cesium#11, rule 20).
+// spec: s0.check.pointer-argument
 void = bump(~i32 p) {
   p = p + 1;
 }

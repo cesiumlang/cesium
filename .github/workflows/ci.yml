@@ -57,6 +57,16 @@ jobs:
         if: matrix.host == 'x86_64-linux-musl'
         run: .devkit/zig/zig build test-diff -Dtarget="${{ matrix.host }}" --summary failures
 
+      # the specification's tested examples, each accepted or rejected by
+      # cesium0 as its category says (proposals/0000-documentation-system.md)
+      - name: The examples of the specification
+        if: matrix.host == 'x86_64-linux-musl'
+        env:
+          ZIG: .devkit/zig/zig
+        run: |
+          bash tools/fetch-skein.sh
+          bash tools/spec-examples.sh
+
   # The stage 0 C dialect (cesiumlang/cesium#10) beyond what `zig cc` checks
   # in the job above: the source check, other compilers, and the sanitizers.
   dialect:
@@ -139,12 +149,6 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-
-      # Zig 0.17.1, the devkit's, for a skein-version that names a commit of
-      # skein, which fetch-skein.sh builds (until the release it waits on)
-      - uses: randyos-org/setup-zig@node24 # v2.2.1 on Node.js 24, until upstream releases it
-        with:
-          version: 0.17.1
 
       - name: Fetch skein
         run: bash tools/fetch-skein.sh

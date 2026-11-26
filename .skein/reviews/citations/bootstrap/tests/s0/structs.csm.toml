@@ -1,0 +1,7 @@
+# Review records, written by skein. Do not edit: use 'skein review'.
+"bootstrap/tests/s0/structs.csm"."cite:test"."s0.assign.pointer" = "2cfc78fe455cf6decc083726842d1e88"
+"bootstrap/tests/s0/structs.csm"."cite:test"."s0.expr.alloc" = "d0ca21c8d345f5c4f16656390d155300"
+"bootstrap/tests/s0/structs.csm"."cite:test"."s0.expr.sizeof" = "eb483d6c3e065e27e544c9eced1ae4ed"
+"bootstrap/tests/s0/structs.csm"."cite:test"."s0.struct" = "dde6710520047fbd79d69ef3b9c62de1"
+"bootstrap/tests/s0/structs.csm"."cite:test"."s0.struct.no-literal" = "191eb7e042c760a37f3b364a21ca8aea"
+"bootstrap/tests/s0/structs.csm"."cite:test"."s0.type.array" = "07d6471b2eb0cb04da225d5a29cec7d6"
