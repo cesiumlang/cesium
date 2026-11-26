@@ -52,6 +52,26 @@ jobs:
       - name: Build and test stage 0
         run: .devkit/zig/zig build install test -Dtarget="${{ matrix.host }}" --summary all
 
+      # the DWARF compile unit (cesiumlang/cesium#78): lines.csm traps at 12
+      - name: gdb finds the line of a trap
+        if: matrix.host == 'x86_64-linux-musl'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdb
+          .devkit/zig/zig build lines -Dtarget="${{ matrix.host }}"
+          readelf --debug-dump=info zig-out/bin/lines > info.txt
+          grep -B4 -A4 'DW_AT_name.*bootstrap/tests/s0/lines.csm' info.txt
+          gdb -batch -ex run -ex bt zig-out/bin/lines 2>&1 | tee gdb.txt
+          grep -q '^#0 .* at bootstrap/tests/s0/lines.csm:12' gdb.txt
+
+      - name: lldb finds the line of a trap
+        if: matrix.host == 'aarch64-macos-none'
+        run: |
+          if ! command -v lldb; then echo "no lldb on this runner"; exit 0; fi
+          .devkit/zig/zig build lines -Dtarget="${{ matrix.host }}"
+          lldb --batch -o run -o bt zig-out/bin/lines 2>&1 | tee lldb.txt
+          grep -q 'lines.csm:12' lldb.txt
+
       # the generated corpus (bootstrap/tests/diff), on one host only
       - name: Compare cesium1 with cesium0 on the generated corpus
         if: matrix.host == 'x86_64-linux-musl'

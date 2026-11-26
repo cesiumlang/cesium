@@ -287,9 +287,12 @@ bool mir_verify(MirModule *m);
 
 /* ---- targets and layout ------------------------------------------------ */
 
+typedef enum MirObjFormat { MIR_ELF, MIR_MACHO, MIR_COFF } MirObjFormat;
+
 typedef struct MirTarget {
   const char *name;      /* the QBE target name */
   uint64_t ptr_size;     /* bytes; also the size of uword */
+  MirObjFormat format;   /* of the objects its assembly becomes */
 } MirTarget;
 
 const MirTarget *mir_target_by_name(const char *name);
@@ -303,7 +306,22 @@ uint64_t mir_alignof(const MirTarget *t, MirType *type);
 
 /* ---- lowering ---------------------------------------------------------- */
 
-/* Appends QBE IL for a verified module. */
-void mir_lower_qbe(CsBuf *out, MirModule *m, const MirTarget *t);
+/* Appends QBE IL for a verified module. Returns the file of its first
+ * dbgfile, or NULL if it has no locations. */
+const char *mir_lower_qbe(CsBuf *out, MirModule *m, const MirTarget *t);
+
+/* ---- debug information ------------------------------------------------- */
+
+/* Appends s as an assembler string, quoted: \\, \" and \ooo. */
+void mir_asm_string(CsBuf *out, const char *s);
+
+/* Whether the target's objects get a DWARF compile unit: ELF and Mach-O. */
+bool mir_dwarf_target(const MirTarget *t);
+/* The assembly that goes before QBE's: a label at the start of the text. */
+void mir_dwarf_head(CsBuf *out, const MirTarget *t);
+/* The assembly that goes after QBE's: a label at the end of the text and a
+ * compile unit covering it, named file, whose line table is the one the
+ * assembler writes for QBE's .file and .loc. */
+void mir_dwarf_tail(CsBuf *out, const MirTarget *t, const char *file);
 
 #endif
