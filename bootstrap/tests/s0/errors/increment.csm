@@ -1,0 +1,6 @@
+// Whether S0 has "++" and "--" is not decided (cesiumlang/cesium#15).
+i32 = main(i32 argc, ##u8 argv) {
+  i32 x = 0;
+  x++;
+  return x;
+}

@@ -1,0 +1,6 @@
+// A C-style function header reads as a global followed by "(", and the
+// message names the S0 form.
+// spec: s0.func
+int main() {
+  return 0;
+}

@@ -57,6 +57,7 @@ const stage0_sources = [_][]const u8{
     "s0_lex.c",
     "s0_parse.c",
     "s0_lower.c",
+    "s0_habit.c",
 };
 
 const Stage0 = struct {

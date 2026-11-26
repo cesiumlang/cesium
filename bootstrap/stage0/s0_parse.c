@@ -73,6 +73,20 @@ static void expect(Parser *p, S0Tok kind) {
   }
 }
 
+/* The next token starts right after the current one, a one-character token. */
+static bool joined(const Parser *p) {
+  return p->peek.loc.line == p->tok.loc.line && p->peek.loc.col == p->tok.loc.col + 1;
+}
+
+/* At `++` or `--`, which S0 does not have (cesiumlang/cesium#15). */
+static bool at_step(const Parser *p) {
+  return (at(p, TK_PLUS) || at(p, TK_MINUS)) && p->peek.kind == p->tok.kind && joined(p);
+}
+
+static void fail_step(Parser *p) {
+  fail(p, p->tok.loc, "E0219", "'++' and '--' are not decided for S0; write x = x + 1");
+}
+
 static const char *expect_ident(Parser *p) {
   const char *name = "";
   if (at(p, TK_IDENT)) {
@@ -225,8 +239,15 @@ static S0Expr *parse_primary(Parser *p) {
     e->name = name;
     return e;
   }
-  if (at(p, TK_MINUS)) {
+  if (at_step(p)) {
+    fail_step(p);
+  } else if (at(p, TK_MINUS)) {
     fail(p, loc, "E0207", "S0 has no unary minus; write 0 - x");
+  } else if (at(p, TK_AMP)) {
+    fail(p, loc, "E0216", "expected an expression, found '&'; an address is taken with '#'");
+  } else if (at(p, TK_STAR)) {
+    fail(p, loc, "E0217",
+         "expected an expression, found '*'; there is no dereference operator: p, p[i] and p.f read through a pointer");
   } else {
     fail(p, loc, "E0208", "expected an expression, found %s", s0_tok_name(p->tok.kind));
   }
@@ -342,6 +363,26 @@ static int binary_level(S0Tok kind) {
   }
 }
 
+/* A binary operator that is also a compound assignment before `=`
+ * (lex.op.compound); S0 does not have those (cesiumlang/cesium#15). */
+static bool is_compound_op(S0Tok kind) {
+  switch (kind) {
+  case TK_PLUS:
+  case TK_MINUS:
+  case TK_STAR:
+  case TK_SLASH:
+  case TK_PERCENT:
+  case TK_AMP:
+  case TK_PIPE:
+  case TK_XOR:
+  case TK_SHL:
+  case TK_SHR:
+    return true;
+  default:
+    return false;
+  }
+}
+
 static S0Expr *parse_binary(Parser *p, int min_level) {
   int depth = p->depth;
   S0Expr *lhs = parse_cast(p);
@@ -354,6 +395,11 @@ static S0Expr *parse_binary(Parser *p, int min_level) {
     }
     /* a chain a + b + c + ... nests to the left */
     enter(p);
+    if (is_compound_op(p->tok.kind) && p->peek.kind == TK_ASSIGN) {
+      fail(p, p->tok.loc, "E0218", "compound assignment is not decided for S0; write x = x + y");
+    } else if (at_step(p)) {
+      fail_step(p);
+    }
     n = new_expr(p, EX_BINARY, p->tok.loc);
     n->op = p->tok.kind;
     advance(p);
@@ -651,6 +697,9 @@ void s0_parse_file(CsArena *arena, S0Diag *diag, const char *file, const char *s
         d->type = type;
         d->name = expect_ident(&p);
         parse_params(&p, d);
+        if (at(&p, TK_MINUS) && p.peek.kind == TK_GT && joined(&p)) {
+          fail(&p, p.tok.loc, "E0215", "expected '{', found '->'; the return type comes first: 'T = name(parameters)'");
+        }
         d->body = parse_block(&p);
         append(head, tail, d);
       } else {
@@ -659,6 +708,10 @@ void s0_parse_file(CsArena *arena, S0Diag *diag, const char *file, const char *s
         memset(&tmp, 0, sizeof tmp);
         if (type.base == BT_VOID) {
           fail(&p, loc, "E0205", "'void' is only a return type in S0");
+        }
+        if (at(&p, TK_IDENT) && p.peek.kind == TK_LPAREN) {
+          fail(&p, p.peek.loc, "E0214",
+               "expected ';', found '('; a function is written 'T = name(parameters) { ... }'");
         }
         parse_declarator(&p, &tmp, true);
         d->type = type;

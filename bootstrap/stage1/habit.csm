@@ -1,0 +1,51 @@
+// cesium1: the messages that name the Cesium form of a habit from C and
+// other languages, where the checker would otherwise say only "unknown
+// type" or "unknown name"; as stage0/s0_habit.c. The parser's are in
+// parse.csm. Each reports and ends the program, or returns when the name is
+// not one of them.
+
+u8 = habit_is(uword id, #u8 s) {
+  return name_is(id, s, text_len(s));
+}
+
+// The integer type names of C.
+u8 = habit_is_c_int(uword id) {
+  if (habit_is(id, "int") || habit_is(id, "long") || habit_is(id, "short") || habit_is(id, "char")) {
+    return TRUE;
+  }
+  return habit_is(id, "unsigned") || habit_is(id, "signed") || habit_is(id, "size_t");
+}
+
+// An unknown type at line:col named id.
+void = habit_type(uword id, u64 line, u64 col) {
+  if (habit_is_c_int(id)) {
+    err_begin(line, col, "E0320");
+    err_s("unknown type '");
+    err_name(id);
+    err_s("'; the integer types of S0 are u8, i32, u32, i64, u64 and uword");
+    err_end();
+  }
+  if (habit_is(id, "bool")) {
+    err_begin(line, col, "E0321");
+    err_s("unknown type 'bool'; there is no bool type: a condition is an integer, nonzero is true");
+    err_end();
+  }
+  if (habit_is(id, "float") || habit_is(id, "double")) {
+    err_begin(line, col, "E0322");
+    err_s("unknown type '");
+    err_name(id);
+    err_s("'; S0 has no floating point");
+    err_end();
+  }
+}
+
+// An unknown name at line:col named id.
+void = habit_name(uword id, u64 line, u64 col) {
+  if (habit_is(id, "true") || habit_is(id, "false")) {
+    err_begin(line, col, "E0323");
+    err_s("unknown name '");
+    err_name(id);
+    err_s("'; true and false are not decided for S0: write 1 or 0");
+    err_end();
+  }
+}

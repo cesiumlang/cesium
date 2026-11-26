@@ -185,7 +185,9 @@ static MirType *resolve_type(L *l, const S0TypeSyn *syn) {
     break;
   default:
     if (find_struct(l, syn->name) == NULL) {
-      s0_error(l->diag, syn->loc, "E0301", "unknown type '%s'", syn->name);
+      if (!s0_habit_type(l->diag, syn->loc, syn->name)) {
+        s0_error(l->diag, syn->loc, "E0301", "unknown type '%s'", syn->name);
+      }
       return NULL;
     }
     t = &mir_struct_ref(l->m, syn->name)->type;
@@ -408,7 +410,7 @@ static Place lower_place(L *l, S0Expr *e) {
                e->name);
     } else if (find_func(l, e->name) != NULL) {
       s0_error(l->diag, e->loc, "E0303", "'%s' is a function", e->name);
-    } else {
+    } else if (!s0_habit_name(l->diag, e->loc, e->name)) {
       s0_error(l->diag, e->loc, "E0304", "unknown name '%s'", e->name);
     }
     return p;

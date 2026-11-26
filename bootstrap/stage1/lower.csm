@@ -231,6 +231,7 @@ void = low_place_name(uword e, ~Val p) {
     err_name(id);
     err_s("' is a function");
   } else {
+    habit_name(id, g_nodes[e].line, g_nodes[e].col);
     err_at(e, "E0304");
     err_s("unknown name '");
     err_name(id);

@@ -1,0 +1,11 @@
+// An address is taken with "#", not C's "&".
+// spec: s0.expr
+void = set(~i32 p) {
+  p = 1;
+}
+
+i32 = main(i32 argc, ##u8 argv) {
+  i32 x = 0;
+  set(&x);
+  return x;
+}
