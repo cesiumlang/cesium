@@ -52,6 +52,7 @@ const csmir_sources = [_][]const u8{
     "mir_qbe.c",
     "mir_dwarf.c",
     "mir_codeview.c",
+    "mir_seh.c",
     "cs_platform.c",
     "csmir_api.c",
 };
@@ -92,7 +93,7 @@ pub fn build(b: *std.Build) tests_diff.Error!void {
     tests.add(b, test_step, target, c99.cesium0, c99.csrt, c99.csmir, s1, tool, devkit);
     diagnostics.add(b, test_step, &stage0_sources, &s1.sources);
 
-    const lines_step = b.step("lines", "Build bootstrap/tests/s0/lines.csm into zig-out/bin, for a debugger");
+    const lines_step = b.step("lines", "Build bootstrap/tests/s0/lines.csm and frames.csm into zig-out/bin, for a debugger");
     tests.addLines(b, lines_step, target, c99.cesium0, c99.csrt);
 
     const diff_step = b.step("test-diff", "Compare cesium1 with cesium0 on the generated corpus");

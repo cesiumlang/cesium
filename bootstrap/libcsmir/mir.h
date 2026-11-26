@@ -332,5 +332,8 @@ void mir_codeview_path(CsBuf *out, const char *file);
 /* Appends QBE's assembly with its .file and .loc made CodeView directives,
  * and the .debug$S section of their line tables. */
 void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len);
+/* Appends body, the code of function name from its label, with .seh_proc and
+ * its prologue described in .seh_ directives; .seh_endproc is the caller's. */
+void mir_seh_prologue(CsBuf *out, const char *name, const char *body, size_t len);
 
 #endif

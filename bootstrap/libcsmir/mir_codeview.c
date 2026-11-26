@@ -6,9 +6,11 @@
  * LLVM's CodeView directives (.cv_file, .cv_func_id, .cv_loc,
  * .cv_linetable), from which the devkit's assembler writes .debug$S and the
  * linker the PDB. Each function also gets a procedure record, and the unit
- * an S_COMPILE3, as clang writes them. Source paths are absolute, with
- * backslashes: the linker would make a relative one absolute with forward
- * slashes, which Windows debuggers do not match against a breakpoint's path.
+ * an S_COMPILE3, as clang writes them; each prologue gets unwind data
+ * (mir_seh.c), without which a debugger finds no caller. Source paths are
+ * absolute, with backslashes: the linker would make a relative one absolute
+ * with forward slashes, which Windows debuggers do not match against a
+ * breakpoint's path.
  */
 #include "mir.h"
 
@@ -155,13 +157,20 @@ static void put_tail(CsBuf *out, const CsBuf *names) {
   cs_buf_puts(out, "\t.cv_filechecksums\n\t.cv_stringtable\n");
 }
 
+/* Writes a held prologue, its function's unwind data begun. */
+static void put_held(CsBuf *out, const CsBuf *name, const CsBuf *body) {
+  mir_seh_prologue(out, name->data, body->data == NULL ? "" : body->data, body->len);
+}
+
 void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
   static const char end_fn[] = "/* end function ";
   CsBuf names = {NULL, 0, 0};
   CsBuf loc = {NULL, 0, 0};  /* the last .loc, not yet written */
   CsBuf body = {NULL, 0, 0}; /* a prologue, held */
+  CsBuf fn = {NULL, 0, 0};   /* the held function's name */
   CsBuf *dst = out;
   bool held = false;
+  bool in_proc = false; /* between .seh_proc and .seh_endproc */
   bool in_text = false;
   bool was_directive = false;
   bool has_id = false;
@@ -194,6 +203,8 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
         line[0] != '/') {
       cs_buf_put(out, line, n);
       cs_buf_putc(out, '\n');
+      fn.len = 0;
+      cs_buf_put(&fn, line, text - 1);
       body.len = 0;
       held = true;
       continue;
@@ -208,8 +219,9 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
           cs_buf_printf(out, "\t.cv_loc %" PRIu32 " ", next_id);
           cs_buf_put(out, line + 6, n - 6);
           cs_buf_putc(out, '\n');
-          cs_buf_put(out, body.data == NULL ? "" : body.data, body.len);
+          put_held(out, &fn, &body);
           held = false;
+          in_proc = true;
         }
       }
       /* of several in a row, the last is the line of the code after them */
@@ -223,9 +235,14 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
     if (starts_with(line, text, end_fn) && text >= sizeof end_fn + 3 && memcmp(line + text - 3, " */", 3) == 0) {
       loc.len = 0;
       if (held) {
-        cs_buf_put(out, body.data == NULL ? "" : body.data, body.len);
+        put_held(out, &fn, &body);
         held = false;
+        in_proc = true;
         dst = out;
+      }
+      if (in_proc) {
+        cs_buf_puts(out, "\t.seh_endproc\n");
+        in_proc = false;
       }
       if (has_id) {
         cs_buf_printf(out, ".Lcs_cv_end%" PRIu32 ":\n", next_id);
@@ -245,11 +262,16 @@ void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len) {
     }
   }
   if (held) {
-    cs_buf_put(out, body.data == NULL ? "" : body.data, body.len);
+    put_held(out, &fn, &body);
+    in_proc = true;
+  }
+  if (in_proc) {
+    cs_buf_puts(out, "\t.seh_endproc\n");
   }
   if (next_id != 0) {
     put_tail(out, &names);
   }
+  cs_buf_free(&fn);
   cs_buf_free(&body);
   cs_buf_free(&loc);
   cs_buf_free(&names);
