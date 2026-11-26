@@ -22,7 +22,7 @@
 #define DW_FORM_addr 0x01
 #define DW_FORM_data2 0x05
 #define DW_FORM_data4 0x06
-#define DW_FORM_string 0x08
+#define DW_FORM_strp 0x0e
 #define DW_FORM_sec_offset 0x17
 #define DW_LANG_C99 0x0c
 
@@ -54,48 +54,61 @@ void mir_dwarf_head(CsBuf *out, const MirTarget *t) {
   cs_buf_printf(out, ".text\n%scs_text_start:\n", local_prefix(t));
 }
 
+/* Switches to a debug section; flags are ELF's. */
+static void section(CsBuf *out, const MirTarget *t, const char *name, const char *flags) {
+  if (t->format == MIR_MACHO) {
+    cs_buf_printf(out, ".section __DWARF,__%s,regular,debug\n", name);
+  } else {
+    cs_buf_printf(out, ".section .%s,%s\n", name, flags);
+  }
+}
+
+/* The offset of a label in its section. ELF relocates it, as GCC writes it;
+ * Mach-O debug sections stay in the object, where this unit's come first,
+ * so it is the label's distance from the section's start (none: 0). .set
+ * makes the assembler compute it, with no relocation. */
+static void sec_offset(CsBuf *out, const MirTarget *t, const char *label, const char *start) {
+  const char *p = local_prefix(t);
+  if (t->format != MIR_MACHO) {
+    cs_buf_printf(out, "\t.long %scs_%s\n", p, label);
+  } else if (start == NULL) {
+    cs_buf_puts(out, "\t.long 0\n");
+  } else {
+    cs_buf_printf(out, "\t.set %scs_%s_off, %scs_%s - %scs_%s\n", p, label, p, label, p, start);
+    cs_buf_printf(out, "\t.long %scs_%s_off\n", p, label);
+  }
+}
+
 void mir_dwarf_tail(CsBuf *out, const MirTarget *t, const char *file) {
   const char *p = local_prefix(t);
-  bool macho = t->format == MIR_MACHO;
   cs_buf_printf(out, "/* DWARF compile unit (libcsmir) */\n.text\n%scs_text_end:\n", p);
-  /* ELF: labels at the start of the sections, as GCC writes them; the
-   * assembler puts its line table after the label. Mach-O debug sections
-   * stay in the object, where this unit and its table come first. */
-  if (macho) {
-    cs_buf_puts(out, ".section __DWARF,__debug_abbrev,regular,debug\n");
-  } else {
+  /* the assembler puts its line table after the label */
+  if (t->format != MIR_MACHO) {
     cs_buf_printf(out, ".section .debug_line,\"\",@progbits\n%scs_line:\n", p);
-    cs_buf_printf(out, ".section .debug_abbrev,\"\",@progbits\n%scs_abbrev:\n", p);
   }
+  /* strings as DW_FORM_strp: Zig's Mach-O linker misreads DW_FORM_string */
+  section(out, t, "debug_str", "\"MS\",@progbits,1");
+  cs_buf_printf(out, "%scs_producer:\n\t.asciz \"libcsmir\"\n%scs_name:\n\t.asciz ", p, p);
+  mir_asm_string(out, file);
+  cs_buf_printf(out, "\n%scs_dir:\n\t.asciz \".\"\n", p);
+  section(out, t, "debug_abbrev", "\"\",@progbits");
   /* abbreviation 1: the compile unit, no children, its attributes */
-  cs_buf_printf(out, "\t.byte 1, 0x%02x, 0\n", DW_TAG_compile_unit);
+  cs_buf_printf(out, "%scs_abbrev:\n\t.byte 1, 0x%02x, 0\n", p, DW_TAG_compile_unit);
   cs_buf_printf(out, "\t.byte 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x\n", DW_AT_producer,
-                DW_FORM_string, DW_AT_language, DW_FORM_data2, DW_AT_name, DW_FORM_string, DW_AT_comp_dir,
-                DW_FORM_string);
+                DW_FORM_strp, DW_AT_language, DW_FORM_data2, DW_AT_name, DW_FORM_strp, DW_AT_comp_dir, DW_FORM_strp);
   cs_buf_printf(out, "\t.byte 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0, 0\n", DW_AT_stmt_list,
                 DW_FORM_sec_offset, DW_AT_low_pc, DW_FORM_addr, DW_AT_high_pc, DW_FORM_data4);
   cs_buf_puts(out, "\t.byte 0\n");
-  cs_buf_puts(out, macho ? ".section __DWARF,__debug_info,regular,debug\n" : ".section .debug_info,\"\",@progbits\n");
-  cs_buf_printf(out, "\t.long %scs_info_end - %scs_info_start\n%scs_info_start:\n", p, p, p);
-  cs_buf_puts(out, "\t.short 4\n");
-  if (macho) {
-    cs_buf_puts(out, "\t.long 0\n");
-  } else {
-    cs_buf_printf(out, "\t.long %scs_abbrev\n", p);
-  }
+  section(out, t, "debug_info", "\"\",@progbits");
+  cs_buf_printf(out, "\t.long %scs_info_end - %scs_info_start\n%scs_info_start:\n\t.short 4\n", p, p, p);
+  sec_offset(out, t, "abbrev", NULL);
   cs_buf_printf(out, "\t.byte %d\n\t.byte 1\n", (int)t->ptr_size);
-  cs_buf_puts(out, "\t.asciz \"libcsmir\"\n");
+  sec_offset(out, t, "producer", "producer");
   cs_buf_printf(out, "\t.short 0x%02x\n", DW_LANG_C99);
-  cs_buf_puts(out, "\t.asciz ");
-  mir_asm_string(out, file);
-  cs_buf_puts(out, "\n\t.asciz \".\"\n");
-  if (macho) {
-    cs_buf_puts(out, "\t.long 0\n");
-  } else {
-    cs_buf_printf(out, "\t.long %scs_line\n", p);
-  }
+  sec_offset(out, t, "name", "producer");
+  sec_offset(out, t, "dir", "producer");
+  sec_offset(out, t, "line", NULL);
   cs_buf_printf(out, "\t%s %scs_text_start\n", t->ptr_size == 8 ? ".quad" : ".long", p);
-  /* .set makes Mach-O's assembler compute the length, with no relocation */
   cs_buf_printf(out, "\t.set %scs_text_size, %scs_text_end - %scs_text_start\n", p, p, p);
   cs_buf_printf(out, "\t.long %scs_text_size\n%scs_info_end:\n", p, p);
 }

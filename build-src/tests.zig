@@ -241,6 +241,7 @@ const lines = struct {
         "\nLcs_text_start:",
         "\nLcs_text_end:",
         ".section __DWARF,__debug_info,regular,debug",
+        ".section __DWARF,__debug_str,regular,debug",
         "\t.quad Lcs_text_start",
     };
     const cross = [_]struct { triple: []const u8, ofmt: std.Target.ObjectFormat }{
