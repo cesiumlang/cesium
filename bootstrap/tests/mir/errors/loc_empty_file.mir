@@ -1,0 +1,6 @@
+cesium-mir 0
+
+func @f() -> void {
+  loc "" 1:1
+  return
+}

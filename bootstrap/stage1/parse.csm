@@ -53,6 +53,7 @@ const uword MAX_NESTING = 128;
 
 struct Node {
   uword kind;
+  uword infile;    // the file named on the command line (loc.csm), 0 for none
   u64 line;
   u64 col;
   uword op;        // EX_BINARY; ST_DECL, ST_ASSIGN, DK_GLOBAL, DK_CONST: the
@@ -101,6 +102,7 @@ uword = node_new(uword kind, u64 line, u64 col) {
   }
   g_nnodes = g_nnodes + 1;
   g_nodes[g_nnodes].kind = kind;
+  g_nodes[g_nnodes].infile = g_file;
   g_nodes[g_nnodes].line = line;
   g_nodes[g_nnodes].col = col;
   return g_nnodes;
@@ -112,6 +114,7 @@ uword = node_here(uword kind) {
 }
 
 void = err_at(uword n, #u8 code) {
+  g_err_file = g_nodes[n].infile;
   err_begin(g_nodes[n].line, g_nodes[n].col, code);
 }
 
