@@ -249,7 +249,8 @@ const lines = struct {
     const coff = [_][]const u8{
         ".cv_file 1 \"",
         "\\\\bootstrap\\\\tests\\\\s0\\\\" ++ name ++ ".csm\"",
-        "\t.cv_func_id 0",
+        // the entry has the line of the first statement, for stepping in
+        "main:\n\t.cv_func_id 0\n\t.cv_loc 0 1 7 3\n\tendbr64",
         "\t.cv_loc 0 1 12 3",
         ".Lcs_cv_end0:",
         ".section .debug$S,\"dr\"",
