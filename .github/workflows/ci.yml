@@ -79,7 +79,7 @@ jobs:
           grep -q 'stop reason = breakpoint 1' lldb-break.txt
 
       # CodeView (cesiumlang/vscode-cesium#47): cdb, the console form of
-      # WinDbg, reads the PDB with the engine of Visual Studio's debugger
+      # WinDbg, reads the PDB as Visual Studio's debugger does
       - name: cdb finds the line of a trap
         if: matrix.host == 'x86_64-windows-gnu'
         run: |
