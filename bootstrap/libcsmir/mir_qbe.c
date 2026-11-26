@@ -489,10 +489,18 @@ static const char *first_loc_file(const MirStmt *s) {
   return NULL;
 }
 
-/* QBE passes the string to the assembler as written. */
+/* QBE passes the string to the assembler as written; CodeView's is
+ * absolute (mir_codeview.c). */
 static void gen_dbgfile(Q *q, const char *file) {
+  CsBuf path = {NULL, 0, 0};
   emit(q, "dbgfile ");
-  mir_asm_string(q->out, file);
+  if (mir_codeview_target(q->t)) {
+    mir_codeview_path(&path, file);
+    mir_asm_string(q->out, path.data);
+    cs_buf_free(&path);
+  } else {
+    mir_asm_string(q->out, file);
+  }
   emit(q, "\n");
 }
 

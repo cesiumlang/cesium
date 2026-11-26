@@ -192,7 +192,7 @@ pub fn add(
     }
 
     // line information: both compilers' assembly names the file and the line,
-    // with a DWARF compile unit where the host's objects get one
+    // with a DWARF compile unit, or CodeView for COFF
     for ([_]*std.Build.Step.Compile{ cesium0, stage1.cesium1 }) |compiler| {
         const compile = runFromRoot(b, compiler, lines.name);
         compile.addArg("-o");
@@ -201,7 +201,7 @@ pub fn add(
         compile.expectExitCode(0);
         step.dependOn(&b.addCheckFile(asm_out, .{ .expected_matches = lines.forFormat(target.result.ofmt) }).step);
     }
-    // and for an ELF and a Mach-O target on every host
+    // and for an ELF, a Mach-O and a COFF target on every host
     for (lines.cross) |cross| {
         const compile = runFromRoot(b, cesium0, lines.name);
         compile.addArgs(&.{ "--target", cross.triple, "-o" });
@@ -244,18 +244,32 @@ const lines = struct {
         ".section __DWARF,__debug_str,regular,debug",
         "\t.quad Lcs_text_start",
     };
+    /// CodeView instead (bootstrap/libcsmir/mir_codeview.c): the path absolute,
+    /// with backslashes, escaped as an assembler string.
+    const coff = [_][]const u8{
+        ".cv_file 1 \"",
+        "\\\\bootstrap\\\\tests\\\\s0\\\\" ++ name ++ ".csm\"",
+        "\t.cv_func_id 0",
+        "\t.cv_loc 0 1 12 3",
+        ".Lcs_cv_end0:",
+        ".section .debug$S,\"dr\"",
+        "\t.short 0x1110",
+        "\t.secrel32 main",
+        "\t.cv_linetable 0, main, .Lcs_cv_end0",
+        "\t.cv_filechecksums",
+    };
     const cross = [_]struct { triple: []const u8, ofmt: std.Target.ObjectFormat }{
         .{ .triple = "x86_64-linux", .ofmt = .elf },
         .{ .triple = "aarch64-macos", .ofmt = .macho },
+        .{ .triple = "x86_64-windows", .ofmt = .coff },
     };
 
-    /// What the assembly for objects of the format must have: COFF gets no
-    /// compile unit.
+    /// What the assembly for objects of the format must have.
     fn forFormat(ofmt: std.Target.ObjectFormat) []const []const u8 {
         return switch (ofmt) {
             .elf => &elf,
             .macho => &macho,
-            else => &matches,
+            else => &coff,
         };
     }
 };

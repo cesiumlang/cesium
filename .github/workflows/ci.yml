@@ -78,6 +78,24 @@ jobs:
           lldb --batch -o "breakpoint set --file $PWD/bootstrap/tests/s0/lines.csm --line 12" -o run -o bt zig-out/bin/lines 2>&1 | tee lldb-break.txt
           grep -q 'stop reason = breakpoint 1' lldb-break.txt
 
+      # CodeView (cesiumlang/vscode-cesium#47): cdb, the console form of
+      # WinDbg, reads the PDB with the engine of Visual Studio's debugger
+      - name: cdb finds the line of a trap
+        if: matrix.host == 'x86_64-windows-gnu'
+        run: |
+          .devkit/zig/zig build lines -Dtarget="${{ matrix.host }}"
+          cdb="/c/Program Files (x86)/Windows Kits/10/Debuggers/x64/cdb.exe"
+          exe=$(cygpath -w "$PWD/zig-out/bin/lines.exe")
+          "$cdb" -lines -c "g; kn 1; q" "$exe" 2>&1 | tee cdb.txt
+          grep -q 'lines!main+.*lines\.csm @ 12' cdb.txt
+          # a breakpoint by absolute path, as an editor sets it, and a step
+          # by source line (line 12 has three ranges, which cdb calls ambiguous)
+          src=$(cygpath -w "$PWD/bootstrap/tests/s0/lines.csm")
+          "$cdb" -lines -c "l+t; bp \`$src:10\`; g; kn 1; p; kn 1; q" "$exe" 2>&1 | tee cdb-break.txt
+          grep -q 'Breakpoint 0 hit' cdb-break.txt
+          grep -q 'lines!main+.*lines\.csm @ 10' cdb-break.txt
+          grep -q 'lines!main+.*lines\.csm @ 12' cdb-break.txt
+
       # the generated corpus (bootstrap/tests/diff), on one host only
       - name: Compare cesium1 with cesium0 on the generated corpus
         if: matrix.host == 'x86_64-linux-musl'
