@@ -121,7 +121,9 @@ sanitize () { # <compiler>
     cmp "$dir/$t.mir" "$dir/$t.again.mir"
     n=$((n + 3))
   done
-  cmp "$dir/tokens.mir" "$B/tests/s0/tokens.mir"
+  # the golden MIR names its file as given: relative to the repository root
+  (cd "$ROOT" && "$c0" --emit-mir -o "$dir/tokens.golden.mir" bootstrap/tests/s0/tokens.csm)
+  cmp "$dir/tokens.golden.mir" "$B/tests/s0/tokens.mir"
   for t in "$B"/tests/s0/errors/*.csm; do
     expect 1 "s0/errors/$(basename "$t")" "$c0" --emit-mir -o "$dir/err.mir" "$t" "$B/tests/s0/lib.csm"
     n=$((n + 1))
