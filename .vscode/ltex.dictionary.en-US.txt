@@ -150,3 +150,5 @@ UQUADWORD
 breg
 ndiff
 vsrc
+zcsls
+getpid
