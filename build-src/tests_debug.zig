@@ -153,6 +153,9 @@ const vars = struct {
         // the if block of scale is a scope
         ".Lcs_sb0_1:\n\tmovb $0, .Lcs_o0_1(%rip)",
         ".Lcs_se0_1:",
+        // the trap of the division, out of the scope, has a block of its own
+        ".Lcs_tb0_0:\n\tmovb $0, .Lcs_t0_1(%rip)\n\tud2\n.Lcs_te0_0:",
+        "\t.long .Lcs_te0_0 - .Lcs_tb0_0",
         // S_REGREL32 at rsp + 28, a pointer to Pair, and S_BLOCK32
         "\t.short 0x1111\n\t.long 28\n\t.long 0x1001\n\t.short 335\n\t.asciz \"p\"",
         "\t.asciz \"inner\"",
@@ -165,6 +168,8 @@ const vars = struct {
         "scale:\n.Lcs_fb0:",
         ".Lcs_sb0_1:\n\tmovb $0, .Lcs_o0_1(%rip)",
         ".Lcs_se0_1:",
+        ".Lcs_tb0_0:\n\tmovb $0, .Lcs_t0_1(%rip)\n\tud2\n.Lcs_te0_0:",
+        "\t.quad .Lcs_tb0_0\n\t.set .Lcs_d2, .Lcs_te0_0 - .Lcs_tb0_0",
         ".Lcs_fe0:\n/* end function scale */",
         "\t.asciz \"inner\"",
         "\t.quad .Lcs_fb0\n\t.set .Lcs_d0, .Lcs_fe0 - .Lcs_fb0",
@@ -174,6 +179,10 @@ const vars = struct {
     const macho = [_][]const u8{
         "_scale:\nLcs_fb0:",
         "Lcs_sb0_1:\n\tadrp",
+        "Lcs_tb0_0:\n\tadrp\tx1, _.Lcs_t0_1@page\n\tadd\tx1, x1, _.Lcs_t0_1@pageoff\n",
+        "\tbrk\t#1000\nLcs_te0_0:",
+        // a function's size in the debug map is right only with it
+        ".subsections_via_symbols\n",
         "\t.asciz \"inner\"",
         "\t.set Lcs_d0, Lcs_fe0 - Lcs_fb0",
         // on AArch64, locals are at offsets from x29: DW_OP_breg29

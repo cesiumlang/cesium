@@ -90,6 +90,14 @@ void mir_vars_init(MirVars *v, const MirModule *m, const MirTarget *t) {
 }
 
 void mir_vars_free(MirVars *v) {
+  size_t i;
+  for (i = 0; i < v->funcs.len / sizeof(MirVarsFunc *); i++) {
+    MirVarsFunc *c;
+    memcpy(&c, v->funcs.data + i * sizeof(MirVarsFunc *), sizeof(MirVarsFunc *));
+    if (c != NULL) {
+      cs_buf_free(&c->traps);
+    }
+  }
   cs_buf_free(&v->funcs);
   cs_arena_free(&v->arena);
 }
@@ -124,6 +132,15 @@ void mir_vars_begin(MirVars *v, const char *label) {
   v->cur = c;
 }
 
+/* The end of the last trap's block, once it was opened. */
+static void close_trap(MirVars *v, CsBuf *dst) {
+  MirVarsFunc *c = v->cur;
+  if (c != NULL && c->trap_state != 0) {
+    cs_buf_printf(dst, "%scs_te%" PRIu32 "_%d:\n", v->prefix, c->id, (int)mir_vars_ntraps(c) - 1);
+    c->trap_state = 0;
+  }
+}
+
 void mir_vars_line(MirVars *v, CsBuf *dst, const char *line, size_t len) {
   MirVarsFunc *c = v->cur;
   int k = 0;
@@ -131,11 +148,25 @@ void mir_vars_line(MirVars *v, CsBuf *dst, const char *line, size_t len) {
   if (c == NULL) {
     return;
   }
+  if (c->trap_state == 2) {
+    close_trap(v, dst);
+  } else if (c->trap_state == 1 && mir_asm_is_trap(line, len)) {
+    c->trap_state = 2;
+  }
   kind = mir_debug_scan_line(&v->scan, line, len, &k);
   if (kind == 0 || k < 1 || (size_t)k >= c->d.nscopes) {
     return;
   }
-  if (kind == 'o' && !c->opened[k]) {
+  if (kind == 't') {
+    /* AArch64 names the marker in two instructions */
+    if (c->trap_state == 1) {
+      return;
+    }
+    close_trap(v, dst);
+    cs_buf_printf(dst, "%scs_tb%" PRIu32 "_%d:\n", v->prefix, c->id, (int)mir_vars_ntraps(c));
+    cs_buf_put(&c->traps, (const char *)&k, sizeof k);
+    c->trap_state = 1;
+  } else if (kind == 'o' && !c->opened[k]) {
     cs_buf_printf(dst, "%scs_sb%" PRIu32 "_%d:\n", v->prefix, c->id, k);
     c->opened[k] = true;
   } else if (kind == 'c' && c->opened[k] && !c->closed[k]) {
@@ -147,6 +178,7 @@ void mir_vars_line(MirVars *v, CsBuf *dst, const char *line, size_t len) {
 MirVarsFunc *mir_vars_end(MirVars *v, CsBuf *out, bool keep) {
   MirVarsFunc *c = v->cur;
   size_t k;
+  close_trap(v, out);
   for (k = 1; c != NULL && k < c->d.nscopes; k++) {
     if (c->opened[k] && !c->closed[k]) {
       cs_buf_printf(out, "%scs_se%" PRIu32 "_%d:\n", v->prefix, c->id, (int)k);
@@ -155,9 +187,31 @@ MirVarsFunc *mir_vars_end(MirVars *v, CsBuf *out, bool keep) {
   }
   if (keep) {
     cs_buf_put(&v->funcs, (const char *)&c, sizeof(MirVarsFunc *));
+  } else if (c != NULL) {
+    cs_buf_free(&c->traps);
   }
   v->cur = NULL;
   return c;
+}
+
+size_t mir_vars_ntraps(const MirVarsFunc *f) {
+  return f->traps.len / sizeof(int);
+}
+
+size_t mir_vars_chain(const MirVarsFunc *f, size_t j, int *chain) {
+  int k;
+  size_t n = 0;
+  size_t i;
+  memcpy(&k, f->traps.data + j * sizeof k, sizeof k);
+  for (; k > 0; k = f->d.parent[k]) {
+    chain[n++] = k;
+  }
+  for (i = 0; i < n / 2; i++) {
+    int x = chain[i];
+    chain[i] = chain[n - 1 - i];
+    chain[n - 1 - i] = x;
+  }
+  return n;
 }
 
 void mir_debug_marker(CsBuf *out, char kind, int func, int n) {
@@ -167,7 +221,7 @@ void mir_debug_marker(CsBuf *out, char kind, int func, int n) {
 char mir_debug_find_marker(const char *line, size_t len, int *n) {
   size_t i;
   for (i = 0; i + 6 < len; i++) {
-    if (memcmp(line + i, "Lcs_", 4) == 0 && (line[i + 4] == 'v' || line[i + 4] == 'o' || line[i + 4] == 'c') &&
+    if (memcmp(line + i, "Lcs_", 4) == 0 && (line[i + 4] == 'v' || line[i + 4] == 'o' || line[i + 4] == 'c' || line[i + 4] == 't') &&
         line[i + 5] >= '0' && line[i + 5] <= '9') {
       char kind = line[i + 4];
       size_t j = i + 5;

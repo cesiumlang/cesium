@@ -203,7 +203,7 @@ char mir_debug_scan_line(MirDebugScan *s, const char *line, size_t len, int *n) 
   int marker = 0;
   char kind = mir_debug_find_marker(line, len, &marker);
   split(&in, line, len);
-  if (kind == 'o' || kind == 'c') {
+  if (kind == 'o' || kind == 'c' || kind == 't') {
     *n = marker;
     return kind;
   }
@@ -234,4 +234,10 @@ char mir_debug_scan_line(MirDebugScan *s, const char *line, size_t len, int *n) 
     }
   }
   return 0;
+}
+
+bool mir_asm_is_trap(const char *line, size_t len) {
+  Insn in;
+  split(&in, line, len);
+  return op_is(&in, "ud2") || op_is(&in, "brk");
 }

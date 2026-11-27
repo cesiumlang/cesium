@@ -205,12 +205,9 @@ static void put_location(Dw *w, const MirDebugVar *v) {
   cs_buf_putc(&w->x->info, '\n');
 }
 
-/* The locals of scope k, then its nested scopes. */
-static void put_scope(Dw *w, const MirVarsFunc *f, int k) {
-  CsBuf a = {NULL, 0, 0};
-  CsBuf b = {NULL, 0, 0};
+/* The locals of scope k. */
+static void put_locals(Dw *w, const MirVarsFunc *f, int k) {
   size_t i;
-  size_t j;
   for (i = 0; i < f->d.nlocals; i++) {
     const MirLocal *l = f->d.locals[i];
     if (f->d.scope[i] != k || f->vars[i].base == MIR_BASE_NONE) {
@@ -221,22 +218,55 @@ static void put_scope(Dw *w, const MirVarsFunc *f, int k) {
     put_type_ref(w, l->type);
     put_location(w, &f->vars[i]);
   }
+}
+
+/* A DW_TAG_lexical_block from PREFIXcs_{b}ID_J to PREFIXcs_{e}ID_J, without
+ * the end of its children. */
+static void put_block(Dw *w, const MirVarsFunc *f, const char *b, const char *e, int j) {
+  CsBuf lo = {NULL, 0, 0};
+  CsBuf hi = {NULL, 0, 0};
+  cs_buf_printf(&hi, "%scs_%s%" PRIu32 "_%d", w->p, e, f->id, j);
+  cs_buf_printf(&lo, "%scs_%s%" PRIu32 "_%d", w->p, b, f->id, j);
+  cs_buf_printf(&w->x->info, "\t.byte %d\n", AB_BLOCK);
+  put_addr(w, lo.data);
+  put_diff(w, hi.data, lo.data);
+  cs_buf_free(&lo);
+  cs_buf_free(&hi);
+}
+
+/* The locals of scope k, then its nested scopes. */
+static void put_scope(Dw *w, const MirVarsFunc *f, int k) {
+  size_t j;
+  put_locals(w, f, k);
   for (j = 1; j < f->d.nscopes; j++) {
     if (f->d.parent[j] != k || !f->opened[j]) {
       continue;
     }
-    a.len = 0;
-    b.len = 0;
-    cs_buf_printf(&a, "%scs_se%" PRIu32 "_%d", w->p, f->id, (int)j);
-    cs_buf_printf(&b, "%scs_sb%" PRIu32 "_%d", w->p, f->id, (int)j);
-    cs_buf_printf(&w->x->info, "\t.byte %d\n", AB_BLOCK);
-    put_addr(w, b.data);
-    put_diff(w, a.data, b.data);
+    put_block(w, f, "sb", "se", (int)j);
     put_scope(w, f, (int)j);
     cs_buf_puts(&w->x->info, "\t.byte 0\n");
   }
-  cs_buf_free(&a);
-  cs_buf_free(&b);
+}
+
+/* Each trap's block, out of its scopes: their locals again, nested. */
+static void put_traps(Dw *w, const MirVarsFunc *f) {
+  CsArena a;
+  int *chain;
+  size_t j;
+  memset(&a, 0, sizeof a);
+  chain = cs_arena_new(&a, cs_mul_size(f->d.nscopes, sizeof *chain));
+  for (j = 0; j < mir_vars_ntraps(f); j++) {
+    size_t len = mir_vars_chain(f, j, chain);
+    size_t i;
+    for (i = 0; i < len; i++) {
+      put_block(w, f, "tb", "te", (int)j);
+      put_locals(w, f, chain[i]);
+    }
+    for (i = 0; i < len; i++) {
+      cs_buf_puts(&w->x->info, "\t.byte 0\n");
+    }
+  }
+  cs_arena_free(&a);
 }
 
 static void put_function(Dw *w, const MirVarsFunc *f) {
@@ -249,6 +279,7 @@ static void put_function(Dw *w, const MirVarsFunc *f) {
   put_addr(w, b.data);
   put_diff(w, a.data, b.data);
   put_scope(w, f, 0);
+  put_traps(w, f);
   cs_buf_puts(&w->x->info, "\t.byte 0\n");
   cs_buf_free(&a);
   cs_buf_free(&b);
