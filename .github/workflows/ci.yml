@@ -8,6 +8,18 @@ name: CI
 # is checked as a whole by the standing pull request from dev to main, whose
 # run each merge into dev restarts. To check one branch alone, start the
 # workflow by hand: `gh workflow run ci.yml --ref BRANCH`.
+#
+# Versions (cesiumlang/cesium#165): build.zig.zon holds the version of the
+# next release, and every host's install tree is archived on every run. A
+# push to main whose version is not tagged yet, and whose milestones
+# (`v<version>`, here and in cesiumlang/grammar and cesiumlang/cspell-cesium,
+# versioned in step) have no open issue, is tagged once built and tested and
+# published as a GitHub pre-release with the archives; main is then merged
+# back into dev, where build.zig.zon gets the next patch version
+# (version.sh, which also checks every place that states it on every run).
+# For a new minor version, run `bash .github/workflows/version.sh set X.Y.Z`
+# on dev. A push to main that is tagged already, or whose milestone is still
+# open, is tested but not released.
 
 on:
   push:
@@ -16,6 +28,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      sign:
+        description: Sign the Windows and macOS programs, as a release does
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,8 +46,97 @@ defaults:
     shell: bash
 
 jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      release: ${{ steps.ver.outputs.release }}
+      sign: ${{ steps.ver.outputs.sign }}
+      sha: ${{ steps.ver.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # A pull request into main must carry an unreleased version, newer
+      # than the latest tag
+      - name: Work out the version
+        id: ver
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BASE_REF: ${{ github.base_ref }}
+          GH_TOKEN: ${{ github.token }}
+          INPUT_SIGN: ${{ inputs.sign }}
+          SIGN_WINDOWS: ${{ vars.SIGN_AZURE_CLIENT_ID }}
+          SIGN_MACOS: ${{ vars.APPLE_SIGNING }}
+        run: |
+          # every place that states the version agrees (version.sh lists them)
+          if ! version=$(bash .github/workflows/version.sh); then
+            echo "::error file=build.zig.zon::the places that state the version disagree; see the log, and set them all with version.sh set"
+            exit 1
+          fi
+          tagged() { git rev-parse -q --verify "refs/tags/v$1" >/dev/null; }
+          latest=$(git tag --list 'v[0-9]*' --sort=-version:refname | head -1)
+          latest=${latest#v}
+          if [ "$EVENT" = pull_request ] && [ "$BASE_REF" = main ] && [ -n "$latest" ]; then
+            newest=$(printf '%s\n%s\n' "$version" "$latest" | sort -V | tail -1)
+            if [ "$version" = "$latest" ] || [ "$newest" != "$version" ]; then
+              echo "::error file=build.zig.zon::.version is $version, but v$latest is already released. Set a newer version."
+              exit 1
+            fi
+          fi
+
+          release=false
+          if [ "$EVENT" = push ] && [ "$REF" = refs/heads/main ]; then
+            git fetch -q origin main
+            # the milestone of the version: a release waits until it has no
+            # open issue, here and in grammar and cspell-cesium, whose versions
+            # are kept in step with this one; issues only, not the pull
+            # request that releases it
+            open=0
+            for repo in "$GITHUB_REPOSITORY" cesiumlang/grammar cesiumlang/cspell-cesium; do
+              m=$(gh api "repos/$repo/milestones?state=all&per_page=100" --jq ".[] | select(.title == \"v$version\") | .number")
+              [ -n "$m" ] || continue
+              n=$(gh api "repos/$repo/issues?milestone=$m&state=open&per_page=100" --jq '[.[] | select(.pull_request | not)] | length')
+              [ "$n" = 0 ] || { echo "$repo: $n open issues in v$version"; open=$((open + n)); }
+            done
+            if [ "$(git rev-parse origin/main)" != "$(git rev-parse HEAD)" ]; then
+              # main moved on: the run for the newer commit releases it
+              echo "main has moved past this commit; testing only" | tee -a "$GITHUB_STEP_SUMMARY"
+            elif tagged "$version"; then
+              echo "::warning::main holds v$version, which is already released; testing only. Set a newer version on dev and merge it."
+            elif [ "$open" != 0 ]; then
+              echo "::warning::the milestones v$version have $open open issues; testing only. Merge again once they have none."
+            else
+              release=true
+            fi
+          fi
+          # signing (#123): for a release, or a run started by hand that asks;
+          # each platform is skipped while it is not configured
+          sign=false
+          if [ "$release" = true ] || { [ "$EVENT" = workflow_dispatch ] && [ "$INPUT_SIGN" = true ]; }; then
+            sign=true
+            [ -n "$SIGN_WINDOWS" ] || echo "::warning::Windows signing is not configured (SIGN_AZURE_CLIENT_ID); the .exe files stay unsigned"
+            [ "$SIGN_MACOS" = true ] || echo "::warning::macOS signing is not configured (APPLE_SIGNING); the macOS programs stay unsigned"
+          fi
+          sha=$(git rev-parse HEAD)
+          {
+            echo "version=$version"
+            echo "release=$release"
+            echo "sign=$sign"
+            echo "sha=$sha"
+          } >> "$GITHUB_OUTPUT"
+          echo "version $version at $sha; release: $release; sign: $sign" | tee -a "$GITHUB_STEP_SUMMARY"
+
   stage0:
     name: Stage 0 on ${{ matrix.host }}
+    needs: version
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     strategy:
@@ -51,6 +157,35 @@ jobs:
 
       - name: Build and test stage 0
         run: .devkit/zig/zig build install test -Dtarget="${{ matrix.host }}" --summary all
+
+      # the install tree as the release holds it (cesiumlang/cesium#165):
+      # cesium0 and cesium1, libcsir and libcsrt, the readme and the license;
+      # a tar keeps the execute bits
+      - name: Stage the install tree
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          HOST: ${{ matrix.host }}
+        run: |
+          name="cesium-v$VERSION-$HOST"
+          mkdir -p "tree/$name"
+          cp -R zig-out/. "tree/$name/"
+          cp readme.md LICENSE "tree/$name/"
+          find "tree/$name" -type f | sort
+          tar -C tree -cf "tree-$HOST.tar" "$name"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tree-${{ matrix.host }}
+          path: tree-${{ matrix.host }}.tar
+          if-no-files-found: error
+
+      # the Windows programs to sign, as a tree (sign-windows.yml of cesiumlang/.github)
+      - uses: actions/upload-artifact@v7
+        if: matrix.host == 'x86_64-windows-gnu'
+        with:
+          name: windows-tree
+          path: tree/
+          if-no-files-found: error
 
       # the DWARF compile unit (cesiumlang/cesium#78): lines.csm traps at 12
       - name: gdb finds the line of a trap
@@ -258,10 +393,319 @@ jobs:
       - name: Coverage in the job summary
         run: .skein-bin/bin/skein coverage --markdown >> "$GITHUB_STEP_SUMMARY"
 
+  # Signing (#123): only for a release and a run started by hand that asks
+  # (signings are limited per month); each job is skipped while unconfigured,
+  # and a failed signing fails the run.
+  sign-windows:
+    name: Sign the Windows programs
+    needs: [version, stage0]
+    if: ${{ !cancelled() && needs.stage0.result == 'success' && needs.version.outputs.sign == 'true' && vars.SIGN_AZURE_CLIENT_ID != '' }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: cesiumlang/.github/.github/workflows/sign-windows.yml@main
+    with:
+      artifact: windows-tree
+      signed-artifact: windows-tree-signed
+      count: 2
+      # the signed compilers compile a program, outside the tree that ships
+      run: >-
+        t=$(mktemp -d) && printf 'i32 = main(i32 argc, ##u8 argv) {\n    return 0;\n}\n' > "$t/t.csm"
+        && cesium-v*/bin/cesium0.exe -o "$t/t0.s" "$t/t.csm" && cesium-v*/bin/cesium1.exe -o "$t/t1.s" "$t/t.csm"
+      client-id: ${{ vars.SIGN_AZURE_CLIENT_ID }}
+      tenant-id: ${{ vars.SIGN_AZURE_TENANT_ID }}
+      subscription-id: ${{ vars.SIGN_AZURE_SUBSCRIPTION_ID }}
+      endpoint: ${{ vars.SIGN_ENDPOINT }}
+      account: ${{ vars.SIGN_ACCOUNT }}
+      profile: ${{ vars.SIGN_PROFILE }}
+
+  # cesium0 and cesium1 of both macOS hosts, with the Developer ID (hardened
+  # runtime, secure timestamp), notarized; no entitlements until a program
+  # debugs (#123)
+  sign-macos:
+    name: Sign and notarize the macOS programs
+    needs: [version, stage0]
+    if: ${{ !cancelled() && needs.stage0.result == 'success' && needs.version.outputs.sign == 'true' && vars.APPLE_SIGNING == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+      APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+      APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: tree-*-macos-none
+          merge-multiple: true
+          path: unsigned
+
+      - name: Unpack the macOS trees
+        run: |
+          mkdir pkg
+          for t in unsigned/*.tar; do tar -C pkg -xf "$t"; done
+          ls pkg
+
+      - name: Import the Developer ID certificate
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          pass=$(uuidgen)
+          echo "$APPLE_DEVELOPER_ID_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$pass" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$pass" "$keychain"
+          security import "$RUNNER_TEMP/cert.p12" -P "$APPLE_DEVELOPER_ID_P12_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$pass" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          rm "$RUNNER_TEMP/cert.p12"
+          security find-identity -v -p codesigning "$keychain"
+
+      - name: Sign
+        run: |
+          identity=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)
+          [ -n "$identity" ] || { echo "::error::no Developer ID Application identity"; exit 1; }
+          for exe in pkg/*/bin/cesium0 pkg/*/bin/cesium1; do
+            codesign --force --options runtime --timestamp --sign "$identity" "$exe"
+            codesign --verify --strict --verbose=2 "$exe"
+          done
+
+      # A bare executable cannot be stapled: Gatekeeper looks the ticket up
+      # online. notarytool takes a zip.
+      - name: Notarize
+        run: |
+          echo "$APPLE_NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          auth=(--key "$RUNNER_TEMP/notary.p8" --key-id "$APPLE_NOTARY_KEY_ID" --issuer "$APPLE_NOTARY_ISSUER_ID")
+          ids=()
+          for dir in pkg/*/; do
+            name=$(basename "$dir")
+            ditto -c -k --keepParent "$dir/bin" "$RUNNER_TEMP/$name.zip"
+            id=$(xcrun notarytool submit "$RUNNER_TEMP/$name.zip" --no-wait --output-format json "${auth[@]}" | jq -r .id)
+            echo "$name: submission $id"
+            ids+=("$id")
+          done
+          failed=0
+          for id in "${ids[@]}"; do
+            xcrun notarytool wait "$id" --timeout 90m --output-format json "${auth[@]}" > "$RUNNER_TEMP/result.json" || true
+            status=$(jq -r '.status // "no answer"' "$RUNNER_TEMP/result.json")
+            echo "submission $id: $status"
+            if [ "$status" != Accepted ]; then
+              xcrun notarytool log "$id" "${auth[@]}" || true
+              failed=1
+            fi
+          done
+          rm "$RUNNER_TEMP/notary.p8"
+          exit "$failed"
+
+      - name: The signed compilers run
+        run: |
+          t=$(mktemp -d)
+          printf 'i32 = main(i32 argc, ##u8 argv) {\n    return 0;\n}\n' > "$t/t.csm"
+          for exe in pkg/*/bin/cesium0 pkg/*/bin/cesium1; do
+            codesign -dv --verbose=2 "$exe" 2>&1 | grep -E "Authority=Developer|flags|Timestamp"
+          done
+          for c in cesium0 cesium1; do
+            pkg/cesium-v*-aarch64-macos-none/bin/$c -o "$t/$c.s" "$t/t.csm"
+            arch -x86_64 pkg/cesium-v*-x86_64-macos-none/bin/$c -o "$t/$c-x86.s" "$t/t.csm" || echo "::warning::the x86_64 $c did not run here (Rosetta?)"
+          done
+
+      - name: Stage the signed trees
+        run: tar -C pkg -cf signed-macos.tar .
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: signed-macos
+          path: signed-macos.tar
+          if-no-files-found: error
+
+  # Universal cesium0, cesium1, libcsir and libcsrt in a signed, notarized and
+  # stapled installer package (Developer ID Installer), installed into
+  # /usr/local; skipped while the variable APPLE_PKG is not true
+  pkg-macos:
+    name: macOS installer package
+    needs: [version, sign-macos]
+    if: ${{ !cancelled() && needs.sign-macos.result == 'success' && vars.APPLE_PKG == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+      APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+      APPLE_INSTALLER_P12: ${{ secrets.APPLE_INSTALLER_P12 }}
+      APPLE_INSTALLER_P12_PASSWORD: ${{ secrets.APPLE_INSTALLER_P12_PASSWORD }}
+      APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: signed-macos
+          path: signed
+
+      - name: Import the certificates
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          pass=$(uuidgen)
+          security create-keychain -p "$pass" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$pass" "$keychain"
+          for kind in DEVELOPER_ID INSTALLER; do
+            p12="APPLE_${kind}_P12"
+            pw="APPLE_${kind}_P12_PASSWORD"
+            echo "${!p12}" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+            security import "$RUNNER_TEMP/cert.p12" -P "${!pw}" -A -t cert -f pkcs12 -k "$keychain"
+            rm "$RUNNER_TEMP/cert.p12"
+          done
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$pass" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          security find-identity -v
+
+      # lipo of the two signed trees; the programs are signed again
+      - name: Build the universal tree and the installer
+        run: |
+          app=$(security find-identity -v | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)
+          inst=$(security find-identity -v | sed -n 's/.*"\(Developer ID Installer:.*\)"/\1/p' | head -1)
+          [ -n "$app" ] && [ -n "$inst" ] || { echo "::error::an identity is missing"; exit 1; }
+          mkdir pkg
+          tar -C pkg -xf signed/signed-macos.tar
+          x86=$(echo pkg/cesium-v*-x86_64-macos-none) arm=$(echo pkg/cesium-v*-aarch64-macos-none)
+          root="$RUNNER_TEMP/root"
+          mkdir -p "$root/usr/local/bin" "$root/usr/local/lib" "$root/usr/local/share/doc/cesium"
+          for c in cesium0 cesium1; do
+            lipo -create "$x86/bin/$c" "$arm/bin/$c" -output "$root/usr/local/bin/$c"
+            codesign --force --options runtime --timestamp --sign "$app" "$root/usr/local/bin/$c"
+          done
+          for l in "$arm"/lib/*.a; do
+            lipo -create "$x86/lib/$(basename "$l")" "$l" -output "$root/usr/local/lib/$(basename "$l")"
+          done
+          lipo -info "$root"/usr/local/bin/* "$root"/usr/local/lib/*
+          cp "$arm/LICENSE" "$arm/readme.md" "$root/usr/local/share/doc/cesium/"
+          pkgbuild --root "$root" --identifier com.github.cesiumlang.cesium --version "$VERSION" \
+            --install-location / "$RUNNER_TEMP/cesium-component.pkg"
+          mkdir out
+          productbuild --package "$RUNNER_TEMP/cesium-component.pkg" --sign "$inst" --timestamp \
+            "out/cesium-v$VERSION-macos.pkg"
+          pkgutil --check-signature "out/cesium-v$VERSION-macos.pkg"
+
+      - name: Notarize and staple the installer
+        run: |
+          echo "$APPLE_NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          auth=(--key "$RUNNER_TEMP/notary.p8" --key-id "$APPLE_NOTARY_KEY_ID" --issuer "$APPLE_NOTARY_ISSUER_ID")
+          pkg="out/cesium-v$VERSION-macos.pkg"
+          xcrun notarytool submit "$pkg" --wait --timeout 90m --output-format json "${auth[@]}" > "$RUNNER_TEMP/result.json" || true
+          status=$(jq -r '.status // "no answer"' "$RUNNER_TEMP/result.json")
+          echo "notarization: $status"
+          if [ "$status" != Accepted ]; then
+            xcrun notarytool log "$(jq -r .id "$RUNNER_TEMP/result.json")" "${auth[@]}" || true
+            exit 1
+          fi
+          rm "$RUNNER_TEMP/notary.p8"
+          xcrun stapler staple "$pkg"
+          xcrun stapler validate "$pkg"
+
+      - name: The installer is accepted and its compilers run
+        run: |
+          pkg="out/cesium-v$VERSION-macos.pkg"
+          spctl --assess --type install -vv "$pkg"
+          pkgutil --expand-full "$pkg" "$RUNNER_TEMP/expanded"
+          t=$(mktemp -d)
+          printf 'i32 = main(i32 argc, ##u8 argv) {\n    return 0;\n}\n' > "$t/t.csm"
+          for c in cesium0 cesium1; do
+            exe=$(find "$RUNNER_TEMP/expanded" -path "*usr/local/bin/$c" | head -1)
+            "$exe" -o "$t/$c.s" "$t/t.csm"
+            arch -x86_64 "$exe" -o "$t/$c-x86.s" "$t/t.csm" || echo "::warning::the x86_64 slice of $c did not run here (Rosetta?)"
+          done
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-pkg
+          path: out/*.pkg
+          if-no-files-found: error
+
+  # What a release publishes: an archive of each host's tree, signed where a
+  # signing job ran, and the macOS installer package when there is one
+  archive:
+    name: Archives
+    needs: [version, stage0, sign-windows, sign-macos, pkg-macos]
+    if: >-
+      ${{ !cancelled() && needs.stage0.result == 'success'
+      && needs.sign-windows.result != 'failure' && needs.sign-macos.result != 'failure' && needs.pkg-macos.result != 'failure' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      WINDOWS_SIGNED: ${{ needs.sign-windows.result == 'success' }}
+      MACOS_SIGNED: ${{ needs.sign-macos.result == 'success' }}
+      PKG: ${{ needs.pkg-macos.result == 'success' }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: tree-*
+          merge-multiple: true
+          path: unsigned
+
+      - uses: actions/download-artifact@v8
+        if: env.WINDOWS_SIGNED == 'true'
+        with:
+          name: windows-tree-signed
+          path: signed-windows
+
+      - uses: actions/download-artifact@v8
+        if: env.MACOS_SIGNED == 'true'
+        with:
+          name: signed-macos
+          path: signed-macos
+
+      - uses: actions/download-artifact@v8
+        if: env.PKG == 'true'
+        with:
+          name: macos-pkg
+          path: dist
+
+      - name: The trees, signed where signing ran
+        run: |
+          mkdir -p staged dist
+          for t in unsigned/*.tar; do tar -C staged -xf "$t"; done
+          if [ "$WINDOWS_SIGNED" = true ]; then cp -R signed-windows/. staged/; fi
+          if [ "$MACOS_SIGNED" = true ]; then tar -C staged -xf signed-macos/signed-macos.tar; fi
+          find staged -type f | sort
+
+      # a signing that succeeded must be what ships
+      - name: What ships is what was signed
+        run: |
+          if [ "$WINDOWS_SIGNED" = true ]; then
+            for c in cesium0 cesium1; do cmp staged/cesium-v*-x86_64-windows-gnu/bin/$c.exe signed-windows/cesium-v*-x86_64-windows-gnu/bin/$c.exe; done
+            echo "Windows: the signed programs"
+          fi
+          if [ "$MACOS_SIGNED" = true ]; then
+            mkdir check && tar -C check -xf signed-macos/signed-macos.tar
+            for h in x86_64 aarch64; do for c in cesium0 cesium1; do cmp staged/cesium-v*-$h-macos-none/bin/$c check/cesium-v*-$h-macos-none/bin/$c; done; done
+            echo "macOS: the signed programs"
+          fi
+
+      - name: The archives
+        run: |
+          for dir in staged/*/; do
+            name=$(basename "$dir")
+            if [[ $name == *windows* ]]; then
+              (cd staged && zip -qr "../dist/$name.zip" "$name")
+            else
+              tar -C staged -czf "dist/$name.tar.gz" "$name"
+            fi
+          done
+          ls -l dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error
+
   # the one check the rulesets require
   ci:
     name: CI
-    needs: [stage0, dialect, msvc, skein]
+    needs: [version, stage0, dialect, msvc, skein, sign-windows, sign-macos, pkg-macos, archive]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -276,3 +720,153 @@ jobs:
               *) echo "::error::a job ended as $r"; exit 1 ;;
             esac
           done
+
+  release:
+    name: Release v${{ needs.version.outputs.version }}
+    needs: [version, ci]
+    if: ${{ !cancelled() && needs.version.outputs.release == 'true' && needs.ci.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      # the attestations of the release files
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      SHA: ${{ needs.version.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+
+      - name: Check the archives
+        run: |
+          ls -l dist
+          for h in x86_64-linux-musl aarch64-linux-musl x86_64-macos-none aarch64-macos-none; do
+            [ -f "dist/cesium-v$VERSION-$h.tar.gz" ] || { echo "::error::no $h archive at version $VERSION"; exit 1; }
+          done
+          [ -f "dist/cesium-v$VERSION-x86_64-windows-gnu.zip" ] || { echo "::error::no Windows archive at version $VERSION"; exit 1; }
+
+      - name: Tag the tested commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "Cesium v$VERSION" "$SHA"
+          git push origin "v$VERSION"
+          (cd dist && sha256sum -- * > SHA256SUMS)
+
+      # A detached GPG signature of SHA256SUMS (the public key is
+      # SIGNING-KEY.asc) and build attestations of the files: each skipped
+      # while its repository variable is not true
+      - name: Sign and attest the release files
+        uses: ./.github/actions/release-integrity
+        with:
+          sign: ${{ vars.RELEASE_GPG_SIGNING }}
+          attest: ${{ vars.RELEASE_ATTESTATIONS }}
+          gpg-key: ${{ secrets.RELEASE_GPG_KEY }}
+          gpg-passphrase: ${{ secrets.RELEASE_GPG_PASSPHRASE }}
+
+      # every version is a pre-release until 1.0
+      - name: Publish the pre-release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          name: Cesium v${{ needs.version.outputs.version }}
+          files: dist/*
+          generate_release_notes: true
+          prerelease: true
+
+      # grammar and cspell-cesium record the state of Cesium at a version, so
+      # they are released with it, at the head of their main: as the Cesium
+      # Agent app (a workflow's own token cannot write to them)
+      - name: The app's token for grammar and cspell-cesium
+        id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: Iv23liXrtnf12IOEFv6c
+          private-key: ${{ secrets.CESIUM_AGENT_PRIVATE_KEY }}
+          owner: cesiumlang
+          repositories: grammar,cspell-cesium
+
+      - name: Release grammar and cspell-cesium v${{ needs.version.outputs.version }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          for repo in cesiumlang/grammar cesiumlang/cspell-cesium; do
+            if gh release view "v$VERSION" --repo "$repo" > /dev/null 2>&1; then
+              echo "$repo: v$VERSION is released already"
+              continue
+            fi
+            gh release create "v$VERSION" --repo "$repo" --target main --prerelease --generate-notes --title "${repo#*/} v$VERSION"
+            echo "$repo: released v$VERSION at $(gh api "repos/$repo/commits/main" --jq .sha)"
+            m=$(gh api "repos/$repo/milestones?state=open&per_page=100" --jq ".[] | select(.title == \"v$VERSION\") | .number")
+            if [ -n "$m" ]; then gh api -X PATCH "repos/$repo/milestones/$m" -f state=closed --jq '"closed milestone " + .title'; fi
+          done
+
+  # The next version is begun on dev: main keeps the version it released.
+  # The version's milestone is closed, and the next version is the lowest
+  # open milestone above it (v0.2.0 after v0.1.0), else the next patch.
+  begin-next-version:
+    name: Merge v${{ needs.version.outputs.version }} into dev and begin the next version
+    needs: [version, release]
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      SHA: ${{ needs.version.outputs.sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          fetch-depth: 0
+
+      # A fast-forward when dev has not moved, else a merge commit
+      - name: Merge into dev and begin the next version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          tagged() { git rev-parse -q --verify "refs/tags/v$1" >/dev/null; }
+          milestones=$(gh api "repos/$GITHUB_REPOSITORY/milestones?state=all&per_page=100" --jq '.[] | "\(.number) \(.state) \(.title)"')
+          done_ms=$(awk -v t="v$VERSION" '$3 == t && $2 == "open" { print $1 }' <<< "$milestones")
+          if [ -n "$done_ms" ]; then gh api -X PATCH "repos/$GITHUB_REPOSITORY/milestones/$done_ms" -f state=closed --jq '"closed milestone " + .title'; fi
+          for attempt in 1 2 3; do
+            git fetch -q --tags origin dev
+            git checkout -q -B dev origin/dev
+            if ! git merge -q -m "Merge v$VERSION into dev [skip ci]" "$SHA"; then
+              git merge --abort
+              echo "::error::v$VERSION conflicts with dev; merge main into dev by hand and set the next version"
+              exit 1
+            fi
+            version=$(bash .github/workflows/version.sh)
+            if tagged "$version"; then
+              next=""
+              for m in $(awk '$2 == "open" { print $3 }' <<< "$milestones" | sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' | sort -V); do
+                if [ "$m" != "$version" ] && [ "$(printf '%s\n%s\n' "$m" "$version" | sort -V | tail -1)" = "$m" ] && ! tagged "$m"; then next=$m; break; fi
+              done
+              if [ -z "$next" ]; then
+                next=$version
+                while tagged "$next"; do
+                  IFS=. read -r ma mi pa <<< "$next"
+                  next="$ma.$mi.$((pa + 1))"
+                done
+              fi
+              bash .github/workflows/version.sh set "$next"
+              git commit -qam "Begin v$next development [skip ci]"
+            fi
+            if git push -q origin dev; then exit 0; fi
+            echo "dev moved while merging; trying again"
+          done
+          echo "::error::could not push to dev"
+          exit 1
