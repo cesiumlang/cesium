@@ -1,7 +1,7 @@
 .{
     .name = .cesium,
     .fingerprint = 0x31b74be1568d57fb,
-    .version = "0.1.0",
+    .version = "0.2.0",
     // the Zig of the devkit (cesiumlang/devkits)
     .minimum_zig_version = "0.17.1",
     .dependencies = .{},
