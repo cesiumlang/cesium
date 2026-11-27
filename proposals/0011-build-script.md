@@ -57,7 +57,7 @@ void = build() {
 
 ## Alternatives
 
-- **Zig's `build.zig`,** the model of the direction. `zig build` compiles `build.zig` and runs its `build` function, which builds a graph of steps; the steps run afterwards. zls learns a project's modules by running `zig build --listen=-` and reading the configuration from the build system's protocol; of the steps it runs only those that generate source files, so that their paths can be resolved, and it passes the build options of its `zls.build.json` as `-D` arguments (zls, `src/bsp.zig`, `loadBuildConfiguration`, master branch, read 2026-11-27). Points 7, 9 and 10 follow it.
+- **Zig's `build.zig`,** the model of the direction. `zig build` compiles `build.zig` and runs its `build` function, which builds a graph of steps; the steps run afterward. zls learns a project's modules by running `zig build --listen=-` and reading the configuration from the build system's protocol; of the steps it runs only those that generate source files, so that their paths can be resolved, and it passes the build options of its `zls.build.json` as `-D` arguments (zls, `src/bsp.zig`, `loadBuildConfiguration`, master branch, read 2026-11-27). Points 7, 9 and 10 follow it.
 - **A declarative file only,** such as `cesium.toml` (#47, item 8) or `Cargo.toml`. Not taken: the direction puts the build logic in Cesium and only the settings in a JSONC file.
 - **Top-level statements in the script,** as in a shell script. Not taken for S0 by point 15: S0 has no top-level statements.
 
