@@ -8,7 +8,7 @@ status = "proposed"
 
 This proposal sets how Cesium's design is written down, decided and checked. It is the first proposal and describes the process that every later one follows. It is accepted when emanspeaks merges the pull request that carries it; until then nothing in it is decided.
 
-It carries out cesiumlang/cesium-workspace#23.
+This carries out cesiumlang/cesium-workspace#23.
 
 ## Motivation
 
@@ -98,7 +98,7 @@ A worked example in the specification is an item of its own, `%example[.open rej
 
 ### What happens to the existing material
 
-- **The `decision` issues (cesiumlang/cesium#4 to #11):** each is rewritten as a proposal with the status `proposed`. emanspeaks reviews each point by point: accept, change, or mark open. Until then they are guidance. The "ADR" naming goes.
+- **The `decision` issues (cesiumlang/cesium#4 to #11):** each is rewritten as a proposal with the status `proposed`. emanspeaks reviews each point by point: accept, change, or mark open. Until then, they are guidance. The "ADR" naming goes.
 - **The draft specification and the S0 grammar:** moved to `spec/` with rule IDs, all `draft`.
 - **The reference pages on cesiumlang.org:** stay as user documentation. Where one states something that no rule states, that statement becomes a `draft` rule or an open question in a proposal.
 - **Open design issues (label `design`):** unchanged until worked. None is closed or decided by this proposal.
@@ -112,7 +112,7 @@ A worked example in the specification is an item of its own, `%example[.open rej
 
 ## Drawbacks
 
-- skein is new and has one maintainer. It renders the specification itself, as Markdown with anchors and links for a site generator, as a static HTML site, or as one self-contained file per document (chasingdaylight/skein#51 to #54, in v0.1.0, a pre-release), so the website does not depend on how skein is built.
+- Skein is new and has one maintainer. It renders the specification itself, as Markdown with anchors and links for a site generator, as a static HTML site, or as one self-contained file per document (chasingdaylight/skein#51 to #54, in v0.1.0, a pre-release), so the website does not depend on how skein is built.
 - CI in cesiumlang/cesium depends on a released skein, which it downloads.
 - Moving the specification changes the paths that existing links to the website's sources point at. The published URLs can stay the same.
 
@@ -124,7 +124,7 @@ Questions 1 to 3 were answered by emanspeaks on 2026-11-21, and 4 to 7 (recommen
 2. **Rule categories:** `syntax`, `legality` (what the compiler must reject), `static` (meaning fixed at compile time) and `dynamic` (behavior at run time), following the Ferrocene Language Specification.
 3. **How skein is obtained.** Not through the buildtools. Developers get it with the VS Code extension `chasingdaylight.skein`, which is to carry the `skein` program for the platform (chasingdaylight/skein#74). CI downloads the archive of a pinned skein release for the runner and checks it against the release's checksums.
 4. **Proposal numbers:** four digits in order of filing; this proposal is `P-0000`, the bootstrap, `P-0001` is the charter and the rest follow (emanspeaks, 2026-11-22).
-5. **Who sets the status** (emanspeaks, 2026-11-22): anyone, agents included, may set `proposed`; for now only emanspeaks sets `accepted`, `rejected` or `superseded`; the author or emanspeaks may set `withdrawn`. skein can make it visible: the type `proposal` declares `approval = ["accepted", "rejected"]`, so `skein check` reports a proposal with either status that has no approval of its current text, and `skein approve --from-pull-request` records the approval from the review of the merged pull request. skein does not yet check who approved (chasingdaylight/skein#213), so until it does this rule is held by review of the pull request, as above.
+5. **Who sets the status** (emanspeaks, 2026-11-22): anyone, agents included, may set `proposed`; for now only emanspeaks sets `accepted`, `rejected` or `superseded`; the author or emanspeaks may set `withdrawn`. Skein can make it visible: the type `proposal` declares `approval = ["accepted", "rejected"]`, so `skein check` reports a proposal with either status that has no approval of its current text, and `skein approve --from-pull-request` records the approval from the review of the merged pull request. Skein does not yet check who approved (chasingdaylight/skein#213), so until it does this rule is held by review of the pull request, as above.
 6. **Later history of rules and proposals** (accepted 2026-11-22): the link types `changed-by` (rule to the proposals that amended it) and `superseded-by` (proposal to its replacement), beside `introduced-by`, so a rule's whole history is a trace.
 7. **Examples in the specification** (accepted 2026-11-22): tested examples (`%example`, categories `accepts` and `rejects`) are part of the conformance suite, as described above, and the `langspec` template of skein is the starting point of `.skein/`.
 
