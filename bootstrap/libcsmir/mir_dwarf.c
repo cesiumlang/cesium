@@ -87,7 +87,8 @@ void mir_dwarf_tail(CsBuf *out, const MirTarget *t, const char *file, const MirD
   if (t->format != MIR_MACHO) {
     cs_buf_printf(out, ".section .debug_line,\"\",@progbits\n%scs_line:\n", p);
   }
-  /* strings as DW_FORM_strp: Zig's Mach-O linker misreads DW_FORM_string */
+  /* strings as DW_FORM_strp: Zig's Mach-O linker misreads DW_FORM_string
+   * (cesiumlang/cesium#150) */
   section(out, t, "debug_str", "\"MS\",@progbits,1");
   cs_buf_printf(out, "%scs_producer:\n\t.asciz \"libcsmir\"\n%scs_name:\n\t.asciz ", p, p);
   mir_asm_string(out, file);
@@ -127,7 +128,7 @@ void mir_dwarf_tail(CsBuf *out, const MirTarget *t, const char *file, const MirD
   cs_buf_printf(out, "%scs_info_end:\n", p);
   /* as clang's: without it, Zig's Mach-O linker gives each function of the
    * object the size of the last one in the debug map, and lldb finds no
-   * debug information past that size */
+   * debug information past that size (cesiumlang/cesium#149) */
   if (t->format == MIR_MACHO) {
     cs_buf_puts(out, ".subsections_via_symbols\n");
   }
