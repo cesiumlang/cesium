@@ -38,7 +38,18 @@ pub const Seed = struct {
 
 pub const Error = Io.Dir.OpenError || Io.Dir.Iterator.Error || Io.Dir.ReadFileAllocError || error{NoCorpus};
 
-const stage1 = [_][]const u8{ "util.csm", "lex.csm", "parse.csm", "types.csm", "habit.csm", "lower.csm", "decl.csm", "loc.csm", "main.csm" };
+/// cesium1's files in unit order, from bootstrap/stage1/sources.txt: a name
+/// a line, `#` starting a comment (build-src/sources.zig).
+fn stage1Files(a: Allocator, io: Io, root: []const u8) Error![]const []const u8 {
+    var names: std.ArrayList([]const u8) = .empty;
+    var lines = std.mem.splitScalar(u8, try read(a, io, root, "bootstrap/stage1/sources.txt"), '\n');
+    while (lines.next()) |raw| {
+        const line = std.mem.trim(u8, raw, " \t\r");
+        if (line.len == 0 or line[0] == '#') continue;
+        try names.append(a, line);
+    }
+    return names.items;
+}
 
 /// The corpus under `root`/bootstrap, `root` an absolute path.
 pub fn load(a: Allocator, io: Io, root: []const u8) Error![]const Seed {
@@ -60,9 +71,9 @@ pub fn load(a: Allocator, io: Io, root: []const u8) Error![]const Seed {
         });
     }
     // cesium1's source: each file in turn is the damaged one
-    var unit: [stage1.len][]const u8 = undefined;
-    for (stage1, &unit) |file, *path| path.* = try absolute(a, root, try a.print("bootstrap/stage1/{s}", .{file}));
-    const all = try a.dupe([]const u8, &unit);
+    const stage1 = try stage1Files(a, io, root);
+    const all = try a.alloc([]const u8, stage1.len);
+    for (stage1, all) |file, *path| path.* = try absolute(a, root, try a.print("bootstrap/stage1/{s}", .{file}));
     for (stage1, 0..) |file, i| {
         const name = try a.print("bootstrap/stage1/{s}", .{file});
         try seeds.append(a, .{ .name = name, .kind = .s0, .data = try read(a, io, root, name), .before = all[0..i], .after = all[i + 1 ..] });
