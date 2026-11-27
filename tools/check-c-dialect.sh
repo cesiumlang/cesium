@@ -17,10 +17,10 @@
 # Needs bash and a POSIX awk.
 set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-SOURCE_DIRS=(bootstrap/include bootstrap/libcsmir bootstrap/stage0 bootstrap/runtime)
+SOURCE_DIRS=(bootstrap/include bootstrap/libcsir bootstrap/stage0 bootstrap/runtime)
 BANNED_HEADER=bootstrap/include/cs_banned.h
 COMMON_HEADER=cs_common.h
-PLATFORM_FILE=bootstrap/libcsmir/cs_platform.c
+PLATFORM_FILE=bootstrap/libcsir/cs_platform.c
 
 die () { printf '%s\n' "$*" >&2; exit 1; }
 

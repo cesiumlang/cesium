@@ -41,7 +41,7 @@ void = main() {
 The language design and the compiler's architecture are recorded as issues in this repository; they are the knowledge base. The decisions so far (label [`decision`](https://github.com/cesiumlang/cesium/issues?q=is%3Aissue+label%3Adecision)):
 
 - The compiler is written in Cesium. A small stage 0 compiler in portable C compiles a tiny subset, S0, in which the first Cesium-written compiler (`cesium1`) is written ([ADR 0002](https://github.com/cesiumlang/cesium/issues/5), [stage 0 and S0](https://github.com/cesiumlang/cesium/issues/9), [stage 0 C dialect](https://github.com/cesiumlang/cesium/issues/10)).
-- Every frontend lowers to a middle IR ([MIR](https://github.com/cesiumlang/cesium/issues/8)) with two backends behind it: QBE first, LLVM as the primary release backend ([ADR 0001](https://github.com/cesiumlang/cesium/issues/4), [ADR 0004](https://github.com/cesiumlang/cesium/issues/7)).
+- Every frontend lowers to a semantic IR ([SIR](https://github.com/cesiumlang/cesium/issues/8)) with two backends behind it: QBE first, LLVM as the primary release backend ([ADR 0001](https://github.com/cesiumlang/cesium/issues/4), [ADR 0004](https://github.com/cesiumlang/cesium/issues/7)).
 - `build.zig` is the build system and runs in CI; the toolchain (pinned Zig, LLVM and LLD libraries, QBE) comes prebuilt from [cesiumlang/devkits](https://github.com/cesiumlang/devkits).
 - Source files end in `.csm`, module interface files in `.csi` ([#14](https://github.com/cesiumlang/cesium/issues/14)).
 
@@ -49,7 +49,7 @@ Open design questions carry the [`design`](https://github.com/cesiumlang/cesium/
 
 ## Repository layout
 
-[`bootstrap/`](bootstrap/README.md) holds the bootstrap compilers: stage 0 (the S0 compiler `cesium0`, the core MIR library `libcsmir` and a small runtime, in portable C) and stage 1 (`cesium1`, a compiler for S0 written in S0), with their tests. `build.zig` builds and tests them with the Zig of the devkit:
+[`bootstrap/`](bootstrap/README.md) holds the bootstrap compilers: stage 0 (the S0 compiler `cesium0`, the core SIR library `libcsir` and a small runtime, in portable C) and stage 1 (`cesium1`, a compiler for S0 written in S0), with their tests. `build.zig` builds and tests them with the Zig of the devkit:
 
 ```sh
 bash tools/fetch-devkit.sh

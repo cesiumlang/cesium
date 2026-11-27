@@ -1,6 +1,6 @@
 # Review records, written by skein. Do not edit: use 'skein review'.
 "bootstrap/tests/s0/vars.csm"."cite:test"."s0.entry" = "6bf37c4383a02a68b599c0382f3f3795"
-"bootstrap/tests/s0/vars.csm"."cite:test"."s0.expr.arithmetic" = "1deae77a3463db568719cde02e0b17d0"
+"bootstrap/tests/s0/vars.csm"."cite:test"."s0.expr.arithmetic" = "dd2db3d04f89ddc728dba7f121e826c9"
 "bootstrap/tests/s0/vars.csm"."cite:test"."s0.struct" = "dde6710520047fbd79d69ef3b9c62de1"
 "bootstrap/tests/s0/vars.csm"."cite:test"."s0.type.array" = "07d6471b2eb0cb04da225d5a29cec7d6"
 "bootstrap/tests/s0/vars.csm"."cite:test"."s0.type.pointer" = "0cfe8290314e7556f0611390739f8945"

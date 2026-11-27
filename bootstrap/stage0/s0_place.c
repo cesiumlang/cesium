@@ -3,11 +3,11 @@
 #include "s0_lower.h"
 
 /* The value stored at a place: the local itself, or a load. */
-MirExpr *place_value(L *l, Place p, int line) {
+SirExpr *place_value(L *l, Place p, int line) {
   if (p.local != NULL) {
-    return mir_local_ref(l->m, p.local, line);
+    return sir_local_ref(l->m, p.local, line);
   }
-  return mir_unary(l->m, ME_LOAD, p.addr, line);
+  return sir_unary(l->m, ME_LOAD, p.addr, line);
 }
 
 Place lower_place(L *l, S0Expr *e) {
@@ -18,7 +18,7 @@ Place lower_place(L *l, S0Expr *e) {
     Global *g;
     if (v != NULL) {
       p.ok = true;
-      p.addr = mir_expr(l->m, ME_ADDR, e->loc.line);
+      p.addr = sir_expr(l->m, ME_ADDR, e->loc.line);
       p.addr->name = v->name;
       p.t = v->type;
       p.local = v->name;
@@ -27,7 +27,7 @@ Place lower_place(L *l, S0Expr *e) {
     g = find_global(l, e->name);
     if (g != NULL) {
       p.ok = true;
-      p.addr = mir_global_ref(l->m, g->name, e->loc.line);
+      p.addr = sir_global_ref(l->m, g->name, e->loc.line);
       p.t = g->type;
       return p;
     }
@@ -45,8 +45,8 @@ Place lower_place(L *l, S0Expr *e) {
   case EX_INDEX: {
     Place base = lower_place(l, e->a);
     Val idx;
-    MirType *elem;
-    MirExpr *first;
+    SirType *elem;
+    SirExpr *first;
     if (!base.ok) {
       return p;
     }
@@ -57,7 +57,7 @@ Place lower_place(L *l, S0Expr *e) {
     } else if (base.t->kind == MT_ARRAY) {
       /* an array is indexed in place */
       elem = base.t->elem;
-      first = mir_as(l->m, mir_ptr(l->m, elem), base.addr, e->loc.line);
+      first = sir_as(l->m, sir_ptr(l->m, elem), base.addr, e->loc.line);
     } else {
       s0_error(l->diag, e->loc, "E0502", "a %s cannot be indexed", type_name(l, base.t));
       return p;
@@ -67,7 +67,7 @@ Place lower_place(L *l, S0Expr *e) {
       return p;
     }
     if (is_untyped(e->b)) {
-      idx = lower_expr(l, e->b, want_type(mir_prim(l->m, MT_UWORD)));
+      idx = lower_expr(l, e->b, want_type(sir_prim(l->m, MT_UWORD)));
     } else {
       idx = lower_expr(l, e->b, want_value());
     }
@@ -75,7 +75,7 @@ Place lower_place(L *l, S0Expr *e) {
       return p;
     }
     p.ok = true;
-    p.addr = mir_binary(l->m, ME_INDEX, first, idx.e, e->loc.line);
+    p.addr = sir_binary(l->m, ME_INDEX, first, idx.e, e->loc.line);
     p.t = elem;
     return p;
   }
@@ -83,7 +83,7 @@ Place lower_place(L *l, S0Expr *e) {
   case EX_FIELD: {
     Place base = lower_place(l, e->a);
     size_t i;
-    MirStruct *st;
+    SirStruct *st;
     if (!base.ok) {
       return p;
     }
@@ -101,7 +101,7 @@ Place lower_place(L *l, S0Expr *e) {
     for (i = 0; i < st->nfields; i++) {
       if (strcmp(st->fields[i].name, e->name) == 0) {
         p.ok = true;
-        p.addr = mir_field(l->m, base.addr, e->name, e->loc.line);
+        p.addr = sir_field(l->m, base.addr, e->name, e->loc.line);
         p.t = st->fields[i].type;
         return p;
       }

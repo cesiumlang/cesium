@@ -1,4 +1,4 @@
-// Caught by the MIR verifier: a function that returns a value must do so
+// Caught by the SIR verifier: a function that returns a value must do so
 // on every path.
 i32 = pick(i32 x) {
   if (x == 1) {

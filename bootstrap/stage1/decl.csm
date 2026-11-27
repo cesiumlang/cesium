@@ -1,9 +1,9 @@
-// cesium1: checking declarations, and the core MIR text of the unit.
+// cesium1: checking declarations, and the core SIR text of the unit.
 // Written in S0.
 //
 // The passes are stage 0's (s0_lower in bootstrap/stage0/s0_decl.c):
 // structs, constants, globals, function signatures, then function bodies,
-// each over the declarations in source order. libcsmir's verifier runs on
+// each over the declarations in source order. libcsir's verifier runs on
 // what stage 0 builds; the two of its checks that S0 source can fail (a
 // struct containing itself, a missing return) are made here too.
 
@@ -20,7 +20,7 @@ void = decl_name_twice(uword d, #u8 code, #u8 what, uword id) {
 
 // True when a value of type t holds the struct target, directly or in an
 // array or a nested struct. Deeper than 64 levels counts as true, as in
-// libcsmir's verifier.
+// libcsir's verifier.
 u8 = decl_contains(uword t, uword target, uword depth) {
   if (depth > 64) {
     return TRUE;
@@ -113,7 +113,7 @@ void = decl_structs() {
     decl_fields(s);
     s = s + 1;
   }
-  // libcsmir's verifier: no struct contains itself by value
+  // libcsir's verifier: no struct contains itself by value
   uword k = 0;
   while (k < g_nsorder) {
     uword sk = g_sorder[k];
@@ -351,7 +351,7 @@ void = decl_body(uword f) {
   low_locals_drop(0);
   buf_puts(~g_out_funcs, "}\n");
   if (ty_kind(g_funcs[f].ret) != MT_VOID && !low_block_returns(g_nodes[d].body)) {
-    // libcsmir's verifier
+    // libcsir's verifier
     err_begin(g_nodes[d].line, g_nodes[d].col, "E1143");
     err_s("@");
     err_name(id);
@@ -380,8 +380,8 @@ void = decl_struct_text(uword sidx) {
   buf_puts(~g_out, " }\n");
 }
 
-// Checks the unit parsed into g_decls and leaves its core MIR text in
-// g_out, exactly as libcsmir's mir_print prints what stage 0 builds.
+// Checks the unit parsed into g_decls and leaves its core SIR text in
+// g_out, exactly as libcsir's sir_print prints what stage 0 builds.
 void = decl_unit() {
   uword d = 0;
   decl_structs();
@@ -406,7 +406,7 @@ void = decl_unit() {
     }
     d = g_nodes[d].next;
   }
-  // bodies, in the order the functions were declared: the order MIR lists
+  // bodies, in the order the functions were declared: the order SIR lists
   // them in, extern declarations included
   uword f = 0;
   while (f < g_nfuncs) {
@@ -426,7 +426,7 @@ void = decl_unit() {
       err_end();
     }
     if (sym == SYM_GLOBAL) {
-      // libcsmir's verifier: one name for a function and a global
+      // libcsir's verifier: one name for a function and a global
       err_begin(g_nodes[g_decls].line, g_nodes[g_decls].col, "E1142");
       err_s("@cs_arena_alloc names both a function and a global");
       err_end();
@@ -434,7 +434,7 @@ void = decl_unit() {
     buf_puts(~g_out_funcs, "\nextern func @cs_arena_alloc(uword, uword) -> ptr<u8> callconv(c)\n");
   }
 
-  buf_puts(~g_out, "cesium-mir 0\n");
+  buf_puts(~g_out, "cesium-sir 0\n");
   uword k = 0;
   while (k < g_nsorder) {
     decl_struct_text(g_sorder[k]);

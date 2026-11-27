@@ -1,0 +1,6 @@
+cesium-sir 0
+
+func @f() -> void {
+  loc "a\00.csm" 1:1
+  return
+}

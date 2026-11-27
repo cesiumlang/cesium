@@ -1,7 +1,7 @@
 //! The differential corpus (bootstrap/tests/diff), as the step test-diff:
 //! generated S0 programs that cesium1 must compile as cesium0 does.
 //!
-//!   diff/<name>.csm          cesium1's core MIR, from standard input, must be
+//!   diff/<name>.csm          cesium1's core SIR, from standard input, must be
 //!                            cesium0's without its loc lines
 //!   diff/errors/<name>.csm   both must exit with status 1, and the first
 //!                            error of each must be the same code and message
@@ -30,10 +30,10 @@ pub fn add(
         const source = b.path(b.fmt(diff_dir ++ "/{s}", .{file}));
         const emit = b.addRunArtifact(cesium0);
         emit.setName(b.fmt("cesium0 diff-{s}", .{name}));
-        emit.addArgs(&.{ "--emit-mir", "-o" });
-        const reference = emit.addOutputFileArg(b.fmt("{s}.mir", .{name}));
+        emit.addArgs(&.{ "--emit-sir", "-o" });
+        const reference = emit.addOutputFileArg(b.fmt("{s}.sir", .{name}));
         emit.addFileArg(source);
-        tests.checkMirOf(b, step, tool, crlf, cesium1, b.fmt("diff-{s}", .{name}), source, reference);
+        tests.checkSirOf(b, step, tool, crlf, cesium1, b.fmt("diff-{s}", .{name}), source, reference);
     }
     for (try csmFiles(b, diff_dir ++ "/errors")) |file| {
         const name = std.fs.path.stem(file);
@@ -41,8 +41,8 @@ pub fn add(
 
         const run0 = b.addRunArtifact(cesium0);
         run0.setName(b.fmt("cesium0 rejects diff-{s}", .{name}));
-        run0.addArgs(&.{ "--emit-mir", "-o" });
-        _ = run0.addOutputFileArg(b.fmt("{s}.mir", .{name}));
+        run0.addArgs(&.{ "--emit-sir", "-o" });
+        _ = run0.addOutputFileArg(b.fmt("{s}.sir", .{name}));
         run0.addFileArg(source);
         run0.expectExitCode(1);
         const error0 = run0.captureStdErr(.{ .basename = b.fmt("{s}.cesium0.txt", .{name}) });

@@ -1,4 +1,4 @@
-# cesium0's own C files, with libcsmir's (../libcsmir/sources.txt): the one
+# cesium0's own C files, with libcsir's (../libcsir/sources.txt): the one
 # list of them, read by the build (build-src/sources.zig) and
 # tools/portable-c.sh.
 main.c

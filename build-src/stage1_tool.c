@@ -12,7 +12,7 @@
  *                                                 every '\n' of <expected> as
  *                                                 "\r\n", which is how a C text
  *                                                 stream writes it on Windows;
- *                                                 with noloc, without the MIR
+ *                                                 with noloc, without the SIR
  *                                                 `loc` lines of <expected>
  *   stage1_tool error <cesium0-stderr> <cesium1-stdout>
  *                                                 fails unless the first error
@@ -75,7 +75,7 @@ static int cat(int argc, char **argv) {
   return fclose(out) == 0 ? 0 : 1;
 }
 
-/* Whether the line of e starting at i is a MIR `loc` line. */
+/* Whether the line of e starting at i is a SIR `loc` line. */
 static int is_loc_line(const char *e, size_t elen, size_t i) {
   while (i < elen && e[i] == ' ') {
     i++;
@@ -151,7 +151,7 @@ static char *first_line(const char *path) {
   return data;
 }
 
-/* A message of libcsmir's verifier, "CODE]: line L: M" or "CODE]: M", against
+/* A message of libcsir's verifier, "CODE]: line L: M" or "CODE]: M", against
  * cesium1's "L:C: error[CODE]: M": cesium1 makes those checks itself
  * (bootstrap/README.md). */
 static int same_verifier_error(const char *e0, const char *e1) {

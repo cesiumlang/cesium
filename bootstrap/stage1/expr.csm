@@ -1,4 +1,4 @@
-// cesium1: checking expressions, and their core MIR text; as
+// cesium1: checking expressions, and their core SIR text; as
 // stage0/s0_expr.c. Written in S0.
 
 u8 = low_is_untyped(uword e) {
@@ -114,7 +114,7 @@ void = low_operands(uword e, uword fallback, ~Val a, ~Val b) {
     low_expr(an, ~w, a);
     low_expr(bn, ~w, b);
   } else if (lu) {
-    // the literal on the left takes the right operand's type; the MIR
+    // the literal on the left takes the right operand's type; the SIR
     // still evaluates left to right
     want_value(~w);
     low_expr(bn, ~w, b);
@@ -141,7 +141,7 @@ void = low_operands(uword e, uword fallback, ~Val a, ~Val b) {
   }
 }
 
-// Writes len bytes of g_strs from start, and a NUL, as a MIR string.
+// Writes len bytes of g_strs from start, and a NUL, as a SIR string.
 void = low_put_bytes(~Buf out, uword start, uword len) {
   buf_putc(out, '"');
   uword i = 0;
@@ -150,7 +150,7 @@ void = low_put_bytes(~Buf out, uword start, uword len) {
     if (i < len) {
       c = g_strs.data[start + i];
     }
-    buf_put_mir_byte(out, c);
+    buf_put_sir_byte(out, c);
     i = i + 1;
   }
   buf_putc(out, '"');
@@ -394,7 +394,7 @@ void = low_binary(uword e, ~Want w, ~Val v) {
   low_settle(e, v, w);
 }
 
-// Checks expression e as w wants it and gives its MIR text and type in v.
+// Checks expression e as w wants it and gives its SIR text and type in v.
 void = low_expr(uword e, ~Want w, ~Val v) {
   uword k = g_nodes[e].kind;
   if (k == EX_INT) {
