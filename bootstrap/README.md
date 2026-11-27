@@ -178,7 +178,10 @@ The files named are compiled as one unit, each read through C's stdio and parsed
 | `parse.csm` | The syntax tree and the parser |
 | `types.csm` | Core MIR types and the tables of structs and functions |
 | `habit.csm` | The messages for C type names and `true` and `false`, as `stage0/s0_habit.c` |
-| `lower.csm` | Checking expressions and statements, and their MIR text |
+| `lower.csm` | What checking expressions and statements shares: values, and fragments of MIR text |
+| `place.csm` | Places: locals, elements and fields |
+| `expr.csm` | Checking expressions, and their MIR text |
+| `stmt.csm` | Checking statements, and their MIR text |
 | `decl.csm` | Checking declarations, and the text of the unit |
 | `loc.csm` | The command line, reading the files, and source locations |
 | `main.csm` | The driver |

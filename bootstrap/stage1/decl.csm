@@ -1,7 +1,7 @@
 // cesium1: checking declarations, and the core MIR text of the unit.
 // Written in S0.
 //
-// The passes are stage 0's (s0_lower in bootstrap/stage0/s0_lower.c):
+// The passes are stage 0's (s0_lower in bootstrap/stage0/s0_decl.c):
 // structs, constants, globals, function signatures, then function bodies,
 // each over the declarations in source order. libcsmir's verifier runs on
 // what stage 0 builds; the two of its checks that S0 source can fail (a

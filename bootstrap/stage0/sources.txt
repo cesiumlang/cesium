@@ -5,4 +5,8 @@ main.c
 s0_lex.c
 s0_parse.c
 s0_lower.c
+s0_place.c
+s0_expr.c
+s0_stmt.c
+s0_decl.c
 s0_habit.c
