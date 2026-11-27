@@ -719,6 +719,9 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+      # the attestations of the release files
+      id-token: write
+      attestations: write
     env:
       VERSION: ${{ needs.version.outputs.version }}
       SHA: ${{ needs.version.outputs.sha }}
@@ -748,6 +751,17 @@ jobs:
           git tag -a "v$VERSION" -m "Cesium v$VERSION" "$SHA"
           git push origin "v$VERSION"
           (cd dist && sha256sum -- * > SHA256SUMS)
+
+      # A detached GPG signature of SHA256SUMS (the public key is
+      # SIGNING-KEY.asc) and build attestations of the files: each skipped
+      # while its repository variable is not true
+      - name: Sign and attest the release files
+        uses: ./.github/actions/release-integrity
+        with:
+          sign: ${{ vars.RELEASE_GPG_SIGNING }}
+          attest: ${{ vars.RELEASE_ATTESTATIONS }}
+          gpg-key: ${{ secrets.RELEASE_GPG_KEY }}
+          gpg-passphrase: ${{ secrets.RELEASE_GPG_PASSPHRASE }}
 
       # every version is a pre-release until 1.0
       - name: Publish the pre-release
