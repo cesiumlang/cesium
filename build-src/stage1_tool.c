@@ -6,11 +6,14 @@
  *
  *   stage1_tool cat <out> <in>...                 writes the inputs, one after
  *                                                 another, to <out>
- *   stage1_tool same <expected> <actual> [crlf]   fails unless <actual> has the
+ *   stage1_tool same <expected> <actual> [crlf] [noloc]
+ *                                                 fails unless <actual> has the
  *                                                 bytes of <expected>; with crlf,
  *                                                 every '\n' of <expected> as
  *                                                 "\r\n", which is how a C text
- *                                                 stream writes it on Windows
+ *                                                 stream writes it on Windows;
+ *                                                 with noloc, without the SIR
+ *                                                 `loc` lines of <expected>
  *   stage1_tool error <cesium0-stderr> <cesium1-stdout>
  *                                                 fails unless the first error
  *                                                 of each is the same code and
@@ -72,7 +75,15 @@ static int cat(int argc, char **argv) {
   return fclose(out) == 0 ? 0 : 1;
 }
 
-static int same(const char *expected_path, const char *actual_path, int crlf) {
+/* Whether the line of e starting at i is a SIR `loc` line. */
+static int is_loc_line(const char *e, size_t elen, size_t i) {
+  while (i < elen && e[i] == ' ') {
+    i++;
+  }
+  return elen - i >= 4 && memcmp(e + i, "loc ", 4) == 0;
+}
+
+static int same(const char *expected_path, const char *actual_path, int crlf, int noloc) {
   size_t elen;
   size_t alen;
   char *e = read_file(expected_path, &elen);
@@ -80,7 +91,20 @@ static int same(const char *expected_path, const char *actual_path, int crlf) {
   size_t i = 0;
   size_t j = 0;
   size_t line = 1;
-  while (i < elen && j < alen) {
+  for (;;) {
+    if (noloc && (i == 0 || e[i - 1] == '\n') && is_loc_line(e, elen, i)) {
+      while (i < elen && e[i] != '\n') {
+        i++;
+      }
+      if (i < elen) {
+        i++;
+        line++;
+      }
+      continue;
+    }
+    if (i >= elen || j >= alen) {
+      break;
+    }
     if (crlf && e[i] == '\n') {
       if (a[j] != '\r') {
         break;
@@ -127,26 +151,36 @@ static char *first_line(const char *path) {
   return data;
 }
 
-/* A message of libcsmir's verifier, "line L: M" or "M", against cesium1's
- * "L:C: error: M": cesium1 makes those checks itself (bootstrap/README.md). */
+/* A message of libcsir's verifier, "CODE]: line L: M" or "CODE]: M", against
+ * cesium1's "L:C: error[CODE]: M": cesium1 makes those checks itself
+ * (bootstrap/README.md). */
 static int same_verifier_error(const char *e0, const char *e1) {
-  const char *tag = strstr(e1, ": error: ");
+  const char *tag = strstr(e1, ": error[");
   const char *colon = strchr(e1, ':');
+  const char *end = strstr(e0, "]: ");
+  size_t code;
   size_t digits;
-  if (tag == NULL) {
+  if (tag == NULL || end == NULL) {
     return 0;
   }
+  code = (size_t)(end - e0);
+  tag += 8;
+  if (strncmp(e0, tag, code + 3) != 0) {
+    return 0;
+  }
+  e0 += code + 3;
+  tag += code + 3;
   if (strncmp(e0, "line ", 5) != 0) {
-    return strcmp(e0, tag + 9) == 0;
+    return strcmp(e0, tag) == 0;
   }
   e0 += 5;
   digits = (size_t)(colon - e1);
-  return strncmp(e0, e1, digits) == 0 && strncmp(e0 + digits, ": ", 2) == 0 && strcmp(e0 + digits + 2, tag + 9) == 0;
+  return strncmp(e0, e1, digits) == 0 && strncmp(e0 + digits, ": ", 2) == 0 && strcmp(e0 + digits + 2, tag) == 0;
 }
 
-/* cesium0 prints "<file>:L:C: error[CODE]: M", or "cesium0: error: " and a
- * verifier message; cesium1 prints "L:C: error[CODE]: M", or "L:C: error: M"
- * for a verifier check. Code and message must be the same. */
+/* cesium0 prints "<file>:L:C: error[CODE]: M", or "cesium0: error[CODE]: "
+ * and a verifier message; cesium1 prints "L:C: error[CODE]: M" for both.
+ * Code and message must be the same. */
 static int same_error(const char *path0, const char *path1) {
   char *e0 = first_line(path0);
   char *e1 = first_line(path1);
@@ -155,8 +189,8 @@ static int same_error(const char *path0, const char *path1) {
   int ok;
   if (n1 > 0 && n0 > n1 && e0[n0 - n1 - 1] == ':' && strcmp(e0 + n0 - n1, e1) == 0) {
     ok = 1;
-  } else if (strncmp(e0, "cesium0: error: ", 16) == 0) {
-    ok = same_verifier_error(e0 + 16, e1);
+  } else if (strncmp(e0, "cesium0: error[", 15) == 0) {
+    ok = same_verifier_error(e0 + 15, e1);
   } else {
     ok = 0;
   }
@@ -172,13 +206,20 @@ int main(int argc, char **argv) {
   if (argc >= 3 && strcmp(argv[1], "cat") == 0) {
     return cat(argc, argv);
   }
-  if ((argc == 4 || argc == 5) && strcmp(argv[1], "same") == 0) {
-    return same(argv[2], argv[3], argc == 5 && strcmp(argv[4], "crlf") == 0);
+  if (argc >= 4 && argc <= 6 && strcmp(argv[1], "same") == 0) {
+    int crlf = 0;
+    int noloc = 0;
+    int i;
+    for (i = 4; i < argc; i++) {
+      crlf |= strcmp(argv[i], "crlf") == 0;
+      noloc |= strcmp(argv[i], "noloc") == 0;
+    }
+    return same(argv[2], argv[3], crlf, noloc);
   }
   if (argc == 4 && strcmp(argv[1], "error") == 0) {
     return same_error(argv[2], argv[3]);
   }
-  fputs("usage: stage1_tool cat <out> <in>... | stage1_tool same <expected> <actual> [crlf]\n"
+  fputs("usage: stage1_tool cat <out> <in>... | stage1_tool same <expected> <actual> [crlf] [noloc]\n"
         "       | stage1_tool error <cesium0-stderr> <cesium1-stdout>\n",
         stderr);
   return 1;

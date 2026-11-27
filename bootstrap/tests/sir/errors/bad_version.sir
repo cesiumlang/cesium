@@ -1,0 +1,4 @@
+cesium-sir 1
+
+func @f() -> void {
+}

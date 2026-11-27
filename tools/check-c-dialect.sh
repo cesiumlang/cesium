@@ -17,9 +17,10 @@
 # Needs bash and a POSIX awk.
 set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-SOURCE_DIRS=(bootstrap/include bootstrap/libcsmir bootstrap/stage0 bootstrap/runtime)
+SOURCE_DIRS=(bootstrap/include bootstrap/libcsir bootstrap/stage0 bootstrap/runtime)
 BANNED_HEADER=bootstrap/include/cs_banned.h
 COMMON_HEADER=cs_common.h
+PLATFORM_FILE=bootstrap/libcsir/cs_platform.c
 
 die () { printf '%s\n' "$*" >&2; exit 1; }
 
@@ -34,7 +35,7 @@ FUNCTIONS=$(awk '
 
 # check_lines <file> <relative path>: the per-line checks, one problem a line
 check_lines () {
-  awk -v rel="$2" -v functions="${FUNCTIONS//$'\n'/ }" -v banned_header="$BANNED_HEADER" '
+  awk -v rel="$2" -v functions="${FUNCTIONS//$'\n'/ }" -v banned_header="$BANNED_HEADER" -v platform_file="$PLATFORM_FILE" '
     BEGIN {
       n = split(functions, f, " "); for (k = 1; k <= n; k++) banned[f[k]] = 1
       # the "Not allowed" list of the dialect: optional or weakly supported
@@ -65,6 +66,9 @@ check_lines () {
       # headers outside the allowed list
       split("stddef.h stdint.h inttypes.h stdbool.h limits.h stdarg.h assert.h string.h stdio.h stdlib.h errno.h", h, " ")
       for (k in h) allowed[h[k]] = 1
+      # the platform wrappers, the one file that calls the platform (P-0008,
+      # point 14), may include its headers too
+      if (rel == platform_file) allowed["unistd.h"] = 1
       # a line with this text in a comment is exempt from the identifier
       # checks; it needs a reason next to it
       allow = "cs-dialect: allow"

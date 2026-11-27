@@ -1,12 +1,12 @@
-// cesium1: core MIR types, and the tables of structs and functions. Written
+// cesium1: core SIR types, and the tables of structs and functions. Written
 // in S0.
 //
 // Every type is made once (pointer types are cached on their element, array
 // types are looked up before one is made), so two types are equal exactly
-// when their numbers are: the structural equality of libcsmir's
-// mir_type_eq.
+// when their numbers are: the structural equality of libcsir's
+// sir_type_eq.
 
-// type kinds, in the order of libcsmir's MirTypeKind
+// type kinds, in the order of libcsir's SirTypeKind
 const uword MT_VOID = 0;
 const uword MT_U8 = 1;
 const uword MT_U16 = 2;
@@ -47,8 +47,8 @@ struct StructInfo {
 
 ~StructInfo g_structs;
 uword g_nstructs;
-// the structs in the order core MIR prints them: by first reference while
-// the struct declarations are checked, as libcsmir's mir_struct_ref lists them
+// the structs in the order core SIR prints them: by first reference while
+// the struct declarations are checked, as libcsir's sir_struct_ref lists them
 ~uword g_sorder;
 uword g_nsorder;
 ~uword g_field_id;
@@ -197,7 +197,7 @@ u8 = ty_fits(uword t, u64 v) {
   return "f64";
 }
 
-// The type's core MIR text: u8, ptr<Token>, [4 x i32].
+// The type's core SIR text: u8, ptr<Token>, [4 x i32].
 void = ty_print(~Buf b, uword t) {
   uword k = g_types[t].kind;
   if (k == MT_PTR) {
@@ -250,7 +250,7 @@ void = err_parts(uword t) {
   }
 }
 
-// Lists the struct for core MIR at its first reference.
+// Lists the struct for core SIR at its first reference.
 void = struct_ref(uword sidx) {
   if (!g_structs[sidx].ordered) {
     g_structs[sidx].ordered = TRUE;
@@ -278,6 +278,8 @@ uword = ty_resolve(uword n) {
   } else if (base == BT_STRUCT) {
     uword id = g_nodes[n].tid;
     if (g_name_tab[id].sym != SYM_STRUCT) {
+      g_err_file = g_nodes[n].infile;
+      habit_type(id, g_nodes[n].tline, g_nodes[n].tcol);
       err_begin(g_nodes[n].tline, g_nodes[n].tcol, "E0301");
       err_s("unknown type '");
       err_name(id);

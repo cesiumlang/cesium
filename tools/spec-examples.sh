@@ -22,7 +22,7 @@ failed=0 count=0
 # examples.json: one object per example, with "file" before "expect"
 while IFS=$'\t' read -r file expect; do
   count=$((count + 1))
-  if "$cesium0" --emit-mir -o "$out/out.mir" "$out/$file" > "$out/err.txt" 2>&1; then got=accept; else got=reject; fi
+  if "$cesium0" --emit-sir -o "$out/out.sir" "$out/$file" > "$out/err.txt" 2>&1; then got=accept; else got=reject; fi
   if [ "$got" != "$expect" ]; then
     echo "::error::${file%.csm}: expected cesium0 to $expect it, and it did $got"
     sed 's/^/    /' "$out/err.txt"

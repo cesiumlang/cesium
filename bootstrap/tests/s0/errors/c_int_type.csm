@@ -1,0 +1,6 @@
+// The integer types of C are not S0's, and the message lists S0's.
+// spec: s0.type.integers
+i32 = main(i32 argc, ##u8 argv) {
+  int x = 0;
+  return 0;
+}

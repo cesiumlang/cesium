@@ -1,0 +1,183 @@
+// cesium1: the files named on the command line, and source locations.
+// Written in S0.
+//
+// Each file is read through C's stdio and parsed in turn, its lines counted
+// from 1, as cesium0 does. A node records its file, an index into argv (0
+// for standard input), so that errors name it and every statement's SIR
+// comes after a `loc` line, as libcsir's sir_print writes it for what
+// stage 0 builds. From standard input there is no file and no `loc`.
+
+extern cstdio = import('c') {
+  #u8 = fopen(#u8 filename, #u8 mode);
+  i32 = fgetc(#u8 stream);
+  i32 = fclose(#u8 stream);
+  i32 = strcmp(#u8 a, #u8 b);
+}
+
+// libcsir's limit on lines and columns (SIR_LOC_MAX): beyond it, no loc
+const u64 LOC_MAX = 536870912;
+
+##u8 g_argv;
+// the files, as indices into argv, in command-line order
+~uword g_loc_files;
+uword g_loc_nfiles;
+// where each file's bytes are in g_loc_src, by index into argv
+~uword g_loc_start;
+~uword g_loc_len;
+Buf g_loc_src;
+// the -o argument
+#u8 g_loc_out;
+u8 g_loc_has_out;
+// the build mode (-O), as libcsir numbers it (CS_OPT_DEBUG ...), and
+// whether variables are kept for debuggers (-f[no-]debug-variables)
+i32 g_loc_mode;
+u8 g_loc_vars;
+u8 g_loc_vars_given;
+uword g_file;      // the file being parsed, which new nodes get
+uword g_err_file;  // the file error positions are in, 0 for none
+uword g_loc_last;  // the file of the function's previous loc, 0 for none
+
+void = loc_usage(#u8 msg) {
+  print("error: ");
+  print(msg);
+  print("\nusage: cesium1 [-O debug|safe|fast|small] [-f[no-]debug-variables] [-o out.s] [file.csm ...]\n");
+  exit(2);
+}
+
+// The build mode named by -O, as Zig names them.
+void = loc_mode(#u8 name) {
+  if (strcmp(name, "debug") == 0) {
+    g_loc_mode = 0;
+  } else if (strcmp(name, "safe") == 0) {
+    g_loc_mode = 1;
+  } else if (strcmp(name, "fast") == 0) {
+    g_loc_mode = 2;
+  } else if (strcmp(name, "small") == 0) {
+    g_loc_mode = 3;
+  } else {
+    loc_usage("unknown build mode (-O debug, safe, fast or small)");
+  }
+}
+
+// Reads the command line, [-O mode] [-f[no-]debug-variables] [-o out.s]
+// [file.csm ...], and the files. Returns their total length. Variables are
+// kept by default in a debug build only (cesiumlang/cesium#143).
+uword = loc_args(i32 argc, ##u8 argv) {
+  uword n = argc as uword;
+  g_argv #= argv;
+  g_loc_files := alloc(n + 1);
+  g_loc_start := alloc(n + 1);
+  g_loc_len := alloc(n + 1);
+  uword i = 1;
+  while (i < n) {
+    #u8 a #= argv[i];
+    if (a[0] == '-' && a[1] == 'o' && a[2] == 0) {
+      if (i + 1 == n) {
+        loc_usage("missing file after -o");
+      }
+      i = i + 1;
+      g_loc_out #= argv[i];
+      g_loc_has_out = TRUE;
+    } else if (strcmp(a, "-O") == 0) {
+      if (i + 1 == n) {
+        loc_usage("missing build mode after -O");
+      }
+      i = i + 1;
+      loc_mode(argv[i]);
+    } else if (strcmp(a, "-fdebug-variables") == 0) {
+      g_loc_vars = TRUE;
+      g_loc_vars_given = TRUE;
+    } else if (strcmp(a, "-fno-debug-variables") == 0) {
+      g_loc_vars = FALSE;
+      g_loc_vars_given = TRUE;
+    } else if (a[0] == '-') {
+      loc_usage("unknown option");
+    } else {
+      loc_read(i);
+      g_loc_files[g_loc_nfiles] = i;
+      g_loc_nfiles = g_loc_nfiles + 1;
+    }
+    i = i + 1;
+  }
+  if (!g_loc_vars_given) {
+    g_loc_vars = g_loc_mode == 0;
+  }
+  return g_loc_src.len;
+}
+
+// Appends the bytes of the file argv[i] to g_loc_src, read in binary mode.
+void = loc_read(uword i) {
+  #u8 f #= fopen(g_argv[i], "rb");
+  if (((#f[0]) as uword) == 0) {
+    print("error: cannot read ");
+    print(g_argv[i]);
+    putchar('\n');
+    exit(1);
+  }
+  g_loc_start[i] = g_loc_src.len;
+  i32 c = fgetc(f);
+  while (c >= 0) {
+    buf_putc(~g_loc_src, c as u8);
+    c = fgetc(f);
+  }
+  fclose(f);
+  g_loc_len[i] = g_loc_src.len - g_loc_start[i];
+}
+
+// Parses the files one after another into the list at g_decls.
+void = loc_parse_files() {
+  uword k = 0;
+  while (k < g_loc_nfiles) {
+    uword i = g_loc_files[k];
+    g_file = i;
+    g_err_file = i;
+    lex_init(#g_loc_src.data[g_loc_start[i]], g_loc_len[i]);
+    parse_unit();
+    k = k + 1;
+  }
+}
+
+// "file:" before a position in an error, when there is a file.
+void = loc_err_file() {
+  if (g_err_file != 0) {
+    buf_puts(~g_err, g_argv[g_err_file]);
+    buf_putc(~g_err, ':');
+  }
+}
+
+u8 = loc_same(#u8 a, #u8 b) {
+  uword i = 0;
+  while (a[i] == b[i]) {
+    if (a[i] == 0) {
+      return TRUE;
+    }
+    i = i + 1;
+  }
+  return FALSE;
+}
+
+// Statement s begins: its `loc "file" line:col` line, the file named only
+// when it is not the one of the function's previous loc, then its indent.
+void = loc_stmt(uword s, uword depth) {
+  uword f = g_nodes[s].infile;
+  if (f != 0 && g_nodes[s].line < LOC_MAX && g_nodes[s].col < LOC_MAX) {
+    out_indent(depth);
+    out_s("loc ");
+    if (g_loc_last == 0 || !loc_same(g_argv[g_loc_last], g_argv[f])) {
+      #u8 name #= g_argv[f];
+      uword i = 0;
+      buf_putc(~g_out_funcs, '"');
+      while (name[i] != 0) {
+        buf_put_sir_byte(~g_out_funcs, name[i]);
+        i = i + 1;
+      }
+      out_s("\" ");
+      g_loc_last = f;
+    }
+    buf_put_u64(~g_out_funcs, g_nodes[s].line);
+    out_s(":");
+    buf_put_u64(~g_out_funcs, g_nodes[s].col);
+    out_s("\n");
+  }
+  out_indent(depth);
+}

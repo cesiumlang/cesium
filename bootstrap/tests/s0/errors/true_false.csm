@@ -1,0 +1,5 @@
+// Whether S0 has true and false is not decided, so stage 0 has neither.
+i32 = main(i32 argc, ##u8 argv) {
+  u8 done = true;
+  return 0;
+}

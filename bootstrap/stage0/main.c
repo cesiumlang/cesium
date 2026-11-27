@@ -1,41 +1,55 @@
 /* cesium0: the stage 0 compiler. It compiles S0 (cesiumlang/cesium#9), or
- * core MIR text, to assembly through libcsmir and QBE.
+ * core SIR text, to assembly through libcsir and QBE.
  *
  *   cesium0 [options] -o <out> <file.csm>...
- *   cesium0 [options] -o <out> --mir <file.mir>
+ *   cesium0 [options] -o <out> --sir <file.sir>
  *
  *   -o <out>        the output file (required)
  *   --target <t>    a QBE target name or an <arch>-<os> triple; default: this machine
- *   --emit-mir      write the core MIR text to <out> and stop
+ *   --emit-sir      write the core SIR text to <out> and stop
  *   --emit-qbe      write the QBE IL to <out> and stop
- *   --mir <file>    read core MIR text instead of S0 source
+ *   --sir <file>    read core SIR text instead of S0 source
+ *   -O <mode>       the build mode, as Zig names them: debug (the default),
+ *                   safe, fast or small
+ *   -fdebug-variables, -fno-debug-variables
+ *                   keep variables in memory and describe them for debuggers,
+ *                   or not; the default of a debug build only
+ *                   (cesiumlang/cesium#143)
  *
  * Without --emit-*, <out> is assembly text and "<out>.ssa" is the QBE IL it
  * was made from. Several .csm files are compiled as one unit.
  *
  * Exit status: 0 on success, 1 on an error in the input, 2 on a usage error.
  */
-#include "csmir.h"
-#include "csmir_internal.h"
+#include "sir.h"
+#include "sir_internal.h"
 #include "s0.h"
 
 static int usage(const char *msg) {
   if (msg != NULL) {
     fprintf(stderr, "cesium0: %s\n", msg);
   }
-  fputs("usage: cesium0 [--target <t>] [--emit-mir | --emit-qbe] -o <out> (<file.csm>... | --mir <file.mir>)\n",
+  fputs("usage: cesium0 [--target <t>] [-O <mode>] [-f[no-]debug-variables] [--emit-sir | --emit-qbe]\n"
+        "               -o <out> (<file.csm>... | --sir <file.sir>)\n",
         stderr);
   return 2;
+}
+
+/* The options that take a value. */
+static bool takes_value(const char *a) {
+  return strcmp(a, "-o") == 0 || strcmp(a, "--target") == 0 || strcmp(a, "--sir") == 0 || strcmp(a, "-O") == 0;
 }
 
 int main(int argc, char *argv[]) {
   const char *out = NULL;
   const char *target_name = NULL;
-  const char *mir_path = NULL;
-  bool emit_mir = false;
+  const char *sir_path = NULL;
+  bool emit_sir = false;
   bool emit_qbe = false;
-  const MirTarget *target;
-  MirModule *m;
+  int mode = CS_OPT_DEBUG;
+  int variables = -1; /* -1: the mode's default */
+  const SirTarget *target;
+  SirModule *m;
   CsArena arena = {NULL};
   S0Diag diag = {0};
   int nfiles = 0;
@@ -43,19 +57,27 @@ int main(int argc, char *argv[]) {
 
   for (i = 1; i < argc; i++) {
     const char *a = argv[i];
-    if (strcmp(a, "-o") == 0 || strcmp(a, "--target") == 0 || strcmp(a, "--mir") == 0) {
+    if (takes_value(a)) {
       if (i + 1 >= argc) {
         return usage("missing value after an option");
       }
       if (a[1] == 'o') {
         out = argv[++i];
+      } else if (a[1] == 'O') {
+        if (!csir_opt_mode(argv[++i], &mode)) {
+          return usage("unknown build mode (-O debug, safe, fast or small)");
+        }
       } else if (a[2] == 't') {
         target_name = argv[++i];
       } else {
-        mir_path = argv[++i];
+        sir_path = argv[++i];
       }
-    } else if (strcmp(a, "--emit-mir") == 0) {
-      emit_mir = true;
+    } else if (strcmp(a, "-fdebug-variables") == 0) {
+      variables = 1;
+    } else if (strcmp(a, "-fno-debug-variables") == 0) {
+      variables = 0;
+    } else if (strcmp(a, "--emit-sir") == 0) {
+      emit_sir = true;
     } else if (strcmp(a, "--emit-qbe") == 0) {
       emit_qbe = true;
     } else if (a[0] == '-') {
@@ -67,28 +89,31 @@ int main(int argc, char *argv[]) {
   if (out == NULL) {
     return usage("no output file (-o)");
   }
-  if ((mir_path == NULL) == (nfiles == 0)) {
-    return usage("give S0 source files or --mir <file>, not both");
+  if ((sir_path == NULL) == (nfiles == 0)) {
+    return usage("give S0 source files or --sir <file>, not both");
+  }
+  if (variables < 0) {
+    variables = mode == CS_OPT_DEBUG;
   }
 
   cs_backend_init();
-  target = csmir_target(target_name);
+  target = csir_target(target_name);
   if (target == NULL) {
     fprintf(stderr, "cesium0: %s\n", cs_last_error());
     return 1;
   }
 
-  if (mir_path != NULL) {
+  if (sir_path != NULL) {
     char *text;
     size_t len;
-    if (!cs_read_file(mir_path, &text, &len)) {
-      fprintf(stderr, "cesium0: cannot read %s\n", mir_path);
+    if (!cs_read_file(sir_path, &text, &len)) {
+      fprintf(stderr, "cesium0: cannot read %s\n", sir_path);
       return 1;
     }
-    m = mir_parse(text, len);
+    m = sir_parse(text, len);
     free(text);
     if (m->failed) {
-      fprintf(stderr, "%s: error: %s\n", mir_path, m->err);
+      fprintf(stderr, "%s: error[%s]: %s\n", sir_path, m->err_code, m->err);
       return 1;
     }
   } else {
@@ -98,7 +123,7 @@ int main(int argc, char *argv[]) {
       const char *a = argv[i];
       char *text;
       size_t len;
-      if (strcmp(a, "-o") == 0 || strcmp(a, "--target") == 0 || strcmp(a, "--mir") == 0) {
+      if (takes_value(a)) {
         i++;
         continue;
       }
@@ -121,33 +146,33 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (!mir_verify(m)) {
+  if (!sir_verify(m)) {
     /* A few errors in S0 source are left to the verifier: a function that
      * does not return on every path, a struct that contains itself, and a
      * name that collides with the runtime's. */
-    fprintf(stderr, "%s: error: %s\n", mir_path != NULL ? mir_path : "cesium0", m->err);
+    fprintf(stderr, "%s: error[%s]: %s\n", sir_path != NULL ? sir_path : "cesium0", m->err_code, m->err);
     return 1;
   }
 
-  if (emit_mir || emit_qbe) {
+  if (emit_sir || emit_qbe) {
     CsBuf b = {NULL, 0, 0};
-    if (emit_mir) {
-      mir_print(&b, m);
+    if (emit_sir) {
+      sir_print(&b, m);
     } else {
-      mir_lower_qbe(&b, m, target);
+      sir_lower_qbe(&b, m, target, variables != 0);
     }
     if (!cs_write_file(out, b.data == NULL ? "" : b.data, b.len)) {
       fprintf(stderr, "cesium0: cannot write %s\n", out);
       return 1;
     }
     cs_buf_free(&b);
-    mir_module_free(m);
+    sir_module_free(m);
     cs_arena_free(&arena);
     return 0;
   }
 
   /* does not return on success: QBE ends the process */
-  if (csmir_emit_qbe(m, target, out) != 0) {
+  if (csir_emit_qbe(m, target, out, variables != 0) != 0) {
     fprintf(stderr, "cesium0: %s\n", cs_last_error());
   }
   return 1;

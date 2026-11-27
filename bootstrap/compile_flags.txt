@@ -1,6 +1,6 @@
 -std=c99
 -Iinclude
--Ilibcsmir
+-Ilibcsir
 -Istage0
 -Wall
 -Wextra

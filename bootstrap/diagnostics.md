@@ -1,10 +1,10 @@
 # Diagnostics
 
-The errors `cesium0` and `cesium1` report in S0 source, by code (cesiumlang/cesium#82). `cesium0` prints `file:line:col: error[E0101]: message` on standard error; `cesium1` prints `line:col: error[E0101]: message` on standard output, with lines counted from the start of its input. Both give the same code and the same message for the same error.
+The errors `cesium0` and `cesium1` report in S0 source, by code (cesiumlang/cesium#82). `cesium0` prints `file:line:col: error[E0101]: message` on standard error; `cesium1` prints the same on standard output, or `line:col: error[E0101]: message` for source given on standard input, with lines counted from the start of the input. Both give the same code and the same message for the same error.
 
-Each code is stable once released: what it means does not change, and a code is never reused for another message. A message is shown as a template, in which the parts in angle brackets (`<name>`, `<type>`, `<token>`, `<n>`) are filled in by the compiler. The first two digits of a code are its group; the last two count within the group, in the order of first appearance in the source of `cesium0`. `zig build test` checks that every code here is used, and that every code the compilers use is here and is used by both (`build-src/diagnostics.zig`).
+Each code is stable once released: what it means does not change, and a code is never reused for another message. A message is shown as a template, in which the parts in angle brackets (`<name>`, `<type>`, `<token>`, `<n>`) are filled in by the compiler. The first two digits of a code are its group; the last two count within the group, first in the order of first appearance in the source of `cesium0`, and a code added later takes the next free number of its group. `zig build test` checks that every code here is used, and that every code the compilers use is here and is used by both (`build-src/diagnostics.zig`).
 
-Not covered yet, and printed without a code: the messages of `libcsmir`, its MIR text parser and its verifier (`cesium0: error: ...`, and in `cesium1`, for the two verifier checks it makes itself, `line:col: error: ...`); the I/O messages of `cesium0`; and the limits of `cesium1` itself (`error: internal: ...`, exit status 2).
+The messages of `libcsir`, its SIR text parser and its verifier, have codes of their own groups, E10xx and E11xx (cesiumlang/cesium#129), used by both compilers, which link it. Printed without a code, as they are no errors in the source: the I/O messages of both compilers (`cesium1`: `error: cannot read a.csm`), the usage errors of `cesium1` (exit status 2), and the limits of `cesium1` itself (`error: internal: ...`, exit status 2).
 
 ## Lexical (E01xx)
 
@@ -56,7 +56,7 @@ The character begins no token of S0, such as `^`, `@`, `?` or `$`. Exclusive or 
 
 `expected <token>, found <token>`
 
-The parser needed a particular token, such as `;`, `)` or `=`, and found another. A C-style function header such as `i32 main() {` gives this error: an S0 function is declared `i32 = main() { ... }`, with `=` after the return type.
+The parser needed a particular token, such as `;`, `)` or `=`, and found another. Where the token found is a habit from another language, the message says so: E0214 for a C-style function header, E0215 for a return type after `->`.
 
 ### E0202
 
@@ -98,7 +98,7 @@ Unary minus is not among the operators of S0 and has no place in the precedence 
 
 `expected an expression, found <token>`
 
-An operand is missing, as in `a + ;` or `f(1, )`, or a statement begins with a token that begins no statement.
+An operand is missing, as in `a + ;` or `f(1, )`, or a statement begins with a token that begins no statement. Prefix `&` and `*`, compound assignment and `++` and `--` have messages of their own: E0216 to E0219.
 
 ### E0209
 
@@ -130,13 +130,49 @@ A `{ ... }` block is only the body of a function, an `if`, an `else` or a `while
 
 The `import` of an `extern` block names its library in quotes, as in `extern libc = import('c') { ... }`.
 
+### E0214
+
+`expected ';', found '('; a function is written 'T = name(parameters) { ... }'`
+
+A declaration at the top level, such as `int main() {` or `fn main() {`, continues with a parameter list, so it reads as a global named `main` followed by `(`. An S0 function is declared with its return type, `=`, its name and its parameters: `i32 = main(i32 argc, ##u8 argv) { ... }` (rule `s0.func`).
+
+### E0215
+
+`expected '{', found '->'; the return type comes first: 'T = name(parameters)'`
+
+A function header continues with `->` and a return type after its parameters, as in Rust or Zig. In S0 the return type comes before the name, followed by `=`: `i32 = main() { ... }`, and `void = f()` for a function that returns nothing (rule `s0.func`).
+
+### E0216
+
+`expected an expression, found '&'; an address is taken with '#'`
+
+An expression begins with `&`, C's address-of. In S0 `&` is the bitwise and of two operands only; an address is taken with `#`, as in `f(#x)` for a pointer parameter (rule `s0.expr`).
+
+### E0217
+
+`expected an expression, found '*'; there is no dereference operator: p, p[i] and p.f read through a pointer`
+
+An expression begins with `*`, C's dereference. S0 has no dereference operator: a pointer is read through by default, so `p` where a number is expected is the value it points at, and `p[i]` and `p.f` reach through it (rule `s0.expr.deref`). Write `return p;` for C's `return *p;`, and `p = 1;` for `*p = 1;`, since plain `=` assigns through a pointer.
+
+### E0218
+
+`compound assignment is not decided for S0; write x = x + y`
+
+An operator such as `+`, `-`, `<<` or `><` is followed by `=`, as in `x += 1`. The compound assignments are operators of full Cesium by the direction of cesiumlang/cesium#15 (rule `lex.op.compound`), but whether S0 has them is open, so stage 0 rejects them. Write the assignment out: `x = x + 1`.
+
+### E0219
+
+`'++' and '--' are not decided for S0; write x = x + 1`
+
+Two `+` or two `-` with nothing between them stand before or after an operand, as in `i++` or `--i`. Increment and decrement are operators of full Cesium by the direction of cesiumlang/cesium#15 (rule `lex.op.increment`), but whether S0 has them is open, so stage 0 rejects them. Write `i = i + 1` or `i = i - 1`.
+
 ## Names and declarations (E03xx)
 
 ### E0301
 
 `unknown type '<name>'`
 
-The name is neither a number type of S0 nor a struct of the unit. The types of C are not S0's: write `i32` for `int`, `u8` for `char`, `uword` for `size_t`, and `#T` for `T *`.
+The name is neither a number type of S0 nor a struct of the unit. The type names of C have messages of their own: E0320 to E0322.
 
 ### E0302
 
@@ -154,7 +190,7 @@ A function's name stands where a variable is needed: as a value, on the left of 
 
 `unknown name '<name>'`
 
-No local, parameter, global or constant of this name is in scope here. Check the spelling, and that a local is declared before its use. S0 has no `true` and `false` (cesiumlang/cesium#38): declare constants such as `const u8 TRUE = 1;`.
+No local, parameter, global or constant of this name is in scope here. Check the spelling, and that a local is declared before its use. For `true` and `false`, the message is E0323.
 
 ### E0305
 
@@ -245,6 +281,30 @@ The names of the parameters of a function are distinct. Rename one.
 `'cs_arena_alloc' is the runtime function behind alloc and cannot be declared`
 
 The unit uses `alloc`, which calls the runtime function `cs_arena_alloc`, and also declares a function of that name. Rename that function.
+
+### E0320
+
+`unknown type '<name>'; the integer types of S0 are u8, i32, u32, i64, u64 and uword`
+
+The type is one of C's integer types, `int`, `long`, `short`, `char`, `unsigned`, `signed` or `size_t`, and no struct of the unit has its name. S0 names its integer types by sign and width (rule `s0.type.integers`): write `i32` for `int`, `u8` for `char`, `uword` for `size_t`, and `#T` for `T *`.
+
+### E0321
+
+`unknown type 'bool'; there is no bool type: a condition is an integer, nonzero is true`
+
+Cesium has no `bool` type, by the direction of cesiumlang/cesium#38 (rule `lex.predeclared.truth`): the condition of an `if` or a `while` is an integer, and nonzero is true (rule `s0.condition`). Declare a flag as a `u8`; a comparison such as `a < b` gives 1 or 0.
+
+### E0322
+
+`unknown type '<name>'; S0 has no floating point`
+
+The type is `float` or `double`, and floating point is not in S0 (rule `s0.excluded`). Stage 0 and stage 1 compute with integers only.
+
+### E0323
+
+`unknown name '<name>'; true and false are not decided for S0: write 1 or 0`
+
+The name is `true` or `false`, and no constant of the unit has it. Full Cesium is to have them as built-in `u8` constants with the values 1 and 0, by the direction of cesiumlang/cesium#38 (rule `lex.predeclared.truth`), but whether S0 has them is open, so stage 0 does not. Write `1` or `0`, or declare constants such as `const u8 TRUE = 1;`.
 
 ## Types and conversions (E04xx)
 
@@ -493,3 +553,395 @@ A call passes more than 64 arguments. Pass a pointer to a struct instead.
 `too many parameters`
 
 A function declares more than 64 parameters. Take a pointer to a struct instead.
+
+## SIR text (E10xx)
+
+The errors of `libcsir`'s parser of core SIR text (`cesium0 --sir file.sir`; `sir_text.c`), printed as `file.sir: error[E1001]: line N: message`. SIR text is written by hand or by a compiler, so these errors come from a hand-written file or from a fault in the compiler that wrote it, not from S0 source. The text form is the one of P-0006 (`proposals/0006-semantic-ir.md`).
+
+### E1001
+
+`expected a name after '<c>'`
+
+A sigil, `%` for a local or `@` for a global, is not followed by a name. Write the name right after it: `%i`, `@main`.
+
+### E1002
+
+`unterminated string`
+
+A string has no closing `"` before the end of its line.
+
+### E1003
+
+`bad escape in string: expected \HH, \\ or \"`
+
+A backslash in a string is followed by something other than two hexadecimal digits, a backslash or a quote. SIR text writes every other byte as `\HH`: `\00`, `\0A`.
+
+### E1004
+
+`unexpected character '<c>'`
+
+The character begins no token of SIR text.
+
+### E1005
+
+`expected <what>`
+
+The parser needed a particular token or construct, such as `'('`, `'->'`, a type, an expression, a statement or a declaration, and found something else.
+
+### E1006
+
+`nested too deeply (the limit is 1024 levels)`
+
+Types, expressions and statements nest at most 1024 levels deep, so that the parser, the verifier and the lowering cannot overflow their stacks.
+
+### E1007
+
+`integer constant is too large`
+
+The digits of a constant are larger than 18446744073709551615, the largest `u64`.
+
+### E1008
+
+`constant does not fit its type`
+
+A constant is out of the range of the type it is written with, as in `256:u8` or `-1:u32`.
+
+### E1009
+
+`too many arguments`
+
+A call passes more than 64 arguments.
+
+### E1010
+
+`unknown operation '<name>'`
+
+An expression starts with a name that is no operation of core SIR. The operations are listed in P-0006.
+
+### E1011
+
+`unknown statement '<name>'`
+
+A statement starts with a word that is no statement of core SIR, such as `local`, `set`, `store`, `eval`, `if`, `while`, `break`, `continue`, `return` or `loc`.
+
+### E1012
+
+`a <line|column> number in a loc is from 1 to 536870911`
+
+A `loc` gives a line or column of 0, or one larger than QBE accepts.
+
+### E1013
+
+`empty file name in a loc`
+
+A `loc` names its file with `""`.
+
+### E1014
+
+`a file name in a loc has a zero byte`
+
+The file name of a `loc` contains `\00`, which no path can hold.
+
+### E1015
+
+`the first loc of a function names its file`
+
+The first `loc` of a function gives only `line:column`. Give it its file, `loc "a.csm" 3:1`; later ones may leave the file out.
+
+### E1016
+
+`a loc stands before a statement`
+
+A `loc` is not followed by a statement, as at the end of a block. Remove it, or move it before the statement it locates.
+
+### E1017
+
+`too many parameters`
+
+A function or an `extern` declaration has more than 64 parameters.
+
+### E1018
+
+`too many fields`
+
+A struct has more than 256 fields.
+
+### E1019
+
+`initializer type differs from the type of @<name>`
+
+A global's initializer is a constant written with another type than the global's: `global @n: u64 = 1:u32`.
+
+### E1020
+
+`expected SIR version 0`
+
+The file does not start with `cesium-sir 0`, the version this `libcsir` reads.
+
+## SIR verification (E11xx)
+
+The errors of `libcsir`'s verifier (`sir_verify.c`), which checks a module, parsed or built by a compiler, before it is lowered: printed as `file.sir: error[E1101]: line N: message` for SIR text, and by `cesium1` after its own message when its SIR fails, as `error[E1101]: SIR: line N: message`. A few are errors in S0 source too, which the compilers report through the same check: E1135, E1142 and E1143; `cesium1` makes those checks itself, with the same code and message at the place in its source.
+
+### E1101
+
+`%<name> is declared twice in the same block`
+
+Two locals of one block have the same name. Rename one; a nested block may reuse a name.
+
+### E1102
+
+`<what>: an array of void`
+
+A type is an array of `void`, which has no size.
+
+### E1103
+
+`<what>: struct <name> is not defined`
+
+A type names a struct that no `struct` declaration of the module defines.
+
+### E1104
+
+`floating-point types are reserved in SIR version 0`
+
+`f32` and `f64` are names of SIR, but version 0 has no floating-point values.
+
+### E1105
+
+`<what> must be an integer, not <type>`
+
+An index, a condition, or an operand of an operation on integers has another type.
+
+### E1106
+
+`a constant needs an integer type`
+
+A constant is written with a type that is not an integer type, as in `0:ptr<u8>`. Write an integer constant and convert it with `as`.
+
+### E1107
+
+`unknown local %<name>`
+
+A local is read, set or has its address taken where no parameter or local of that name is in scope.
+
+### E1108
+
+`%<name> has type <type> and cannot be read as a value; use addr(%<name>)`
+
+A local of a struct or array type is used as a value. Such a local is reached through its address: `addr(%p)`, then `field` or `index`.
+
+### E1109
+
+`@<name> is a function; function addresses are not values in SIR version 0`
+
+A function's name is used as a value. Call it with `call`.
+
+### E1110
+
+`unknown global @<name>`
+
+An expression, or the initializer of a global, names a global that the module does not declare.
+
+### E1111
+
+`load needs a pointer, not <type>`
+
+The operand of `load` is not a pointer.
+
+### E1112
+
+`load of <type>: only integers and pointers are loaded`
+
+`load` reads through a pointer to a struct or an array. Load its fields or elements one at a time, through `field` and `index`.
+
+### E1113
+
+`index needs a pointer to a sized type, not <type>`
+
+The first operand of `index` is not a pointer, or points at `void`.
+
+### E1114
+
+`field needs a pointer to a struct, not <type>`
+
+The first operand of `field` is not a pointer to a struct.
+
+### E1115
+
+`struct <name> has no field <field>`
+
+`field` names a field that the struct does not have.
+
+### E1116
+
+`unknown function @<name>`
+
+A call names a function that the module neither defines nor declares `extern`.
+
+### E1117
+
+`@<name> takes <n> arguments, not <m>`
+
+A call passes another number of arguments than the function has parameters.
+
+### E1118
+
+`argument <n> of @<name> is <type>, not <type>`
+
+An argument's type is not the type of its parameter. Convert it with `as`.
+
+### E1119
+
+`<op> of <type> and <type>: the operands must have the same type`
+
+The two operands of an arithmetic or bitwise operation have different types. Convert one with `as`.
+
+### E1120
+
+`<op> of <type> and <type>: the operands must be integers or pointers of the same type`
+
+The operands of a comparison have different types, or are neither integers nor pointers.
+
+### E1121
+
+`no conversion from <type> to <type>`
+
+`as` converts between integers, between pointers, and between a pointer and `uword`; this is none of them.
+
+### E1122
+
+`<op> of void`
+
+An operation has an operand of type `void`, such as the result of a call to a function that returns nothing.
+
+### E1123
+
+`%<name> cannot have type void`
+
+A local is declared with the type `void`.
+
+### E1124
+
+`%<name> is <type> but its initializer is <type>`
+
+A local's initializer has another type than the local. Convert it with `as`.
+
+### E1125
+
+`set %<name>: the local is <type> and the value is <type>`
+
+`set` gives a local a value of another type, or sets a local of a struct or array type, which is written through its address with `store`.
+
+### E1126
+
+`store of <type> through <type>`
+
+The value stored is not of the type the pointer points at, or the first operand of `store` is not a pointer.
+
+### E1127
+
+`<break|continue> outside a loop`
+
+`break` or `continue` stands outside every `while`.
+
+### E1128
+
+`@<name> must return a <type>`
+
+`return` without a value in a function that returns a value.
+
+### E1129
+
+`@<name> returns <type>, not <type>`
+
+`return` gives a value of another type than the function's, or a value in a function that returns `void`.
+
+### E1130
+
+`@<name> returns <type>: only integers, pointers and void in SIR version 0`
+
+A function returns a struct or an array. Return it through a pointer parameter.
+
+### E1131
+
+`parameter <n> of @<name> is <type>: only integers and pointers in SIR version 0`
+
+A parameter has a struct or array type. Pass a pointer instead.
+
+### E1132
+
+`@<name> has two parameters named %<param>`
+
+Two parameters of a function have the same name.
+
+### E1133
+
+`struct <name> is used but never defined`
+
+A type names a struct that is never defined.
+
+### E1134
+
+`field <field> of struct <name> has type void`
+
+A field is declared with the type `void`.
+
+### E1135
+
+`struct <name> contains itself through field <field>`
+
+A struct holds itself by value, directly or through other structs, so it would have no finite size. In S0 source too: give the field a pointer type, `~Node next;`.
+
+### E1136
+
+`struct <name> has two fields named <field>`
+
+Two fields of a struct have the same name.
+
+### E1137
+
+`@<name> is defined twice`
+
+Two globals, or two functions, have the same name.
+
+### E1138
+
+`@<name> cannot have type void`
+
+A global is declared with the type `void`.
+
+### E1139
+
+`@<name> is not an integer but has an integer initializer`
+
+A global of a pointer, struct or array type is initialized with an integer constant.
+
+### E1140
+
+`@<name>: a string of <n> bytes needs the type [<n> x u8]`
+
+A global initialized with a string has another type than an array of exactly as many bytes as the string, its final `\00` included.
+
+### E1141
+
+`@<name> is not a pointer but is initialized with an address`
+
+A global that is not a pointer is initialized with the address of another global.
+
+### E1142
+
+`@<name> names both a function and a global`
+
+A function and a global have the same name. In S0 source, this is a global named `cs_arena_alloc` in a program that uses `alloc`, whose runtime function has that name.
+
+### E1143
+
+`@<name> does not return a value on every path`
+
+The end of a function that returns a value can be reached without a `return`. In S0 source too: a `while` or an `if` without `else` can be left, so put a `return` after it, even after a call that never returns, such as `exit`.
+
+### E1144
+
+`struct <name> is defined twice`
+
+Two `struct` declarations of the module have the same name.

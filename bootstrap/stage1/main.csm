@@ -1,43 +1,70 @@
 // cesium1: the driver. Written in S0.
 //
-//   cesium1           S0 source on standard input -> core MIR text on
-//                     standard output
-//   cesium1 <out.s>   S0 source on standard input -> assembly in <out.s>,
-//                     through libcsmir (and "<out.s>.ssa", the QBE IL)
+//   cesium1 [-O mode] [-f[no-]debug-variables] [-o out.s] [file.csm ...]
 //
-// Several files are compiled as one unit by giving them one after another
-// on standard input. The core MIR is the text cesium0 --emit-mir prints for
-// the same unit, byte for byte.
+// -O is the build mode, as Zig names it (debug, the default, safe, fast or
+// small); a debug build keeps variables for debuggers unless told not to,
+// the others only when told to (cesiumlang/cesium#143).
+//
+// The files are compiled as one unit, each read in turn (loc.csm), to the
+// core SIR text cesium0 --emit-sir prints for the same files, byte for
+// byte, on standard output; with -o, to assembly in out.s through libcsir
+// (and "out.s.ssa", the QBE IL). With no file named, the unit is read from
+// standard input, where several files can be given one after another, and
+// its SIR has no source locations.
 //
 // Exit status: 0 on success; 1 on an error in the source, reported as
-// "line:col: error[E0101]: message" on standard output (lines count from the start
-// of the input), or when libcsmir fails; 2 when a limit of cesium1 is
-// reached. Nothing else is printed before the whole unit has been checked.
+// "file:line:col: error[E0101]: message" on standard output ("line:col"
+// from standard input, lines counted from its start), on a file that
+// cannot be read, or when libcsir fails; 2 on a usage error or when a
+// limit of cesium1 is reached. Nothing else is printed before the whole
+// unit has been checked.
 
-// libcsmir's coarse C API (bootstrap/libcsmir/csmir.h). With the QBE
-// backend a successful cs_compile_mir does not return: QBE ends the process.
-extern csmir = import('csmir') {
-  i32 = cs_compile_mir(#u8 mir, uword len, i32 backend, #u8 triple, #u8 cpu, #u8 features, i32 opt_level,
+// libcsir's coarse C API (bootstrap/libcsir/sir.h). With the QBE
+// backend a successful cs_compile_sir does not return: QBE ends the process.
+extern csir = import('csir') {
+  i32 = cs_compile_sir(#u8 sir, uword len, i32 backend, #u8 triple, #u8 cpu, #u8 features, i32 opt_level,
                        #u8 out_path);
   #u8 = cs_last_error();
+  #u8 = cs_last_error_code();
 }
 
 const i32 CS_BACKEND_QBE = 0;
+// or'ed into the build mode: keep variables for debuggers
+const i32 CS_OPT_VARIABLES = 256;
 
 i32 = main(i32 argc, ##u8 argv) {
   #u8 src;
-  uword len = read_all(~src);
+  uword len = loc_args(argc, argv);
+  if (g_loc_nfiles == 0) {
+    len = read_all(~src);
+  }
   name_init(len);
-  lex_init(src, len);
   parse_init(len);
-  parse_unit();
+  if (g_loc_nfiles == 0) {
+    lex_init(src, len);
+    parse_unit();
+  } else {
+    loc_parse_files();
+  }
   ty_init(len, g_nnodes);
   low_init(g_nnodes);
   decl_unit();
 
-  if (argc > 1) {
-    cs_compile_mir(g_out.data, g_out.len, CS_BACKEND_QBE, "", "", "", 0, argv[1]);
-    print("error: ");
+  if (g_loc_has_out) {
+    i32 opt = g_loc_mode;
+    if (g_loc_vars) {
+      opt = opt | CS_OPT_VARIABLES;
+    }
+    cs_compile_sir(g_out.data, g_out.len, CS_BACKEND_QBE, "", "", "", opt, g_loc_out);
+    #u8 code := cs_last_error_code();
+    if (code[0] != 0) {
+      print("error[");
+      print(code);
+      print("]: ");
+    } else {
+      print("error: ");
+    }
     print(cs_last_error());
     putchar('\n');
     return 1;

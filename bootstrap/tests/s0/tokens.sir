@@ -1,0 +1,93 @@
+cesium-sir 0
+
+struct Token { kind: i64, start: ptr<u8>, len: uword }
+
+const @str.0: [6 x u8] = "hello\00"
+const @str.1: [15 x u8] = "token length: \00"
+
+extern func @putchar(i32) -> i32 callconv(c)
+
+func @cstr_len(%s: ptr<u8>) -> uword {
+  loc "bootstrap/tests/s0/tokens.csm" 18:3
+  local %n: uword = 0:uword
+  loc 19:3
+  while ne(load(index(%s, %n)), 0:u8) {
+    loc 20:5
+    set %n = add(%n, 1:uword)
+  }
+  loc 22:3
+  return %n
+}
+
+func @print(%s: ptr<u8>) -> void {
+  loc "bootstrap/tests/s0/tokens.csm" 26:3
+  local %i: uword = 0:uword
+  loc 27:3
+  while ne(load(index(%s, %i)), 0:u8) {
+    loc 28:5
+    eval call @putchar(as(i32, load(index(%s, %i))))
+    loc 29:5
+    set %i = add(%i, 1:uword)
+  }
+}
+
+func @fmt_u64(%v: u64, %buf: ptr<u8>) -> uword {
+  loc "bootstrap/tests/s0/tokens.csm" 35:3
+  local %tmp: [20 x u8]
+  loc 36:3
+  local %n: uword = 0:uword
+  loc 37:3
+  if eq(%v, 0:u64) {
+    loc 38:5
+    store index(%buf, 0:uword), 48:u8
+    loc 39:5
+    return 1:uword
+  }
+  loc 41:3
+  while ne(%v, 0:u64) {
+    loc 42:5
+    store index(as(ptr<u8>, addr(%tmp)), %n), as(u8, add(48:u64, rem(%v, 10:u64)))
+    loc 43:5
+    set %v = div(%v, 10:u64)
+    loc 44:5
+    set %n = add(%n, 1:uword)
+  }
+  loc 46:3
+  local %i: uword = 0:uword
+  loc 47:3
+  while lt(%i, %n) {
+    loc 48:5
+    store index(%buf, %i), load(index(as(ptr<u8>, addr(%tmp)), sub(sub(%n, 1:uword), %i)))
+    loc 49:5
+    set %i = add(%i, 1:uword)
+  }
+  loc 51:3
+  return %n
+}
+
+export func @main(%argc: i32, %argv: ptr<ptr<u8>>) -> i32 {
+  loc "bootstrap/tests/s0/tokens.csm" 55:3
+  local %t: ptr<Token> = as(ptr<Token>, call @cs_arena_alloc(mul(1:uword, sizeof(Token)), alignof(Token)))
+  loc 56:3
+  store field(%t, kind), 1:i64
+  loc 57:3
+  store field(%t, start), as(ptr<u8>, @str.0)
+  loc 58:3
+  store field(%t, len), call @cstr_len(load(field(%t, start)))
+  loc 60:3
+  local %buf: ptr<u8> = as(ptr<u8>, call @cs_arena_alloc(mul(32:uword, sizeof(u8)), alignof(u8)))
+  loc 61:3
+  local %n: uword = call @fmt_u64(as(u64, load(field(%t, len))), %buf)
+  loc 62:3
+  store index(%buf, %n), 10:u8
+  loc 63:3
+  store index(%buf, add(%n, 1:uword)), 0:u8
+  loc 64:3
+  eval call @print(as(ptr<u8>, @str.1))
+  loc 65:3
+  eval call @print(%buf)
+  loc 66:3
+  return 0:i32
+}
+
+extern func @cs_arena_alloc(uword, uword) -> ptr<u8> callconv(c)

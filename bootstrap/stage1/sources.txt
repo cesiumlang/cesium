@@ -1,0 +1,16 @@
+# cesium1's files, in the order they make one unit: the one list of them,
+# read by the build (build-src/sources.zig), tools/portable-c.sh and the
+# fuzzer (tools/fuzz-stage0/corpus.zig). A file here is also in the table of
+# bootstrap/README.md, "Stage 1", which zig build test checks.
+util.csm
+lex.csm
+parse.csm
+types.csm
+habit.csm
+lower.csm
+place.csm
+expr.csm
+stmt.csm
+decl.csm
+loc.csm
+main.csm

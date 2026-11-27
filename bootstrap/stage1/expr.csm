@@ -1,0 +1,489 @@
+// cesium1: checking expressions, and their core SIR text; as
+// stage0/s0_expr.c. Written in S0.
+
+u8 = low_is_untyped(uword e) {
+  uword k = g_nodes[e].kind;
+  if (k == EX_INT) {
+    return TRUE;
+  }
+  if (k == EX_BINARY) {
+    uword op = g_nodes[e].op;
+    if (op == TK_PLUS || op == TK_MINUS || op == TK_STAR || op == TK_SLASH || op == TK_PERCENT || op == TK_AMP ||
+        op == TK_PIPE || op == TK_XOR || op == TK_SHL || op == TK_SHR) {
+      return low_is_untyped(g_nodes[e].a) && low_is_untyped(g_nodes[e].b);
+    }
+  }
+  return FALSE;
+}
+
+// Reads through pointers until the value has the depth the context wants,
+// then checks the result against the context.
+void = low_settle(uword at, ~Val v, ~Want w) {
+  uword target = w.ptr_depth;
+  if (w.ty != 0) {
+    target = ty_depth(w.ty);
+  }
+  while (ty_depth(v.ty) > target) {
+    uword t = ty_elem(v.ty);
+    if (!ty_is_scalar(t)) {
+      err_at(at, "E0401");
+      err_s("a ");
+      err_ty(t);
+      err_s(" is not a value; use one of its ");
+      err_parts(t);
+      err_end();
+    }
+    val_wrap(v, "load(");
+    v.ty = t;
+  }
+  if (w.ty != 0) {
+    if (v.ty != w.ty) {
+      u8 both_int = ty_is_int(v.ty) && ty_is_int(w.ty);
+      if (both_int) {
+        err_at(at, "E0403");
+      } else {
+        err_at(at, "E0402");
+      }
+      err_s("expected ");
+      err_ty(w.ty);
+      err_s(", found ");
+      err_ty(v.ty);
+      if (both_int) {
+        err_s("; convert it with 'as'");
+      }
+      err_end();
+    }
+  } else if (w.ptr_depth > 0) {
+    if (!(ty_kind(v.ty) == MT_PTR || (w.or_uword && ty_kind(v.ty) == MT_UWORD))) {
+      err_at(at, "E0404");
+      err_s("expected a pointer");
+      if (w.or_uword) {
+        err_s(" or a uword");
+      }
+      err_s(", found ");
+      err_ty(v.ty);
+      err_end();
+    }
+  } else if (!ty_is_int(v.ty)) {
+    err_at(at, "E0405");
+    err_s("expected a number, found ");
+    err_ty(v.ty);
+    err_end();
+  }
+}
+
+void = frag_op(uword op) {
+  if (op == TK_PLUS) { frag_s("add"); }
+  if (op == TK_MINUS) { frag_s("sub"); }
+  if (op == TK_STAR) { frag_s("mul"); }
+  if (op == TK_SLASH) { frag_s("div"); }
+  if (op == TK_PERCENT) { frag_s("rem"); }
+  if (op == TK_AMP) { frag_s("and"); }
+  if (op == TK_PIPE) { frag_s("or"); }
+  if (op == TK_XOR) { frag_s("xor"); }
+  if (op == TK_SHL) { frag_s("shl"); }
+  if (op == TK_SHR) { frag_s("shr"); }
+  if (op == TK_EQ) { frag_s("eq"); }
+  if (op == TK_NE) { frag_s("ne"); }
+  if (op == TK_LT) { frag_s("lt"); }
+  if (op == TK_LE) { frag_s("le"); }
+  if (op == TK_GT) { frag_s("gt"); }
+  if (op == TK_GE) { frag_s("ge"); }
+  if (op == TK_ANDAND) { frag_s("land"); }
+  if (op == TK_OROR) { frag_s("lor"); }
+}
+
+u8 = low_is_comparison(uword op) {
+  return op == TK_EQ || op == TK_NE || op == TK_LT || op == TK_LE || op == TK_GT || op == TK_GE;
+}
+
+// The two operands of an arithmetic or comparison operator: both numbers of
+// one type. A literal takes the other operand's type. fallback is the type
+// for two literals, or 0 when the context gives none.
+void = low_operands(uword e, uword fallback, ~Val a, ~Val b) {
+  uword an = g_nodes[e].a;
+  uword bn = g_nodes[e].b;
+  u8 lu = low_is_untyped(an);
+  u8 ru = low_is_untyped(bn);
+  Want w;
+  if (lu && ru) {
+    if (fallback == 0 || !ty_is_int(fallback)) {
+      err_node(e, "E0406", "the type of these literals is not determined by their context; write 'as T' after one");
+    }
+    want_type(~w, fallback);
+    low_expr(an, ~w, a);
+    low_expr(bn, ~w, b);
+  } else if (lu) {
+    // the literal on the left takes the right operand's type; the SIR
+    // still evaluates left to right
+    want_value(~w);
+    low_expr(bn, ~w, b);
+    want_type(~w, b.ty);
+    low_expr(an, ~w, a);
+  } else if (ru) {
+    want_value(~w);
+    low_expr(an, ~w, a);
+    want_type(~w, a.ty);
+    low_expr(bn, ~w, b);
+  } else {
+    want_value(~w);
+    low_expr(an, ~w, a);
+    low_expr(bn, ~w, b);
+    if (a.ty != b.ty) {
+      err_at(e, "E0407");
+      err_s("the operands are ");
+      err_ty(a.ty);
+      err_s(" and ");
+      err_ty(b.ty);
+      err_s("; convert one with 'as'");
+      err_end();
+    }
+  }
+}
+
+// Writes len bytes of g_strs from start, and a NUL, as a SIR string.
+void = low_put_bytes(~Buf out, uword start, uword len) {
+  buf_putc(out, '"');
+  uword i = 0;
+  while (i <= len) {
+    u8 c = 0;
+    if (i < len) {
+      c = g_strs.data[start + i];
+    }
+    buf_put_sir_byte(out, c);
+    i = i + 1;
+  }
+  buf_putc(out, '"');
+}
+
+// A string literal: a global array of its bytes and a NUL, and the value
+// as(ptr<u8>, @str.N).
+void = low_string(uword e, ~Val v) {
+  uword n = g_nstrings;
+  uword len = g_nodes[e].slen;
+  uword u8t = ty_prim(MT_U8);
+  g_nstrings = g_nstrings + 1;
+  buf_puts(~g_out_globals, "const @str.");
+  buf_put_u64(~g_out_globals, n as u64);
+  buf_puts(~g_out_globals, ": ");
+  ty_print(~g_out_globals, ty_array(u8t, (len + 1) as u64));
+  buf_puts(~g_out_globals, " = ");
+  low_put_bytes(~g_out_globals, g_nodes[e].sstart, len);
+  buf_putc(~g_out_globals, '\n');
+  uword start = g_frag.len;
+  frag_s("as(");
+  frag_ty(ty_ptr(u8t));
+  frag_s(", @str.");
+  buf_put_u64(~g_frag, n as u64);
+  frag_s(")");
+  val_end(v, start, ty_ptr(u8t));
+}
+
+void = low_call(uword e, ~Want w, ~Val v) {
+  uword id = g_nodes[e].id;
+  if (id == ID_ALLOC) {
+    err_node(e, "E0507", "alloc(count) can only initialize or be assigned to a pointer with ':='");
+  }
+  if (g_name_tab[id].sym != SYM_FUNC) {
+    err_at(e, "E0305");
+    err_s("unknown function '");
+    err_name(id);
+    err_s("'");
+    err_end();
+  }
+  uword f = g_name_tab[id].sym_idx;
+  if (g_nodes[e].count != g_funcs[f].nparams) {
+    err_at(e, "E0601");
+    err_s("'");
+    err_name(id);
+    err_s("' takes ");
+    err_u64(g_funcs[f].nparams as u64);
+    err_s(" arguments, not ");
+    err_u64(g_nodes[e].count as u64);
+    err_end();
+  }
+  uword base = g_nfstack;
+  uword arg = g_nodes[e].items;
+  uword i = 0;
+  while (arg != 0) {
+    Want aw;
+    Val av;
+    want_type(~aw, g_param_ty[g_funcs[f].first + i]);
+    low_expr(arg, ~aw, ~av);
+    g_fstack[g_nfstack] = av.start;
+    g_fstack[g_nfstack + 1] = av.len;
+    g_nfstack = g_nfstack + 2;
+    arg = g_nodes[arg].next;
+    i = i + 1;
+  }
+  uword start = g_frag.len;
+  frag_s("call @");
+  frag_name(id);
+  frag_s("(");
+  uword j = base;
+  while (j < g_nfstack) {
+    if (j != base) {
+      frag_s(", ");
+    }
+    buf_copy(~g_frag, g_fstack[j], g_fstack[j + 1]);
+    j = j + 2;
+  }
+  frag_s(")");
+  g_nfstack = base;
+  uword ret = g_funcs[f].ret;
+  val_end(v, start, ret);
+  if (ty_kind(ret) == MT_VOID) {
+    if (!w.allow_void) {
+      err_at(e, "E0602");
+      err_s("'");
+      err_name(id);
+      err_s("' returns nothing");
+      err_end();
+    }
+    return;
+  }
+  if (w.allow_void) {
+    // a statement: the result is dropped as it is
+    return;
+  }
+  low_settle(e, v, w);
+}
+
+void = low_as(uword e, ~Want w, ~Val v) {
+  uword to = ty_resolve(e);
+  uword a = g_nodes[e].a;
+  Want ow;
+  want_value(~ow);
+  if (ty_kind(to) == MT_PTR) {
+    if (low_is_untyped(a)) {
+      want_type(~ow, ty_prim(MT_UWORD));
+    } else {
+      ow.ptr_depth = ty_depth(to);
+      ow.or_uword = TRUE;
+    }
+    low_expr(a, ~ow, v);
+  } else if (ty_is_int(to)) {
+    if (low_is_untyped(a)) {
+      // a literal simply takes the type
+      want_type(~ow, to);
+      low_expr(a, ~ow, v);
+      low_settle(e, v, w);
+      return;
+    }
+    if (g_nodes[a].kind == EX_ADDROF || g_nodes[a].kind == EX_STRING) {
+      // an explicit address converts to uword only
+      if (ty_kind(to) != MT_UWORD) {
+        err_at(e, "E0408");
+        err_s("an address converts to uword only, not to ");
+        err_ty(to);
+        err_end();
+      }
+      ow.ptr_depth = 1;
+    }
+    low_expr(a, ~ow, v);
+  } else {
+    err_at(e, "E0409");
+    err_s("'as' converts to a number or a pointer type, not to ");
+    err_ty(to);
+    err_end();
+  }
+  if (v.ty != to) {
+    uword start = g_frag.len;
+    frag_s("as(");
+    frag_ty(to);
+    frag_s(", ");
+    frag_copy(v);
+    frag_s(")");
+    val_end(v, start, to);
+  }
+  low_settle(e, v, w);
+}
+
+void = low_int(uword e, ~Want w, ~Val v) {
+  if (w.ty == 0 || !ty_is_int(w.ty)) {
+    if (w.ty != 0) {
+      err_at(e, "E0410");
+      err_s("expected ");
+      err_ty(w.ty);
+      err_s(", found a number");
+    } else {
+      err_at(e, "E0411");
+      err_s("the type of this literal is not determined by its context; write 'as T' after it");
+    }
+    err_end();
+  }
+  if (!ty_fits(w.ty, g_nodes[e].ival)) {
+    err_at(e, "E0412");
+    err_u64(g_nodes[e].ival);
+    err_s(" does not fit ");
+    err_ty(w.ty);
+    err_end();
+  }
+  val_const(v, g_nodes[e].ival, w.ty);
+}
+
+void = low_name(uword e, ~Want w, ~Val v) {
+  uword id = g_nodes[e].id;
+  if (!g_name_tab[id].local_on && g_name_tab[id].sym == SYM_CONST) {
+    val_const(v, g_name_tab[id].sym_val, g_name_tab[id].sym_ty);
+    low_settle(e, v, w);
+    return;
+  }
+  low_place(e, v);
+  if (!ty_is_scalar(v.ty)) {
+    err_at(e, "E0414");
+    err_s("'");
+    err_name(id);
+    err_s("' is a ");
+    err_ty(v.ty);
+    err_s(", not a value; use one of its ");
+    err_parts(v.ty);
+    err_end();
+  }
+  low_place_value(v);
+  low_settle(e, v, w);
+}
+
+void = low_addrof(uword e, ~Want w, ~Val v) {
+  uword a = g_nodes[e].a;
+  if (!low_is_place(a)) {
+    err_node(e, "E0508", "'#' and '~' take the address of a variable, an element or a field");
+  }
+  low_place(a, v);
+  uword t = ty_ptr(v.ty);
+  // an explicit address is never read through
+  if (w.ty != 0) {
+    if (t != w.ty) {
+      err_at(e, "E0402");
+      err_s("expected ");
+      err_ty(w.ty);
+      err_s(", found ");
+      err_ty(t);
+      err_end();
+    }
+  } else if (w.ptr_depth == 0) {
+    err_node(e, "E0415", "an address is not a number; a pointer is expected only where one is declared");
+  }
+  v.ty = t;
+  v.local = 0;
+}
+
+void = low_binary(uword e, ~Want w, ~Val v) {
+  uword op = g_nodes[e].op;
+  uword ty = ty_prim(MT_U8);
+  Val b;
+  if (op == TK_ANDAND || op == TK_OROR) {
+    Want lw;
+    want_value(~lw);
+    low_expr(g_nodes[e].a, ~lw, v);
+    low_expr(g_nodes[e].b, ~lw, ~b);
+  } else if (low_is_comparison(op)) {
+    low_operands(e, 0, v, ~b);
+  } else {
+    low_operands(e, w.ty, v, ~b);
+    ty = v.ty;
+  }
+  uword start = g_frag.len;
+  frag_op(op);
+  frag_s("(");
+  frag_copy(v);
+  frag_s(", ");
+  frag_copy(~b);
+  frag_s(")");
+  val_end(v, start, ty);
+  low_settle(e, v, w);
+}
+
+// Checks expression e as w wants it and gives its SIR text and type in v.
+void = low_expr(uword e, ~Want w, ~Val v) {
+  uword k = g_nodes[e].kind;
+  if (k == EX_INT) {
+    low_int(e, w, v);
+  } else if (k == EX_STRING) {
+    low_string(e, v);
+    if (w.ty == 0 && w.ptr_depth == 0) {
+      err_node(e, "E0413", "a string is a #u8, not a number");
+    }
+    low_settle(e, v, w);
+  } else if (k == EX_NAME) {
+    low_name(e, w, v);
+  } else if (k == EX_INDEX || k == EX_FIELD) {
+    low_place(e, v);
+    if (!ty_is_scalar(v.ty)) {
+      err_at(e, "E0401");
+      err_s("a ");
+      err_ty(v.ty);
+      err_s(" is not a value; use one of its ");
+      err_parts(v.ty);
+      err_end();
+    }
+    low_place_value(v);
+    low_settle(e, v, w);
+  } else if (k == EX_CALL) {
+    low_call(e, w, v);
+  } else if (k == EX_ADDROF) {
+    low_addrof(e, w, v);
+  } else if (k == EX_NOT) {
+    Want nw;
+    want_value(~nw);
+    low_expr(g_nodes[e].a, ~nw, v);
+    val_wrap(v, "lnot(");
+    v.ty = ty_prim(MT_U8);
+    low_settle(e, v, w);
+  } else if (k == EX_BINARY) {
+    low_binary(e, w, v);
+  } else if (k == EX_AS) {
+    low_as(e, w, v);
+  } else {
+    // EX_SIZEOF
+    uword t = ty_resolve(e);
+    uword start = g_frag.len;
+    frag_s("sizeof(");
+    frag_ty(t);
+    frag_s(")");
+    val_end(v, start, ty_prim(MT_UWORD));
+    low_settle(e, v, w);
+  }
+}
+
+// alloc(count) for a pointer of type `to` (cesiumlang/cesium#9, mapping):
+//   as(ptr<T>, call @cs_arena_alloc(mul(n, sizeof(T)), alignof(T)))
+void = low_alloc(uword e, uword to, ~Val v) {
+  if (g_nodes[e].count != 1) {
+    err_node(e, "E0509", "alloc takes one argument, the element count");
+  }
+  uword elem = ty_elem(to);
+  if (ty_kind(elem) == MT_VOID) {
+    err_node(e, "E0510", "alloc needs an element type; the pointer is #void");
+  }
+  Want nw;
+  Val n;
+  want_type(~nw, ty_prim(MT_UWORD));
+  low_expr(g_nodes[e].items, ~nw, ~n);
+  g_uses_alloc = TRUE;
+  uword start = g_frag.len;
+  frag_s("as(");
+  frag_ty(to);
+  frag_s(", call @cs_arena_alloc(mul(");
+  frag_copy(~n);
+  frag_s(", sizeof(");
+  frag_ty(elem);
+  frag_s(")), alignof(");
+  frag_ty(elem);
+  frag_s(")))");
+  val_end(v, start, to);
+}
+
+// The right side of `:=`, `#=` or `~=` for a pointer of type `to`.
+void = low_pointer_value(uword e, uword op, uword to, ~Val v) {
+  if (g_nodes[e].kind == EX_CALL && g_nodes[e].id == ID_ALLOC) {
+    if (op != TK_OWN) {
+      err_node(e, "E0511", "alloc returns ownership; receive it with ':='");
+    }
+    low_alloc(e, to, v);
+    return;
+  }
+  Want pw;
+  want_type(~pw, to);
+  low_expr(e, ~pw, v);
+}

@@ -1,6 +1,6 @@
 # Review records, written by skein. Do not edit: use 'skein review'.
 "bootstrap/tests/s0/arith.csm"."cite:test"."lex.lit.int.decimal" = "5ff6826b0fbb2aac2c4e973eb75d98b7"
 "bootstrap/tests/s0/arith.csm"."cite:test"."s0.expr" = "6da17c02c1df1410eef89b85565cc5c3"
-"bootstrap/tests/s0/arith.csm"."cite:test"."s0.expr.arithmetic" = "1deae77a3463db568719cde02e0b17d0"
+"bootstrap/tests/s0/arith.csm"."cite:test"."s0.expr.arithmetic" = "dd2db3d04f89ddc728dba7f121e826c9"
 "bootstrap/tests/s0/arith.csm"."cite:test"."s0.expr.left" = "40b18eac2387321a70880ec9dda34235"
 "bootstrap/tests/s0/arith.csm"."cite:test"."s0.type.integers" = "b4087096275e691301eb1ab4d21ca72e"

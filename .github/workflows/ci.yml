@@ -52,6 +52,104 @@ jobs:
       - name: Build and test stage 0
         run: .devkit/zig/zig build install test -Dtarget="${{ matrix.host }}" --summary all
 
+      # the DWARF compile unit (cesiumlang/cesium#78): lines.csm traps at 12
+      - name: gdb finds the line of a trap
+        if: matrix.host == 'x86_64-linux-musl'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdb
+          .devkit/zig/zig build lines -Dtarget="${{ matrix.host }}"
+          readelf --debug-dump=info zig-out/bin/lines > info.txt
+          grep -B4 -A4 'DW_AT_name.*bootstrap/tests/s0/lines.csm' info.txt
+          gdb -batch -ex run -ex bt zig-out/bin/lines 2>&1 | tee gdb.txt
+          grep -q '^#0 .* at bootstrap/tests/s0/lines.csm:12' gdb.txt
+          # a breakpoint by absolute path, as an editor sets it
+          gdb -batch -ex "break $PWD/bootstrap/tests/s0/lines.csm:12" -ex run -ex bt zig-out/bin/lines 2>&1 | tee gdb-break.txt
+          grep -q '^Breakpoint 1, .*lines.csm:12' gdb-break.txt
+          # variables (cesiumlang/cesium#143): in a block's own scope, then
+          # out of it, through a pointer to a struct, and at the block's trap
+          vsrc="$PWD/bootstrap/tests/s0/vars.csm"
+          gdb -batch -ex "break $vsrc:21" -ex "break $vsrc:33" -ex run -ex "info locals" -ex continue \
+            -ex "info args" -ex "info locals" -ex "print *p" -ex continue -ex "info locals" \
+            zig-out/bin/vars 2>&1 | tee gdb-vars.txt
+          [ "$(grep -c '^inner = 84' gdb-vars.txt)" = 2 ]
+          grep -q '^k = 2' gdb-vars.txt
+          grep -q '^total = 42' gdb-vars.txt
+          grep -q '^total = 84' gdb-vars.txt
+          grep -q 'a = 40, b = 9' gdb-vars.txt
+          grep -q '^i = 2' gdb-vars.txt
+          ! grep -q '^step = ' gdb-vars.txt
+
+      - name: lldb finds the line of a trap
+        if: matrix.host == 'aarch64-macos-none'
+        run: |
+          if ! command -v lldb; then echo "no lldb on this runner"; exit 0; fi
+          .devkit/zig/zig build lines -Dtarget="${{ matrix.host }}"
+          lldb --batch -o run -o bt zig-out/bin/lines 2>&1 | tee lldb.txt
+          grep -q 'lines.csm:12' lldb.txt
+          # a breakpoint by absolute path, as an editor sets it
+          lldb --batch -o "breakpoint set --file $PWD/bootstrap/tests/s0/lines.csm --line 12" -o run -o bt zig-out/bin/lines 2>&1 | tee lldb-break.txt
+          grep -q 'stop reason = breakpoint 1' lldb-break.txt
+          # variables (cesiumlang/cesium#143), as gdb checks them
+          vsrc="$PWD/bootstrap/tests/s0/vars.csm"
+          lldb --batch -o "breakpoint set --file $vsrc --line 33" -o "breakpoint set --file $vsrc --line 21" -o run \
+            -o "frame variable" -o continue -o "frame variable" -o "p *p" -o continue -k "frame variable" \
+            zig-out/bin/vars 2>&1 | tee lldb-vars.txt
+          [ "$(grep -c '(int) inner = 84' lldb-vars.txt)" = 2 ]
+          grep -q '(int) k = 2' lldb-vars.txt
+          grep -q '(int) total = 42' lldb-vars.txt
+          grep -q '(int) total = 84' lldb-vars.txt
+          grep -q 'a = 40' lldb-vars.txt
+          grep -q '(int) i = 2' lldb-vars.txt
+          ! grep -q '(int) step = ' lldb-vars.txt
+          # the trap's frame has its function, past the size the debug map
+          # gave it without .subsections_via_symbols
+          grep -q 'vars`scale(p=.*vars.csm:22' lldb-vars.txt
+
+      # CodeView (cesiumlang/vscode-cesium#47): cdb, the console form of
+      # WinDbg, reads the PDB as Visual Studio's debugger does
+      - name: cdb finds lines, breakpoints and callers
+        if: matrix.host == 'x86_64-windows-gnu'
+        run: |
+          .devkit/zig/zig build lines -Dtarget="${{ matrix.host }}"
+          cdb="/c/Program Files (x86)/Windows Kits/10/Debuggers/x64/cdb.exe"
+          exe=$(cygpath -w "$PWD/zig-out/bin/lines.exe")
+          "$cdb" -lines -c "g; kn 1; q" "$exe" 2>&1 | tee cdb.txt
+          grep -q 'lines!main+.*lines\.csm @ 12' cdb.txt
+          # a breakpoint by absolute path, as an editor sets it, and a step
+          # by source line, past the if not taken (line 12 has three ranges,
+          # which cdb calls ambiguous)
+          src=$(cygpath -w "$PWD/bootstrap/tests/s0/lines.csm")
+          "$cdb" -lines -c "l+t; bp \`$src:9\`; g; kn 1; p; kn 1; q" "$exe" 2>&1 | tee cdb-break.txt
+          grep -q 'Breakpoint 0 hit' cdb-break.txt
+          grep -q 'lines!main+.*lines\.csm @ 9' cdb-break.txt
+          grep -q 'lines!main+.*lines\.csm @ 12' cdb-break.txt
+          # the stack walk, by the unwind data: from a trap two calls deep,
+          # through a frame too large to be set after its allocation
+          frames=$(cygpath -w "$PWD/zig-out/bin/frames.exe")
+          "$cdb" -lines -c "g; kn 4; q" "$frames" 2>&1 | tee cdb-frames.txt
+          grep -q 'frames!leaf+.*frames\.csm @ 7' cdb-frames.txt
+          grep -q 'frames!wide+.*frames\.csm @ 13' cdb-frames.txt
+          grep -q 'frames!main+.*frames\.csm @ 17' cdb-frames.txt
+          # variables (cesiumlang/cesium#143): in a block's own scope, then
+          # out of it, through a pointer to a struct, and at the block's trap
+          vars=$(cygpath -w "$PWD/zig-out/bin/vars.exe")
+          vsrc=$(cygpath -w "$PWD/bootstrap/tests/s0/vars.csm")
+          "$cdb" -lines -c "bp \`$vsrc:21\`; bp \`$vsrc:33\`; g; dv /t; g; dv /t; dx *p; g; dv /t; q" "$vars" 2>&1 | tee cdb-vars.txt
+          [ "$(grep -c 'int inner = 0n84' cdb-vars.txt)" = 2 ]
+          grep -q 'int k = 0n2' cdb-vars.txt
+          grep -q 'int total = 0n42' cdb-vars.txt
+          grep -q 'int total = 0n84' cdb-vars.txt
+          grep -q 'struct Pair \* p = ' cdb-vars.txt
+          grep -Eq '\] a +: 40 ' cdb-vars.txt
+          grep -q 'int i = 0n2' cdb-vars.txt
+          ! grep -q 'int step = 0n2' cdb-vars.txt
+          # and a step out of a function, in cesium1
+          .devkit/zig/zig build -Dtarget="${{ matrix.host }}"
+          cesium1=$(cygpath -w "$PWD/zig-out/bin/cesium1.exe")
+          "$cdb" -lines -c "l+t; bp cesium1!loc_args; g; p; gu; kn 1; q" "$cesium1" -o out1.s bootstrap/tests/s0/tokens.csm 2>&1 | tee cdb-out.txt
+          grep -q 'cesium1!main+.*main\.csm @' cdb-out.txt
+
       # the generated corpus (bootstrap/tests/diff), on one host only
       - name: Compare cesium1 with cesium0 on the generated corpus
         if: matrix.host == 'x86_64-linux-musl'
@@ -109,7 +207,7 @@ jobs:
 
       # damaged copies of the corpus: cesium0 must reject or accept each
       # without crashing; the seed is fixed so that a failure can be repeated
-      - name: Fuzz the MIR text parser and the S0 front end
+      - name: Fuzz the SIR text parser and the S0 front end
         run: bash tools/portable-c.sh fuzz clang 6000 1
 
       - name: Keep the failing inputs

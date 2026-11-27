@@ -136,6 +136,27 @@ void = buf_copy(~Buf b, uword start, uword n) {
   b.len = b.len + n;
 }
 
+// One byte of a SIR string: \" and \\, printable ASCII as it is, else \HH.
+void = buf_put_sir_byte(~Buf b, u8 c) {
+  if (c == '"' || c == '\\') {
+    buf_putc(b, '\\');
+    buf_putc(b, c);
+  } else if (c >= 32 && c < 127) {
+    buf_putc(b, c);
+  } else {
+    buf_putc(b, '\\');
+    buf_putc(b, buf_hex_digit(c >> 4));
+    buf_putc(b, buf_hex_digit(c & 15));
+  }
+}
+
+u8 = buf_hex_digit(u8 d) {
+  if (d < 10) {
+    return '0' + d;
+  }
+  return 'A' + d - 10;
+}
+
 void = buf_put_u64(~Buf b, u64 v) {
   u8 digits[20];
   uword n = 0;
@@ -161,7 +182,8 @@ Buf g_err;
 
 // Starts a message "line:col: error[code]: ", the code as in
 // bootstrap/diagnostics.md. Lines count from the start of the standard
-// input, which may hold several files one after another.
+// input, which may hold several files one after another; with files named
+// on the command line, the message starts with the file (loc.csm).
 void = err_begin(u64 line, u64 col, #u8 code) {
   err_pos(line, col);
   buf_puts(~g_err, ": error[");
@@ -169,14 +191,9 @@ void = err_begin(u64 line, u64 col, #u8 code) {
   buf_puts(~g_err, "]: ");
 }
 
-// Starts "line:col: error: ", for the checks of libcsmir's verifier that
-// cesium1 makes itself: like the verifier's messages, they have no code.
-void = err_begin_verifier(u64 line, u64 col) {
-  err_pos(line, col);
-  buf_puts(~g_err, ": error: ");
-}
 
 void = err_pos(u64 line, u64 col) {
+  loc_err_file();
   buf_put_u64(~g_err, line);
   buf_putc(~g_err, ':');
   buf_put_u64(~g_err, col);

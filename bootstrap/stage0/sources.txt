@@ -1,0 +1,12 @@
+# cesium0's own C files, with libcsir's (../libcsir/sources.txt): the one
+# list of them, read by the build (build-src/sources.zig) and
+# tools/portable-c.sh.
+main.c
+s0_lex.c
+s0_parse.c
+s0_lower.c
+s0_place.c
+s0_expr.c
+s0_stmt.c
+s0_decl.c
+s0_habit.c
