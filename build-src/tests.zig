@@ -242,7 +242,7 @@ fn addStage1(
 
     // the fixed point: cesium1 compiles itself to cesium0's MIR, and the
     // cesium1 it builds from its own source does the same
-    const self = checkMir(b, step, tool, crlf, cesium0, cesium1, "s1-self", &stage1.sources);
+    const self = checkMir(b, step, tool, crlf, cesium0, cesium1, "s1-self", stage1.sources);
     const compile2 = b.addRunArtifact(cesium1);
     compile2.setName("cesium1 compiles cesium1");
     compile2.addArg("-o");
@@ -250,7 +250,7 @@ fn addStage1(
     for (stage1.sources) |source| compile2.addFileArg(source);
     compile2.expectExitCode(0);
     const cesium2 = link.linkCompiler(b, target, csrt, csmir, devkit, "cesium1-gen2", cesium2_asm);
-    _ = checkMirWith(b, step, tool, crlf, cesium2, "s1-gen2-self", &stage1.sources, self);
+    _ = checkMirWith(b, step, tool, crlf, cesium2, "s1-gen2-self", stage1.sources, self);
 
     // from standard input: the same MIR without the locations
     const cat = b.addRunArtifact(tool);

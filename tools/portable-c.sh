@@ -31,13 +31,23 @@ INCLUDES=(-I"$B/include" -I"$B/libcsmir")
 # override where a sanitizer is missing (MinGW has no ASan runtime)
 SANITIZE_FLAGS=${PORTABLE_C_SANITIZE:--fsanitize=address,undefined -fno-sanitize-recover=all}
 
-SOURCES=(
-  libcsmir/cs_common.c libcsmir/cs_format.c libcsmir/mir.c libcsmir/mir_text.c
-  libcsmir/mir_print.c libcsmir/mir_verify.c libcsmir/mir_qbe.c libcsmir/mir_dwarf.c libcsmir/mir_dwarf_vars.c
-  libcsmir/mir_codeview.c libcsmir/mir_codeview_vars.c libcsmir/mir_seh.c libcsmir/mir_debug.c libcsmir/mir_debug_scan.c libcsmir/cs_platform.c libcsmir/csmir_api.c
-  stage0/main.c stage0/s0_lex.c stage0/s0_parse.c stage0/s0_lower.c stage0/s0_habit.c
-  runtime/cs_arena.c
-)
+# the names of bootstrap/<dir>/sources.txt, the lists the build reads too
+# (build-src/sources.zig), each prefixed with <prefix>
+list_sources () { # <dir> <prefix>
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%$'\r'}
+    case $line in '' | '#'*) continue ;; esac
+    printf '%s\n' "$2$line"
+  done < "$B/$1/sources.txt"
+}
+
+# a read loop, not mapfile: the bash of macOS is 3.2
+SOURCES=()
+STAGE1=()
+while IFS= read -r f; do SOURCES+=("$f"); done < <(list_sources libcsmir libcsmir/; list_sources stage0 stage0/)
+SOURCES+=(runtime/cs_arena.c)
+while IFS= read -r f; do STAGE1+=("$f"); done < <(list_sources stage1 "$B/stage1/")
 
 usage () { sed -n '2,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
@@ -140,9 +150,7 @@ sanitize () { # <compiler>
     n=$((n + 1))
   done
   # cesium1's own source: the largest S0 program there is
-  expect 0 "stage1 (QBE IL)" "$c0" --emit-qbe -o "$dir/cesium1.ssa" \
-    "$B"/stage1/util.csm "$B"/stage1/lex.csm "$B"/stage1/parse.csm "$B"/stage1/types.csm \
-    "$B"/stage1/habit.csm "$B"/stage1/lower.csm "$B"/stage1/decl.csm "$B"/stage1/loc.csm "$B"/stage1/main.csm
+  expect 0 "stage1 (QBE IL)" "$c0" --emit-qbe -o "$dir/cesium1.ssa" "${STAGE1[@]}"
   n=$((n + 1))
   echo "ok: $n runs of cesium0 built by $cc with $SANITIZE_FLAGS, no report"
 }
