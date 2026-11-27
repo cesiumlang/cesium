@@ -255,10 +255,9 @@ static void end_symbol(CsBuf *out, uint32_t id, int n) {
   cs_buf_printf(out, "\t.p2align 2\n.Lcs_sy%" PRIu32 "_%d_end:\n", id, n);
 }
 
-/* The locals of scope k, then its nested scopes; n numbers the records. */
-static void put_scope(CsBuf *out, MirCvTypes *types, const MirVarsFunc *f, const MirTarget *t, int k, int *n) {
+/* The locals of scope k; n numbers the records. */
+static void put_locals(CsBuf *out, MirCvTypes *types, const MirVarsFunc *f, const MirTarget *t, int k, int *n) {
   size_t i;
-  size_t j;
   for (i = 0; i < f->d.nlocals; i++) {
     const MirDebugVar *v = &f->vars[i];
     if (f->d.scope[i] != k || v->base == MIR_BASE_NONE) {
@@ -271,25 +270,58 @@ static void put_scope(CsBuf *out, MirCvTypes *types, const MirVarsFunc *f, const
     cs_buf_putc(out, '\n');
     end_symbol(out, f->id, (*n)++);
   }
+}
+
+/* An S_BLOCK32 from .Lcs_{b}ID_J to .Lcs_{e}ID_J; S_END closes it. */
+static void put_block(CsBuf *out, const MirVarsFunc *f, const char *b, const char *e, int j, int *n) {
+  /* parent and end: the linker fills them in */
+  begin_symbol(out, S_BLOCK32, f->id, *n);
+  cs_buf_printf(out, "\t.long 0, 0\n\t.long .Lcs_%s%" PRIu32 "_%d - .Lcs_%s%" PRIu32 "_%d\n", e, f->id, j, b,
+                f->id, j);
+  cs_buf_printf(out, "\t.secrel32 .Lcs_%s%" PRIu32 "_%d\n\t.secidx .Lcs_%s%" PRIu32 "_%d\n\t.byte 0\n", b, f->id,
+                j, b, f->id, j);
+  end_symbol(out, f->id, (*n)++);
+}
+
+static void put_end(CsBuf *out) {
+  cs_buf_printf(out, "\t.short 2\n\t.short 0x%04x\n", S_END);
+}
+
+/* The locals of scope k, then its nested scopes. */
+static void put_scope(CsBuf *out, MirCvTypes *types, const MirVarsFunc *f, const MirTarget *t, int k, int *n) {
+  size_t j;
+  put_locals(out, types, f, t, k, n);
   for (j = 1; j < f->d.nscopes; j++) {
     if (f->d.parent[j] != k || !f->opened[j]) {
       continue;
     }
-    /* parent and end: the linker fills them in */
-    begin_symbol(out, S_BLOCK32, f->id, *n);
-    cs_buf_printf(out, "\t.long 0, 0\n\t.long .Lcs_se%" PRIu32 "_%d - .Lcs_sb%" PRIu32 "_%d\n", f->id, (int)j,
-                  f->id, (int)j);
-    cs_buf_printf(out, "\t.secrel32 .Lcs_sb%" PRIu32 "_%d\n\t.secidx .Lcs_sb%" PRIu32 "_%d\n\t.byte 0\n", f->id,
-                  (int)j, f->id, (int)j);
-    end_symbol(out, f->id, (*n)++);
+    put_block(out, f, "sb", "se", (int)j, n);
     put_scope(out, types, f, t, (int)j, n);
-    cs_buf_printf(out, "\t.short 2\n\t.short 0x%04x\n", S_END);
+    put_end(out);
   }
 }
 
 void mir_cv_put_vars(CsBuf *out, MirCvTypes *types, const MirVarsFunc *f, const MirTarget *t) {
+  CsArena a;
+  int *chain;
   int n = 0;
+  size_t j;
+  memset(&a, 0, sizeof a);
+  chain = cs_arena_new(&a, cs_mul_size(f->d.nscopes, sizeof *chain));
   put_scope(out, types, f, t, 0, &n);
+  /* a trap's block, out of its scopes: their locals again, nested */
+  for (j = 0; j < mir_vars_ntraps(f); j++) {
+    size_t len = mir_vars_chain(f, j, chain);
+    size_t i;
+    for (i = 0; i < len; i++) {
+      put_block(out, f, "tb", "te", (int)j, &n);
+      put_locals(out, types, f, t, chain[i], &n);
+    }
+    for (i = 0; i < len; i++) {
+      put_end(out);
+    }
+  }
+  cs_arena_free(&a);
 }
 
 void mir_cv_put_types(CsBuf *out, const MirCvTypes *types) {

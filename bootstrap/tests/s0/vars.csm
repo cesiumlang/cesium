@@ -1,8 +1,9 @@
 // Variables for debuggers (cesiumlang/cesium#143): run without arguments,
 // this program divides by zero at line 22, in a block with a local of its
-// own; there a debugger shows k = 2, total = 42, inner = 84, bytes[1] = 7
-// and p pointing at a Pair with a = 40, b = 9 and name "pair" (zig build
-// lines, CI's cdb, gdb and lldb steps).
+// own; at line 21 a debugger shows k = 2, total = 42, inner = 84,
+// bytes[1] = 7 and p pointing at a Pair with a = 40, b = 9 and name "pair",
+// and at the trap total = 84 and inner and zero still (zig build lines,
+// CI's cdb, gdb and lldb steps).
 // spec: s0.entry, s0.struct, s0.type.array, s0.type.pointer, s0.expr.arithmetic
 struct Pair {
   i32 a;

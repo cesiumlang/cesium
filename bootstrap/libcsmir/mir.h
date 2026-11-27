@@ -331,8 +331,9 @@ bool mir_block_is_scope(const MirStmt *body);
 /* Fills d for f, in a's memory. */
 void mir_debug_func(CsArena *a, MirDebugFunc *d, const MirFunc *f);
 /* Appends the symbol of a marker, without QBE's $: kind 'v' for local n's
- * address, 'o' and 'c' where scope n opens and closes; func is the index of
- * the function among the module's defined ones. */
+ * address, 'o' and 'c' where scope n opens and closes, 't' in the block of a
+ * trap inside scope n; func is the index of the function among the module's
+ * defined ones. */
 void mir_debug_marker(CsBuf *out, char kind, int func, int n);
 /* Reads a marker from its symbol in an instruction: its kind and number, or
  * kind 0. */
@@ -373,9 +374,11 @@ bool mir_asm_func_label(MirAsmLines *s, const char *line, size_t len);
 
 /* Starts reading a function whose nlocals locals go into vars. */
 void mir_debug_scan_start(MirDebugScan *s, MirDebugVar *vars, size_t nlocals);
-/* Reads an instruction. Returns 'o' or 'c', with the scope in *n, if a
+/* Reads an instruction. Returns 'o', 'c' or 't', with the scope in *n, if a
  * scope's marker starts on it; 0 otherwise. */
 char mir_debug_scan_line(MirDebugScan *s, const char *line, size_t len, int *n);
+/* Whether a line is the instruction QBE writes for hlt: ud2, brk. */
+bool mir_asm_is_trap(const char *line, size_t len);
 
 /* ---- debug information ------------------------------------------------- */
 
@@ -415,13 +418,18 @@ void mir_codeview_path(CsBuf *out, const char *file);
 void mir_codeview_rewrite(CsBuf *out, const char *in, size_t len, const MirModule *m, const MirTarget *t);
 /* A function's variables as a rewrite of QBE's assembly found them: its
  * number among the functions read, its scopes and locals, where each local
- * is, and which scopes have labels (PREFIXcs_sbID_K and PREFIXcs_seID_K). */
+ * is, and which scopes have labels (PREFIXcs_sbID_K and PREFIXcs_seID_K).
+ * QBE moves a trap's block out of its scope, so each trap in a scope has
+ * labels of its own (PREFIXcs_tbID_J and PREFIXcs_teID_J) and its scope's
+ * variables. */
 typedef struct MirVarsFunc {
   uint32_t id;
   MirDebugFunc d;
   MirDebugVar *vars;
   bool *opened;
   bool *closed;
+  CsBuf traps;    /* the scope of each trap, an int */
+  int trap_state; /* 1 in a trap's block, 2 after its instruction */
 } MirVarsFunc;
 
 /* The reading of a module's markers by a rewrite (mir_debug.c). */
@@ -448,6 +456,12 @@ void mir_vars_line(MirVars *v, CsBuf *dst, const char *line, size_t len);
  * appended to out; with keep, the function (or NULL) joins v->funcs.
  * Returns it, or NULL. */
 MirVarsFunc *mir_vars_end(MirVars *v, CsBuf *out, bool keep);
+/* The number of f's traps that have labels. */
+size_t mir_vars_ntraps(const MirVarsFunc *f);
+/* Fills chain, with room for f->d.nscopes, with the scopes around trap j,
+ * from the outermost one inside the function to the trap's own. Returns the
+ * chain's length. */
+size_t mir_vars_chain(const MirVarsFunc *f, size_t j, int *chain);
 
 /* The .debug$T records of one object (mir_codeview_vars.c). */
 typedef struct MirCvTypes {

@@ -34,10 +34,11 @@ typedef struct Q {
   const char *func_file;
   const MirStmt *loc; /* the statement whose line was given last, or NULL */
   /* variables for debuggers (mir_debug.c): the function's index among the
-   * defined ones, and its scopes so far */
+   * defined ones, its scopes so far and the innermost one being lowered */
   bool vars;
   int func;
   int nscope;
+  int scope;
 } Q;
 
 static void emit(Q *q, const char *fmt, ...) {
@@ -193,7 +194,10 @@ static int truth(Q *q, const MirType *t, int v) {
 
 static int gen(Q *q, MirExpr *e);
 
-/* QBE may move the trap's block anywhere, so it repeats its statement's line. */
+static void gen_marker(Q *q, char kind, int n);
+
+/* QBE may move the trap's block anywhere, so it repeats its statement's line,
+ * and inside a scope it is marked to get the scope's variables. */
 static void gen_trap_if(Q *q, int cond) {
   int trap = new_label(q);
   int ok = new_label(q);
@@ -201,6 +205,9 @@ static void gen_trap_if(Q *q, int cond) {
   emit(q, "@trap.%d\n", trap);
   if (q->loc != NULL) {
     emit(q, "\tdbgloc %" PRIu32 ", %" PRIu32 "\n", q->loc->loc_line, q->loc->loc_col);
+  }
+  if (q->scope > 0) {
+    gen_marker(q, 't', q->scope);
   }
   emit(q, "\thlt\n@ok.%d\n", ok);
 }
@@ -535,11 +542,14 @@ static void gen_marker(Q *q, char kind, int n) {
  * Returns the scope, or -1. */
 static int gen_scoped(Q *q, MirStmt *body) {
   int k = -1;
+  int outer = q->scope;
   if (q->vars && mir_block_is_scope(body)) {
     k = q->nscope++;
     gen_marker(q, 'o', k);
+    q->scope = k;
   }
   gen_block(q, body);
+  q->scope = outer;
   if (k >= 0) {
     gen_marker(q, 'c', k);
   }
@@ -705,6 +715,8 @@ static void gen_marker_data(Q *q, size_t nlocals) {
     mir_debug_marker(q->out, 'o', q->func, k);
     emit(q, " = { b 0 }\ndata $");
     mir_debug_marker(q->out, 'c', q->func, k);
+    emit(q, " = { b 0 }\ndata $");
+    mir_debug_marker(q->out, 't', q->func, k);
     emit(q, " = { b 0 }\n");
   }
   emit(q, "\n");
@@ -751,6 +763,7 @@ static void gen_func(Q *q, MirFunc *f) {
     emit(q, "\n");
   }
   q->nscope = 1;
+  q->scope = 0;
   gen_block(q, f->body);
   /* the verifier proved a non-void function never gets here */
   emit(q, "%s", f->ret->kind == MT_VOID ? "\tret\n" : "\thlt\n");
