@@ -125,4 +125,10 @@ void mir_dwarf_tail(CsBuf *out, const MirTarget *t, const char *file, const MirD
     cs_buf_puts(out, "\t.byte 0\n");
   }
   cs_buf_printf(out, "%scs_info_end:\n", p);
+  /* as clang's: without it, Zig's Mach-O linker gives each function of the
+   * object the size of the last one in the debug map, and lldb finds no
+   * debug information past that size */
+  if (t->format == MIR_MACHO) {
+    cs_buf_puts(out, ".subsections_via_symbols\n");
+  }
 }

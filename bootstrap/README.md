@@ -83,7 +83,7 @@ As the locals live in memory, code that QBE would otherwise fold away stays, so 
 What debuggers see:
 
 - **Linux (ELF):** gdb sets breakpoints at a `.csm` line and reports a trap at its file and line (`gdb -batch -ex run -ex bt`: `main () at bootstrap/tests/s0/lines.csm:12`); CI checks it on x86_64 with `zig build lines`, `readelf --debug-dump=info` and gdb.
-- **macOS (Mach-O):** lldb does the same through the debug map, which points at the objects in Zig's cache, so the debug information is there as long as the cache is; CI runs lldb on arm64 when the runner has it. There is no `dsymutil` step.
+- **macOS (Mach-O):** lldb does the same through the debug map, which points at the objects in Zig's cache, so the debug information is there as long as the cache is; CI runs lldb on arm64 when the runner has it. There is no `dsymutil` step. The assembly ends with `.subsections_via_symbols`, as clang's does: without it, Zig's Mach-O linker gives every function of an object the size of its last one in the debug map, and lldb finds no function for an address past that size, such as a trap at a function's end.
 - **Windows (COFF):** the PDB has the line tables: `cdb`, the console form of WinDbg, sets a breakpoint by file name or absolute path, steps by `.csm` line and reports a trap at `lines.csm @ 12`; CI checks it on x86_64 with `zig build lines` and `cdb`. Visual Studio's debugger, and VS Code's `cppvsdbg`, read the same PDB with an engine of their own, which no script can drive (`vsdbg` takes only sessions VS Code starts). gdb from MSYS2 reads DWARF, which these objects no longer have.
 
 ## What stage 0 enforces

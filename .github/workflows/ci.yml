@@ -93,7 +93,7 @@ jobs:
           # variables (cesiumlang/cesium#143), as gdb checks them
           vsrc="$PWD/bootstrap/tests/s0/vars.csm"
           lldb --batch -o "breakpoint set --file $vsrc --line 33" -o "breakpoint set --file $vsrc --line 21" -o run \
-            -o "frame variable" -o continue -o "frame variable" -o "p *p" -o continue -o "frame variable" \
+            -o "frame variable" -o continue -o "frame variable" -o "p *p" -o continue -k "frame variable" \
             zig-out/bin/vars 2>&1 | tee lldb-vars.txt
           [ "$(grep -c '(int) inner = 84' lldb-vars.txt)" = 2 ]
           grep -q '(int) k = 2' lldb-vars.txt
@@ -102,6 +102,9 @@ jobs:
           grep -q 'a = 40' lldb-vars.txt
           grep -q '(int) i = 2' lldb-vars.txt
           ! grep -q '(int) step = ' lldb-vars.txt
+          # the trap's frame has its function, past the size the debug map
+          # gave it without .subsections_via_symbols
+          grep -q 'vars`scale(p=.*vars.csm:22' lldb-vars.txt
 
       # CodeView (cesiumlang/vscode-cesium#47): cdb, the console form of
       # WinDbg, reads the PDB as Visual Studio's debugger does

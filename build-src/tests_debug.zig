@@ -181,6 +181,8 @@ const vars = struct {
         "Lcs_sb0_1:\n\tadrp",
         "Lcs_tb0_0:\n\tadrp\tx1, _.Lcs_t0_1@page\n\tadd\tx1, x1, _.Lcs_t0_1@pageoff\n",
         "\tbrk\t#1000\nLcs_te0_0:",
+        // a function's size in the debug map is right only with it
+        ".subsections_via_symbols\n",
         "\t.asciz \"inner\"",
         "\t.set Lcs_d0, Lcs_fe0 - Lcs_fb0",
         // on AArch64, locals are at offsets from x29: DW_OP_breg29
