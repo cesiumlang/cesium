@@ -11,8 +11,9 @@ name: CI
 #
 # Versions (cesiumlang/cesium#165): build.zig.zon holds the version of the
 # next release, and every host's install tree is archived on every run. A
-# push to main whose version is not tagged yet, and whose milestone
-# (`v<version>`) has no open issue, is tagged once built and tested and
+# push to main whose version is not tagged yet, and whose milestones
+# (`v<version>`, here and in cesiumlang/grammar and cesiumlang/cspell-cesium,
+# versioned in step) have no open issue, is tagged once built and tested and
 # published as a GitHub pre-release with the archives; main is then merged
 # back into dev, where build.zig.zon gets the next patch version
 # (version.sh, which also checks every place that states it on every run).
@@ -94,15 +95,24 @@ jobs:
           release=false
           if [ "$EVENT" = push ] && [ "$REF" = refs/heads/main ]; then
             git fetch -q origin main
-            # the milestone of the version: a release waits until it has no open issue
-            open=$(gh api "repos/$GITHUB_REPOSITORY/milestones?state=all&per_page=100" --jq ".[] | select(.title == \"v$version\") | .open_issues")
+            # the milestone of the version: a release waits until it has no
+            # open issue, here and in grammar and cspell-cesium, whose versions
+            # are kept in step with this one; issues only, not the pull
+            # request that releases it
+            open=0
+            for repo in "$GITHUB_REPOSITORY" cesiumlang/grammar cesiumlang/cspell-cesium; do
+              m=$(gh api "repos/$repo/milestones?state=all&per_page=100" --jq ".[] | select(.title == \"v$version\") | .number")
+              [ -n "$m" ] || continue
+              n=$(gh api "repos/$repo/issues?milestone=$m&state=open&per_page=100" --jq '[.[] | select(.pull_request | not)] | length')
+              [ "$n" = 0 ] || { echo "$repo: $n open issues in v$version"; open=$((open + n)); }
+            done
             if [ "$(git rev-parse origin/main)" != "$(git rev-parse HEAD)" ]; then
               # main moved on: the run for the newer commit releases it
               echo "main has moved past this commit; testing only" | tee -a "$GITHUB_STEP_SUMMARY"
             elif tagged "$version"; then
               echo "::warning::main holds v$version, which is already released; testing only. Set a newer version on dev and merge it."
-            elif [ -n "$open" ] && [ "$open" != 0 ]; then
-              echo "::warning::the milestone v$version has $open open issues; testing only. Merge again once it has none."
+            elif [ "$open" != 0 ]; then
+              echo "::warning::the milestones v$version have $open open issues; testing only. Merge again once they have none."
             else
               release=true
             fi
@@ -772,6 +782,33 @@ jobs:
           files: dist/*
           generate_release_notes: true
           prerelease: true
+
+      # grammar and cspell-cesium record the state of Cesium at a version, so
+      # they are released with it, at the head of their main: as the Cesium
+      # Agent app (a workflow's own token cannot write to them)
+      - name: The app's token for grammar and cspell-cesium
+        id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: Iv23liXrtnf12IOEFv6c
+          private-key: ${{ secrets.CESIUM_AGENT_PRIVATE_KEY }}
+          owner: cesiumlang
+          repositories: grammar,cspell-cesium
+
+      - name: Release grammar and cspell-cesium v${{ needs.version.outputs.version }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          for repo in cesiumlang/grammar cesiumlang/cspell-cesium; do
+            if gh release view "v$VERSION" --repo "$repo" > /dev/null 2>&1; then
+              echo "$repo: v$VERSION is released already"
+              continue
+            fi
+            gh release create "v$VERSION" --repo "$repo" --target main --prerelease --generate-notes --title "${repo#*/} v$VERSION"
+            echo "$repo: released v$VERSION at $(gh api "repos/$repo/commits/main" --jq .sha)"
+            m=$(gh api "repos/$repo/milestones?state=open&per_page=100" --jq ".[] | select(.title == \"v$VERSION\") | .number")
+            if [ -n "$m" ]; then gh api -X PATCH "repos/$repo/milestones/$m" -f state=closed --jq '"closed milestone " + .title'; fi
+          done
 
   # The next version is begun on dev: main keeps the version it released.
   # The version's milestone is closed, and the next version is the lowest
