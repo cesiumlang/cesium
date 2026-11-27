@@ -1,8 +1,9 @@
 /* Stage 0: the S0 frontend (cesiumlang/cesium#9).
  *
  * S0 source files -> tokens (s0_lex.c) -> syntax tree (s0_parse.c) ->
- * checked core MIR (s0_lower.c, with s0_habit.c for the messages that name
- * the Cesium form of a habit from C). libcsmir verifies and lowers the MIR.
+ * checked core MIR (s0_lower.c and the files of s0_lower.h, with s0_habit.c
+ * for the messages that name the Cesium form of a habit from C). libcsmir
+ * verifies and lowers the MIR.
  *
  * Where the design leaves a question open, stage 0 rejects the program
  * instead of picking an answer, so that no S0 source can depend on a rule

@@ -1,0 +1,305 @@
+// cesium1: checking statements, and their core MIR text; as
+// stage0/s0_stmt.c. Written in S0.
+
+void = out_s(#u8 s) {
+  buf_puts(~g_out_funcs, s);
+}
+
+void = out_val(~Val v) {
+  buf_putn(~g_out_funcs, #g_frag.data[v.start], v.len);
+}
+
+void = out_name(uword id) {
+  name_put(~g_out_funcs, id);
+}
+
+void = out_ty(uword t) {
+  ty_print(~g_out_funcs, t);
+}
+
+void = out_indent(uword depth) {
+  uword i = 0;
+  while (i < depth) {
+    out_s("  ");
+    i = i + 1;
+  }
+}
+
+// Reports a new name that collides with one in use. Whether Cesium allows
+// shadowing is not recorded, so S0 allows none.
+void = low_name_free(uword id, uword at, u8 check_locals) {
+  uword sym = g_name_tab[id].sym;
+  if (id != ID_ALLOC && sym == SYM_NONE && !(check_locals && g_name_tab[id].local_on)) {
+    return;
+  }
+  err_at(at, "E0302");
+  err_s("'");
+  err_name(id);
+  err_s("' is already the name of ");
+  if (id == ID_ALLOC) {
+    err_s("the built-in alloc");
+  } else if (sym == SYM_CONST) {
+    err_s("a constant");
+  } else if (sym == SYM_GLOBAL) {
+    err_s("a global");
+  } else if (sym == SYM_FUNC) {
+    err_s("a function");
+  } else if (sym == SYM_STRUCT) {
+    err_s("a struct");
+  } else {
+    err_s("a local or parameter");
+  }
+  err_end();
+}
+
+void = low_local_add(uword id, uword ty) {
+  g_name_tab[id].local_on = TRUE;
+  g_name_tab[id].local_ty = ty;
+  g_lstack[g_nlstack] = id;
+  g_nlstack = g_nlstack + 1;
+}
+
+// Ends the scope of the locals declared after the first `keep`.
+void = low_locals_drop(uword keep) {
+  while (g_nlstack > keep) {
+    g_nlstack = g_nlstack - 1;
+    g_name_tab[g_lstack[g_nlstack]].local_on = FALSE;
+  }
+}
+
+void = low_decl(uword s, uword depth) {
+  uword t = ty_resolve(s);
+  uword op = g_nodes[s].op;
+  Val init;
+  if (g_nodes[s].is_array) {
+    if (g_nodes[s].ival == 0) {
+      err_node(s, "E0306", "an array has at least one element");
+    }
+    t = ty_array(t, g_nodes[s].ival);
+  }
+  if (op != TK_EOF) {
+    if (!ty_is_scalar(t)) {
+      err_at(s, "E0512");
+      err_s("a ");
+      err_ty(t);
+      err_s(" has no initializer in S0; assign its ");
+      err_parts(t);
+      err_s(" one at a time");
+      err_end();
+    }
+    if (ty_kind(t) == MT_PTR) {
+      if (op == TK_ASSIGN) {
+        err_node(s, "E0513", "a pointer is initialized with ':=', '#=' or '~='; plain '=' assigns through it");
+      }
+      low_pointer_value(g_nodes[s].b, op, t, ~init);
+    } else {
+      if (op != TK_ASSIGN) {
+        err_at(s, "E0514");
+        err_tok(op);
+        err_s(" is only for pointers; a plain value is initialized with '='");
+        err_end();
+      }
+      Want iw;
+      want_type(~iw, t);
+      low_expr(g_nodes[s].b, ~iw, ~init);
+    }
+  }
+  // the name comes into scope after its initializer
+  low_name_free(g_nodes[s].id, s, TRUE);
+  loc_stmt(s, depth);
+  out_s("local %");
+  out_name(g_nodes[s].id);
+  out_s(": ");
+  out_ty(t);
+  if (op != TK_EOF) {
+    out_s(" = ");
+    out_val(~init);
+  }
+  out_s("\n");
+  low_local_add(g_nodes[s].id, t);
+}
+
+void = low_assign(uword s, uword depth) {
+  uword op = g_nodes[s].op;
+  Val p;
+  Val v;
+  if (!low_is_place(g_nodes[s].a)) {
+    err_node(s, "E0515", "the left side of an assignment is a variable, an element or a field");
+  }
+  low_place(g_nodes[s].a, ~p);
+  if (op == TK_ASSIGN) {
+    // plain '=' stores a number, through pointers if the place holds one
+    while (ty_kind(p.ty) == MT_PTR) {
+      uword t = ty_elem(p.ty);
+      low_place_value(~p);
+      p.ty = t;
+    }
+    if (!ty_is_int(p.ty)) {
+      err_at(s, "E0516");
+      err_s("a ");
+      err_ty(p.ty);
+      err_s(" is not assigned as a whole in S0; assign its ");
+      err_parts(p.ty);
+      err_end();
+    }
+    Want vw;
+    want_type(~vw, p.ty);
+    low_expr(g_nodes[s].b, ~vw, ~v);
+  } else {
+    if (ty_kind(p.ty) != MT_PTR) {
+      err_at(s, "E0517");
+      err_tok(op);
+      err_s(" sets where a pointer points; the left side is a ");
+      err_ty(p.ty);
+      err_end();
+    }
+    low_pointer_value(g_nodes[s].b, op, p.ty, ~v);
+  }
+  loc_stmt(s, depth);
+  if (p.local != 0) {
+    out_s("set %");
+    out_name(p.local);
+    out_s(" = ");
+  } else {
+    out_s("store ");
+    out_val(~p);
+    out_s(", ");
+  }
+  out_val(~v);
+  out_s("\n");
+}
+
+void = low_eval(uword s, uword depth) {
+  Want w;
+  Val v;
+  if (g_nodes[g_nodes[s].a].kind != EX_CALL) {
+    err_node(s, "E0603", "only a call can be a statement");
+  }
+  want_value(~w);
+  w.allow_void = TRUE;
+  low_call(g_nodes[s].a, ~w, ~v);
+  loc_stmt(s, depth);
+  out_s("eval ");
+  out_val(~v);
+  out_s("\n");
+}
+
+// if and while: the condition, then the block.
+void = low_cond(uword s, uword depth, #u8 keyword) {
+  Want w;
+  Val c;
+  want_value(~w);
+  low_expr(g_nodes[s].a, ~w, ~c);
+  loc_stmt(s, depth);
+  out_s(keyword);
+  out_val(~c);
+  out_s(" {\n");
+}
+
+void = low_return(uword s, uword depth) {
+  uword ret = g_funcs[g_fn].ret;
+  uword fid = g_funcs[g_fn].id;
+  if (g_nodes[s].a == 0) {
+    if (ty_kind(ret) != MT_VOID) {
+      err_at(s, "E0605");
+      err_s("'");
+      err_name(fid);
+      err_s("' returns a ");
+      err_ty(ret);
+      err_end();
+    }
+    loc_stmt(s, depth);
+    out_s("return\n");
+    return;
+  }
+  if (ty_kind(ret) == MT_VOID) {
+    err_at(s, "E0602");
+    err_s("'");
+    err_name(fid);
+    err_s("' returns nothing");
+    err_end();
+  }
+  Want w;
+  Val v;
+  want_type(~w, ret);
+  low_expr(g_nodes[s].a, ~w, ~v);
+  loc_stmt(s, depth);
+  out_s("return ");
+  out_val(~v);
+  out_s("\n");
+}
+
+void = low_stmt(uword s, uword depth) {
+  uword k = g_nodes[s].kind;
+  g_frag.len = 0;
+  if (k == ST_DECL) {
+    low_decl(s, depth);
+  } else if (k == ST_ASSIGN) {
+    low_assign(s, depth);
+  } else if (k == ST_EXPR) {
+    low_eval(s, depth);
+  } else if (k == ST_IF) {
+    low_cond(s, depth, "if ");
+    low_block(g_nodes[s].body, depth + 1);
+    out_indent(depth);
+    out_s("}");
+    // `else if` parses as an else block holding one if statement
+    if (g_nodes[s].els != 0) {
+      out_s(" else {\n");
+      low_block(g_nodes[s].els, depth + 1);
+      out_indent(depth);
+      out_s("}");
+    }
+    out_s("\n");
+  } else if (k == ST_WHILE) {
+    low_cond(s, depth, "while ");
+    g_loops = g_loops + 1;
+    low_block(g_nodes[s].body, depth + 1);
+    g_loops = g_loops - 1;
+    out_indent(depth);
+    out_s("}\n");
+  } else if (k == ST_BREAK || k == ST_CONTINUE) {
+    if (g_loops == 0) {
+      if (k == ST_BREAK) {
+        err_node(s, "E0604", "'break' outside a loop");
+      }
+      err_node(s, "E0604", "'continue' outside a loop");
+    }
+    loc_stmt(s, depth);
+    if (k == ST_BREAK) {
+      out_s("break\n");
+    } else {
+      out_s("continue\n");
+    }
+  } else {
+    low_return(s, depth);
+  }
+}
+
+void = low_block(uword s, uword depth) {
+  uword keep = g_nlstack;
+  while (s != 0) {
+    low_stmt(s, depth);
+    s = g_nodes[s].next;
+  }
+  low_locals_drop(keep);
+}
+
+// True when control cannot reach the end of the block: libcsmir's
+// verifier requires it of a function that returns a value. A loop is never
+// counted as returning. Each statement became one MIR statement, so the
+// syntax tree answers for the MIR.
+u8 = low_block_returns(uword s) {
+  while (s != 0) {
+    uword k = g_nodes[s].kind;
+    if (k == ST_RETURN) {
+      return TRUE;
+    }
+    if (k == ST_IF && g_nodes[s].els != 0 && low_block_returns(g_nodes[s].body) &&
+        low_block_returns(g_nodes[s].els)) {
+      return TRUE;
+    }
+    s = g_nodes[s].next;
+  }
+  return FALSE;
+}

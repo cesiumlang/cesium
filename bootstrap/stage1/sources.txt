@@ -8,6 +8,9 @@ parse.csm
 types.csm
 habit.csm
 lower.csm
+place.csm
+expr.csm
+stmt.csm
 decl.csm
 loc.csm
 main.csm
