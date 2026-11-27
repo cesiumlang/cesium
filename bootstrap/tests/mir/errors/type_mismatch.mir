@@ -1,5 +1,0 @@
-cesium-mir 0
-
-func @f(%a: u8, %b: u32) -> u32 {
-  return add(%a, %b)
-}

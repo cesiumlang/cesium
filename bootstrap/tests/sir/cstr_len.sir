@@ -1,0 +1,70 @@
+cesium-sir 0
+
+const @s.0: [16 x u8] = "length of hello\00"
+const @s.1: [6 x u8] = "hello\00"
+const @lib.0: [3 x u8] = ": \00"
+const @lib.1: [3 x u8] = ": \00"
+
+extern func @putchar(i32) -> i32 callconv(c)
+
+func @print(%s: ptr<u8>) -> void {
+  local %i: uword = 0:uword
+  while ne(load(index(%s, %i)), 0:u8) {
+    eval call @putchar(as(i32, load(index(%s, %i))))
+    set %i = add(%i, 1:uword)
+  }
+}
+
+func @print_u64(%v: u64) -> void {
+  local %digits: [20 x u8]
+  local %n: uword = 0:uword
+  if eq(%v, 0:u64) {
+    eval call @putchar(48:i32)
+    return
+  }
+  while ne(%v, 0:u64) {
+    store index(as(ptr<u8>, addr(%digits)), %n), as(u8, add(48:u64, rem(%v, 10:u64)))
+    set %v = div(%v, 10:u64)
+    set %n = add(%n, 1:uword)
+  }
+  while ne(%n, 0:uword) {
+    set %n = sub(%n, 1:uword)
+    eval call @putchar(as(i32, load(index(as(ptr<u8>, addr(%digits)), %n))))
+  }
+}
+
+func @print_i64(%v: i64) -> void {
+  if lt(%v, 0:i64) {
+    eval call @putchar(45:i32)
+    eval call @print_u64(as(u64, sub(0:i64, %v)))
+  } else {
+    eval call @print_u64(as(u64, %v))
+  }
+}
+
+func @show(%label: ptr<u8>, %v: i64) -> void {
+  eval call @print(%label)
+  eval call @print(as(ptr<u8>, @lib.0))
+  eval call @print_i64(%v)
+  eval call @putchar(10:i32)
+}
+
+func @show_u(%label: ptr<u8>, %v: u64) -> void {
+  eval call @print(%label)
+  eval call @print(as(ptr<u8>, @lib.1))
+  eval call @print_u64(%v)
+  eval call @putchar(10:i32)
+}
+
+func @cstr_len(%s: ptr<u8>) -> uword {
+  local %n: uword = 0:uword
+  while ne(load(index(%s, %n)), 0:u8) {
+    set %n = add(%n, 1:uword)
+  }
+  return %n
+}
+
+export func @main(%argc: i32, %argv: ptr<ptr<u8>>) -> i32 {
+  eval call @show_u(as(ptr<u8>, @s.0), as(u64, call @cstr_len(as(ptr<u8>, @s.1))))
+  return 0:i32
+}

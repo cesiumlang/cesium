@@ -1,4 +1,4 @@
-// cesium1: checking statements, and their core MIR text; as
+// cesium1: checking statements, and their core SIR text; as
 // stage0/s0_stmt.c. Written in S0.
 
 void = out_s(#u8 s) {
@@ -285,10 +285,10 @@ void = low_block(uword s, uword depth) {
   low_locals_drop(keep);
 }
 
-// True when control cannot reach the end of the block: libcsmir's
+// True when control cannot reach the end of the block: libcsir's
 // verifier requires it of a function that returns a value. A loop is never
-// counted as returning. Each statement became one MIR statement, so the
-// syntax tree answers for the MIR.
+// counted as returning. Each statement became one SIR statement, so the
+// syntax tree answers for the SIR.
 u8 = low_block_returns(uword s) {
   while (s != 0) {
     uword k = g_nodes[s].kind;

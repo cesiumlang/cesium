@@ -3,7 +3,7 @@
 # than the devkit's `zig cc`, which build.zig uses.
 #
 # usage: portable-c.sh compile <kind> <compiler> [<std>]
-#          Compile every translation unit of stage 0 and libcsmir, without
+#          Compile every translation unit of stage 0 and libcsir, without
 #          linking. <kind> selects the flags: gnu (GCC or Clang, with the
 #          dialect's full warning set), tcc (TinyCC) or msvc (cl).
 #          <std> is c99 or c11 (default: both, one after the other; msvc
@@ -27,7 +27,7 @@ B=$ROOT/bootstrap
 # the flags of cesiumlang/cesium#10, as in build-src/__root__.zig
 GNU_FLAGS=(-pedantic-errors -Wall -Wextra -Wvla -Wconversion -Wformat=2 -Wformat-nonliteral
   -Wno-missing-format-attribute -Wimplicit-fallthrough -Wstrict-prototypes -Wmissing-prototypes -Werror)
-INCLUDES=(-I"$B/include" -I"$B/libcsmir")
+INCLUDES=(-I"$B/include" -I"$B/libcsir")
 # override where a sanitizer is missing (MinGW has no ASan runtime)
 SANITIZE_FLAGS=${PORTABLE_C_SANITIZE:--fsanitize=address,undefined -fno-sanitize-recover=all}
 
@@ -45,7 +45,7 @@ list_sources () { # <dir> <prefix>
 # a read loop, not mapfile: the bash of macOS is 3.2
 SOURCES=()
 STAGE1=()
-while IFS= read -r f; do SOURCES+=("$f"); done < <(list_sources libcsmir libcsmir/; list_sources stage0 stage0/)
+while IFS= read -r f; do SOURCES+=("$f"); done < <(list_sources libcsir libcsir/; list_sources stage0 stage0/)
 SOURCES+=(runtime/cs_arena.c)
 while IFS= read -r f; do STAGE1+=("$f"); done < <(list_sources stage1 "$B/stage1/")
 
@@ -61,7 +61,7 @@ compile_all () { # <kind> <compiler> <std>
       gnu)
         # cs_format.c is the one file that forwards format strings
         local extra=()
-        [ "$src" = libcsmir/cs_format.c ] && extra=(-Wno-format-nonliteral)
+        [ "$src" = libcsir/cs_format.c ] && extra=(-Wno-format-nonliteral)
         "$cc" "-std=$std" "${GNU_FLAGS[@]}" ${extra[@]+"${extra[@]}"} "${INCLUDES[@]}" -c "$B/$src" -o "$obj"
         ;;
       tcc)
@@ -71,7 +71,7 @@ compile_all () { # <kind> <compiler> <std>
         # C4996 is MSVC's own deprecation of ISO C functions such as fopen
         # Windows paths and dash options, and the object named relative to
         # its directory, so that an MSYS shell rewrites none of the arguments
-        (cd "$dir" && "$cc" -nologo -std:c11 -W4 -WX -wd4996           -I"$(cygpath -m "$B/include")" -I"$(cygpath -m "$B/libcsmir")"           -c "$(cygpath -m "$B/$src")" -Fo"$(basename "$obj")")
+        (cd "$dir" && "$cc" -nologo -std:c11 -W4 -WX -wd4996           -I"$(cygpath -m "$B/include")" -I"$(cygpath -m "$B/libcsir")"           -c "$(cygpath -m "$B/$src")" -Fo"$(basename "$obj")")
         ;;
       *) usage ;;
     esac
@@ -125,28 +125,28 @@ sanitize () { # <compiler>
   for t in tokens arith pointers structs control globals; do
     local files=("$B/tests/s0/$t.csm")
     [ "$t" = tokens ] || files+=("$B/tests/s0/lib.csm")
-    expect 0 "s0/$t (MIR)" "$c0" --emit-mir -o "$dir/$t.mir" "${files[@]}"
+    expect 0 "s0/$t (SIR)" "$c0" --emit-sir -o "$dir/$t.sir" "${files[@]}"
     expect 0 "s0/$t (QBE IL)" "$c0" --emit-qbe -o "$dir/$t.ssa" "${files[@]}"
-    # the MIR text cesium0 printed must parse, verify and print back the same
-    expect 0 "s0/$t (MIR round trip)" "$c0" --emit-mir -o "$dir/$t.again.mir" --mir "$dir/$t.mir"
-    cmp "$dir/$t.mir" "$dir/$t.again.mir"
+    # the SIR text cesium0 printed must parse, verify and print back the same
+    expect 0 "s0/$t (SIR round trip)" "$c0" --emit-sir -o "$dir/$t.again.sir" --sir "$dir/$t.sir"
+    cmp "$dir/$t.sir" "$dir/$t.again.sir"
     n=$((n + 3))
   done
-  # the golden MIR names its file as given: relative to the repository root
-  (cd "$ROOT" && "$c0" --emit-mir -o "$dir/tokens.golden.mir" bootstrap/tests/s0/tokens.csm)
-  cmp "$dir/tokens.golden.mir" "$B/tests/s0/tokens.mir"
+  # the golden SIR names its file as given: relative to the repository root
+  (cd "$ROOT" && "$c0" --emit-sir -o "$dir/tokens.golden.sir" bootstrap/tests/s0/tokens.csm)
+  cmp "$dir/tokens.golden.sir" "$B/tests/s0/tokens.sir"
   for t in "$B"/tests/s0/errors/*.csm; do
-    expect 1 "s0/errors/$(basename "$t")" "$c0" --emit-mir -o "$dir/err.mir" "$t" "$B/tests/s0/lib.csm"
+    expect 1 "s0/errors/$(basename "$t")" "$c0" --emit-sir -o "$dir/err.sir" "$t" "$B/tests/s0/lib.csm"
     n=$((n + 1))
   done
-  for t in "$B"/tests/mir/*.mir; do
-    expect 0 "mir/$(basename "$t") (print)" "$c0" --emit-mir -o "$dir/m.mir" --mir "$t"
-    cmp "$dir/m.mir" "$t"
-    expect 0 "mir/$(basename "$t") (QBE IL)" "$c0" --emit-qbe -o "$dir/m.ssa" --mir "$t"
+  for t in "$B"/tests/sir/*.sir; do
+    expect 0 "sir/$(basename "$t") (print)" "$c0" --emit-sir -o "$dir/m.sir" --sir "$t"
+    cmp "$dir/m.sir" "$t"
+    expect 0 "sir/$(basename "$t") (QBE IL)" "$c0" --emit-qbe -o "$dir/m.ssa" --sir "$t"
     n=$((n + 2))
   done
-  for t in "$B"/tests/mir/errors/*.mir; do
-    expect 1 "mir/errors/$(basename "$t")" "$c0" --emit-mir -o "$dir/err.mir" --mir "$t"
+  for t in "$B"/tests/sir/errors/*.sir; do
+    expect 1 "sir/errors/$(basename "$t")" "$c0" --emit-sir -o "$dir/err.sir" --sir "$t"
     n=$((n + 1))
   done
   # cesium1's own source: the largest S0 program there is

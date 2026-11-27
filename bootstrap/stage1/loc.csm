@@ -3,8 +3,8 @@
 //
 // Each file is read through C's stdio and parsed in turn, its lines counted
 // from 1, as cesium0 does. A node records its file, an index into argv (0
-// for standard input), so that errors name it and every statement's MIR
-// comes after a `loc` line, as libcsmir's mir_print writes it for what
+// for standard input), so that errors name it and every statement's SIR
+// comes after a `loc` line, as libcsir's sir_print writes it for what
 // stage 0 builds. From standard input there is no file and no `loc`.
 
 extern cstdio = import('c') {
@@ -14,7 +14,7 @@ extern cstdio = import('c') {
   i32 = strcmp(#u8 a, #u8 b);
 }
 
-// libcsmir's limit on lines and columns (MIR_LOC_MAX): beyond it, no loc
+// libcsir's limit on lines and columns (SIR_LOC_MAX): beyond it, no loc
 const u64 LOC_MAX = 536870912;
 
 ##u8 g_argv;
@@ -28,7 +28,7 @@ Buf g_loc_src;
 // the -o argument
 #u8 g_loc_out;
 u8 g_loc_has_out;
-// the build mode (-O), as libcsmir numbers it (CS_OPT_DEBUG ...), and
+// the build mode (-O), as libcsir numbers it (CS_OPT_DEBUG ...), and
 // whether variables are kept for debuggers (-f[no-]debug-variables)
 i32 g_loc_mode;
 u8 g_loc_vars;
@@ -168,7 +168,7 @@ void = loc_stmt(uword s, uword depth) {
       uword i = 0;
       buf_putc(~g_out_funcs, '"');
       while (name[i] != 0) {
-        buf_put_mir_byte(~g_out_funcs, name[i]);
+        buf_put_sir_byte(~g_out_funcs, name[i]);
         i = i + 1;
       }
       out_s("\" ");

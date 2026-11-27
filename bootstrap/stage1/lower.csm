@@ -1,12 +1,12 @@
 // cesium1: what checking expressions and statements shares, values and
-// fragments of MIR text; the checking is in place.csm, expr.csm and
+// fragments of SIR text; the checking is in place.csm, expr.csm and
 // stmt.csm. Written in S0.
 //
 // The rules and the mapping are stage 0's (bootstrap/stage0/s0_lower.c and
 // the files beside it), file for file and function for function: lower.csm,
 // place.csm, expr.csm, stmt.csm and decl.csm are s0_lower.c, s0_place.c,
-// s0_expr.c, s0_stmt.c and s0_decl.c. Stage 0 builds MIR in memory and
-// prints it; here an expression's MIR is text from the start: a fragment of
+// s0_expr.c, s0_stmt.c and s0_decl.c. Stage 0 builds SIR in memory and
+// prints it; here an expression's SIR is text from the start: a fragment of
 // g_frag, which the enclosing expression copies into its own text. g_frag
 // is emptied before each statement, whose text then goes to g_out_funcs.
 // String literals become globals as they are met, in g_out_globals, so
@@ -17,7 +17,7 @@
 
 // A checked expression, or a place (somewhere a value is stored).
 struct Val {
-  uword start;    // the MIR text, in g_frag: a value, or a place's address
+  uword start;    // the SIR text, in g_frag: a value, or a place's address
   uword len;
   uword ty;       // the value's type, or the type stored at the place
   uword local;    // a place that is a whole local: its name; otherwise 0

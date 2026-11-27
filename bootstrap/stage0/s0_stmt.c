@@ -1,7 +1,7 @@
-/* S0 statements and their core MIR (s0_lower.c has the rules). */
+/* S0 statements and their core SIR (s0_lower.c has the rules). */
 #include "s0_lower.h"
 
-static void block_add(Block *b, MirStmt *s) {
+static void block_add(Block *b, SirStmt *s) {
   if (b->tail != NULL) {
     b->tail->next = s;
   } else {
@@ -10,17 +10,17 @@ static void block_add(Block *b, MirStmt *s) {
   b->tail = s;
 }
 
-/* A MIR statement located at the first token of the S0 statement. */
-static MirStmt *new_stmt(L *l, MirStmtKind kind, const S0Stmt *s) {
-  MirStmt *ms = mir_stmt(l->m, kind, s->loc.line);
-  mir_stmt_loc(l->m, ms, s->loc.file, (uint32_t)s->loc.line, (uint32_t)s->loc.col);
+/* A SIR statement located at the first token of the S0 statement. */
+static SirStmt *new_stmt(L *l, SirStmtKind kind, const S0Stmt *s) {
+  SirStmt *ms = sir_stmt(l->m, kind, s->loc.line);
+  sir_stmt_loc(l->m, ms, s->loc.file, (uint32_t)s->loc.line, (uint32_t)s->loc.col);
   return ms;
 }
 
 
 static void lower_decl(L *l, S0Stmt *s, Block *out) {
-  MirType *t = resolve_type(l, &s->type);
-  MirStmt *ms;
+  SirType *t = resolve_type(l, &s->type);
+  SirStmt *ms;
   Local *v;
   Val init = bad_val();
   bool has_init = s->op != TK_EOF;
@@ -32,10 +32,10 @@ static void lower_decl(L *l, S0Stmt *s, Block *out) {
       s0_error(l->diag, s->loc, "E0306", "an array has at least one element");
       return;
     }
-    t = mir_array(l->m, t, s->count);
+    t = sir_array(l->m, t, s->count);
   }
   if (has_init) {
-    if (!mir_type_is_scalar(t)) {
+    if (!sir_type_is_scalar(t)) {
       s0_error(l->diag, s->loc, "E0512", "a %s has no initializer in S0; assign its %s one at a time",
                type_name(l, t), t->kind == MT_ARRAY ? "elements" : "fields");
       return;
@@ -78,7 +78,7 @@ static void lower_decl(L *l, S0Stmt *s, Block *out) {
 static void lower_assign(L *l, S0Stmt *s, Block *out) {
   Place p;
   Val v;
-  MirStmt *ms;
+  SirStmt *ms;
   if (!is_place_expr(s->a)) {
     s0_error(l->diag, s->loc, "E0515",
              "the left side of an assignment is a variable, an element or a field");
@@ -95,7 +95,7 @@ static void lower_assign(L *l, S0Stmt *s, Block *out) {
       p.t = p.t->elem;
       p.local = NULL;
     }
-    if (!mir_type_is_int(p.t)) {
+    if (!sir_type_is_int(p.t)) {
       s0_error(l->diag, s->loc, "E0516", "a %s is not assigned as a whole in S0; assign its %s", type_name(l, p.t),
                p.t->kind == MT_ARRAY ? "elements" : "fields");
       return;
@@ -125,7 +125,7 @@ static void lower_assign(L *l, S0Stmt *s, Block *out) {
 }
 
 static void lower_stmt(L *l, S0Stmt *s, Block *out) {
-  MirStmt *ms;
+  SirStmt *ms;
   Val v;
   switch (s->kind) {
   case ST_DECL:
@@ -212,7 +212,7 @@ static void lower_stmt(L *l, S0Stmt *s, Block *out) {
   CS_BUG("unknown statement");
 }
 
-MirStmt *lower_block(L *l, S0Stmt *s) {
+SirStmt *lower_block(L *l, S0Stmt *s) {
   Local *saved = l->locals;
   Block b = {NULL, NULL};
   for (; s != NULL; s = s->next) {

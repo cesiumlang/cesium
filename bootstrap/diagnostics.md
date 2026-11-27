@@ -4,7 +4,7 @@ The errors `cesium0` and `cesium1` report in S0 source, by code (cesiumlang/cesi
 
 Each code is stable once released: what it means does not change, and a code is never reused for another message. A message is shown as a template, in which the parts in angle brackets (`<name>`, `<type>`, `<token>`, `<n>`) are filled in by the compiler. The first two digits of a code are its group; the last two count within the group, first in the order of first appearance in the source of `cesium0`, and a code added later takes the next free number of its group. `zig build test` checks that every code here is used, and that every code the compilers use is here and is used by both (`build-src/diagnostics.zig`).
 
-The messages of `libcsmir`, its MIR text parser and its verifier, have codes of their own groups, E10xx and E11xx (cesiumlang/cesium#129), used by both compilers, which link it. Printed without a code, as they are no errors in the source: the I/O messages of both compilers (`cesium1`: `error: cannot read a.csm`), the usage errors of `cesium1` (exit status 2), and the limits of `cesium1` itself (`error: internal: ...`, exit status 2).
+The messages of `libcsir`, its SIR text parser and its verifier, have codes of their own groups, E10xx and E11xx (cesiumlang/cesium#129), used by both compilers, which link it. Printed without a code, as they are no errors in the source: the I/O messages of both compilers (`cesium1`: `error: cannot read a.csm`), the usage errors of `cesium1` (exit status 2), and the limits of `cesium1` itself (`error: internal: ...`, exit status 2).
 
 ## Lexical (E01xx)
 
@@ -554,9 +554,9 @@ A call passes more than 64 arguments. Pass a pointer to a struct instead.
 
 A function declares more than 64 parameters. Take a pointer to a struct instead.
 
-## MIR text (E10xx)
+## SIR text (E10xx)
 
-The errors of `libcsmir`'s parser of core MIR text (`cesium0 --mir file.mir`; `mir_text.c`), printed as `file.mir: error[E1001]: line N: message`. MIR text is written by hand or by a compiler, so these errors come from a hand-written file or from a fault in the compiler that wrote it, not from S0 source. The text form is the one of P-0006 (`proposals/0006-middle-ir.md`).
+The errors of `libcsir`'s parser of core SIR text (`cesium0 --sir file.sir`; `sir_text.c`), printed as `file.sir: error[E1001]: line N: message`. SIR text is written by hand or by a compiler, so these errors come from a hand-written file or from a fault in the compiler that wrote it, not from S0 source. The text form is the one of P-0006 (`proposals/0006-semantic-ir.md`).
 
 ### E1001
 
@@ -574,13 +574,13 @@ A string has no closing `"` before the end of its line.
 
 `bad escape in string: expected \HH, \\ or \"`
 
-A backslash in a string is followed by something other than two hexadecimal digits, a backslash or a quote. MIR text writes every other byte as `\HH`: `\00`, `\0A`.
+A backslash in a string is followed by something other than two hexadecimal digits, a backslash or a quote. SIR text writes every other byte as `\HH`: `\00`, `\0A`.
 
 ### E1004
 
 `unexpected character '<c>'`
 
-The character begins no token of MIR text.
+The character begins no token of SIR text.
 
 ### E1005
 
@@ -616,13 +616,13 @@ A call passes more than 64 arguments.
 
 `unknown operation '<name>'`
 
-An expression starts with a name that is no operation of core MIR. The operations are listed in P-0006.
+An expression starts with a name that is no operation of core SIR. The operations are listed in P-0006.
 
 ### E1011
 
 `unknown statement '<name>'`
 
-A statement starts with a word that is no statement of core MIR, such as `local`, `set`, `store`, `eval`, `if`, `while`, `break`, `continue`, `return` or `loc`.
+A statement starts with a word that is no statement of core SIR, such as `local`, `set`, `store`, `eval`, `if`, `while`, `break`, `continue`, `return` or `loc`.
 
 ### E1012
 
@@ -674,13 +674,13 @@ A global's initializer is a constant written with another type than the global's
 
 ### E1020
 
-`expected MIR version 0`
+`expected SIR version 0`
 
-The file does not start with `cesium-mir 0`, the version this `libcsmir` reads.
+The file does not start with `cesium-sir 0`, the version this `libcsir` reads.
 
-## MIR verification (E11xx)
+## SIR verification (E11xx)
 
-The errors of `libcsmir`'s verifier (`mir_verify.c`), which checks a module, parsed or built by a compiler, before it is lowered: printed as `file.mir: error[E1101]: line N: message` for MIR text, and by `cesium1` after its own message when its MIR fails, as `error[E1101]: MIR: line N: message`. A few are errors in S0 source too, which the compilers report through the same check: E1135, E1142 and E1143; `cesium1` makes those checks itself, with the same code and message at the place in its source.
+The errors of `libcsir`'s verifier (`sir_verify.c`), which checks a module, parsed or built by a compiler, before it is lowered: printed as `file.sir: error[E1101]: line N: message` for SIR text, and by `cesium1` after its own message when its SIR fails, as `error[E1101]: SIR: line N: message`. A few are errors in S0 source too, which the compilers report through the same check: E1135, E1142 and E1143; `cesium1` makes those checks itself, with the same code and message at the place in its source.
 
 ### E1101
 
@@ -702,9 +702,9 @@ A type names a struct that no `struct` declaration of the module defines.
 
 ### E1104
 
-`floating-point types are reserved in MIR version 0`
+`floating-point types are reserved in SIR version 0`
 
-`f32` and `f64` are names of MIR, but version 0 has no floating-point values.
+`f32` and `f64` are names of SIR, but version 0 has no floating-point values.
 
 ### E1105
 
@@ -732,7 +732,7 @@ A local of a struct or array type is used as a value. Such a local is reached th
 
 ### E1109
 
-`@<name> is a function; function addresses are not values in MIR version 0`
+`@<name> is a function; function addresses are not values in SIR version 0`
 
 A function's name is used as a value. Call it with `call`.
 
@@ -858,13 +858,13 @@ The value stored is not of the type the pointer points at, or the first operand 
 
 ### E1130
 
-`@<name> returns <type>: only integers, pointers and void in MIR version 0`
+`@<name> returns <type>: only integers, pointers and void in SIR version 0`
 
 A function returns a struct or an array. Return it through a pointer parameter.
 
 ### E1131
 
-`parameter <n> of @<name> is <type>: only integers and pointers in MIR version 0`
+`parameter <n> of @<name> is <type>: only integers and pointers in SIR version 0`
 
 A parameter has a struct or array type. Pass a pointer instead.
 

@@ -22,7 +22,7 @@ pub const Context = struct {
     timeout_text: []const u8,
     jobs: usize,
     seeds: []const corpus.Seed,
-    mir_words: []const []const u8,
+    sir_words: []const []const u8,
     s0_words: []const []const u8,
 };
 
@@ -82,7 +82,7 @@ fn one(ctx: *const Context, a: Allocator, number: u64) (Error || Io.Cancelable)!
     const r = prng.random();
     const seed = ctx.seeds[r.uintLessThan(usize, ctx.seeds.len)];
     const words = switch (seed.kind) {
-        .mir => ctx.mir_words,
+        .sir => ctx.sir_words,
         .s0 => ctx.s0_words,
     };
     const data = try mutate.mutate(a, r, seed.data, words);
@@ -91,7 +91,7 @@ fn one(ctx: *const Context, a: Allocator, number: u64) (Error || Io.Cancelable)!
     const work = try a.print("{s}/work/{d}", .{ ctx.out, number % (ctx.jobs * 4) });
     try cwd.createDirPath(io, work);
     const ext = switch (seed.kind) {
-        .mir => ".mir",
+        .sir => ".sir",
         .s0 => ".csm",
     };
     const mutant = try a.print("{s}/input{s}", .{ work, ext });
@@ -101,23 +101,23 @@ fn one(ctx: *const Context, a: Allocator, number: u64) (Error || Io.Cancelable)!
     const command = try seed.command(a, ctx.cesium0, "--emit-qbe", try a.print("{s}/out.ssa", .{work}), mutant);
     const first_run = try check(ctx, a, command);
     if (first_run.problem) |p| return try failure.keep(p, command, first_run.stderr);
-    if (seed.kind != .mir) return null;
+    if (seed.kind != .sir) return null;
 
-    // MIR text that is accepted and printed must read back the same
-    const first = try a.print("{s}/first.mir", .{work});
-    const print_command = try seed.command(a, ctx.cesium0, "--emit-mir", first, mutant);
+    // SIR text that is accepted and printed must read back the same
+    const first = try a.print("{s}/first.sir", .{work});
+    const print_command = try seed.command(a, ctx.cesium0, "--emit-sir", first, mutant);
     const printed = try check(ctx, a, print_command);
     if (printed.problem) |p| return try failure.keep(p, print_command, printed.stderr);
     if (printed.status != 0) return null; // rejected
-    const second = try a.print("{s}/second.mir", .{work});
-    const again = try check(ctx, a, &.{ ctx.cesium0, "--emit-mir", "-o", second, "--mir", first });
+    const second = try a.print("{s}/second.sir", .{work});
+    const again = try check(ctx, a, &.{ ctx.cesium0, "--emit-sir", "-o", second, "--sir", first });
     if (again.problem != null or again.status != 0) {
-        return try failure.keep("the MIR text cesium0 printed for this input does not parse again", print_command, again.stderr);
+        return try failure.keep("the SIR text cesium0 printed for this input does not parse again", print_command, again.stderr);
     }
     const first_text = try cwd.readFileAlloc(io, first, a, .unlimited);
     const second_text = try cwd.readFileAlloc(io, second, a, .unlimited);
     if (!std.mem.eql(u8, first_text, second_text)) {
-        return try failure.keep("the MIR text cesium0 printed for this input prints differently the second time", print_command, "");
+        return try failure.keep("the SIR text cesium0 printed for this input prints differently the second time", print_command, "");
     }
     return null;
 }

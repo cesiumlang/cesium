@@ -1,7 +1,7 @@
 //! Builds stage 0 of the Cesium bootstrap chain (cesiumlang/cesium#9):
 //!
-//!   cesium0    the stage 0 compiler: S0 source or core MIR text -> assembly
-//!   libcsmir   core MIR: text parser and printer, verifier, QBE lowering
+//!   cesium0    the stage 0 compiler: S0 source or core SIR text -> assembly
+//!   libcsir   core SIR: text parser and printer, verifier, QBE lowering
 //!   libcsrt    the runtime behind S0's alloc(count)
 //!
 //! Everything is portable C (cesiumlang/cesium#10) compiled by `zig cc`. QBE
@@ -48,13 +48,13 @@ const c_flags = [_][]const u8{
 /// The files of the bootstrap, from their lists (sources.zig).
 const Lists = struct {
     stage0: []const []const u8,
-    csmir: []const []const u8,
+    csir: []const []const u8,
     stage1: []const []const u8,
 };
 
 const Stage0 = struct {
     cesium0: *std.Build.Step.Compile,
-    csmir: *std.Build.Step.Compile,
+    csir: *std.Build.Step.Compile,
     csrt: *std.Build.Step.Compile,
 };
 
@@ -64,7 +64,7 @@ pub fn build(b: *std.Build) (tests_diff.Error || sources.Error)!void {
     const devkit = b.option([]const u8, "devkit", "The unpacked Cesium devkit (default: .devkit)") orelse ".devkit";
     const lists: Lists = .{
         .stage0 = try sources.read(b, "stage0"),
-        .csmir = try sources.read(b, "libcsmir"),
+        .csir = try sources.read(b, "libcsir"),
         .stage1 = try sources.read(b, "stage1"),
     };
 
@@ -73,19 +73,19 @@ pub fn build(b: *std.Build) (tests_diff.Error || sources.Error)!void {
     const c11 = try addStage0(b, target, optimize, devkit, lists, "-std=c11", "-c11");
 
     b.installArtifact(c99.cesium0);
-    b.installArtifact(c99.csmir);
+    b.installArtifact(c99.csir);
     b.installArtifact(c99.csrt);
     // the cesium1 the tests check
-    const s1 = try stage1.add(b, target, optimize, lists.stage1, c99.cesium0, c99.csrt, c99.csmir, devkit);
+    const s1 = try stage1.add(b, target, optimize, lists.stage1, c99.cesium0, c99.csrt, c99.csir, devkit);
     b.installArtifact(s1.cesium1);
 
     const tool = tests.addTool(b);
     const test_step = b.step("test", "Run the stage 0 test corpus");
     test_step.dependOn(&c11.cesium0.step);
-    tests.add(b, test_step, target, c99.cesium0, c99.csrt, c99.csmir, s1, tool, devkit);
-    diagnostics.add(b, test_step, lists.stage0, lists.csmir, s1.sources);
+    tests.add(b, test_step, target, c99.cesium0, c99.csrt, c99.csir, s1, tool, devkit);
+    diagnostics.add(b, test_step, lists.stage0, lists.csir, s1.sources);
     try sources.check(b, test_step, "stage0", ".c", lists.stage0);
-    try sources.check(b, test_step, "libcsmir", ".c", lists.csmir);
+    try sources.check(b, test_step, "libcsir", ".c", lists.csir);
     try sources.check(b, test_step, "stage1", ".csm", lists.stage1);
     try sources.checkTable(b, test_step, "stage1", lists.stage1);
 
@@ -112,19 +112,19 @@ fn addStage0(
     // the one file that forwards format strings (bootstrap/include/cs_common.h)
     const format_file = "cs_format.c";
     const format_flags = flags ++ [_][]const u8{"-Wno-format-nonliteral"};
-    var csmir_files: std.ArrayList([]const u8) = .empty;
-    for (lists.csmir) |file| {
-        if (!std.mem.eql(u8, file, format_file)) try csmir_files.append(b.allocator, file);
+    var csir_files: std.ArrayList([]const u8) = .empty;
+    for (lists.csir) |file| {
+        if (!std.mem.eql(u8, file, format_file)) try csir_files.append(b.allocator, file);
     }
 
-    const csmir = b.addLibrary(.{
-        .name = "csmir" ++ suffix,
+    const csir = b.addLibrary(.{
+        .name = "csir" ++ suffix,
         .linkage = .static,
         .root_module = b.createModule(.{ .target = target, .optimize = optimize, .link_libc = true }),
     });
-    csmir.root_module.addIncludePath(b.path("bootstrap/include"));
-    csmir.root_module.addCSourceFiles(.{ .root = b.path("bootstrap/libcsmir"), .files = csmir_files.items, .flags = &flags });
-    csmir.root_module.addCSourceFiles(.{ .root = b.path("bootstrap/libcsmir"), .files = &.{format_file}, .flags = &format_flags });
+    csir.root_module.addIncludePath(b.path("bootstrap/include"));
+    csir.root_module.addCSourceFiles(.{ .root = b.path("bootstrap/libcsir"), .files = csir_files.items, .flags = &flags });
+    csir.root_module.addCSourceFiles(.{ .root = b.path("bootstrap/libcsir"), .files = &.{format_file}, .flags = &format_flags });
 
     const csrt = b.addLibrary(.{
         .name = "csrt" ++ suffix,
@@ -133,19 +133,19 @@ fn addStage0(
     });
     csrt.root_module.addIncludePath(b.path("bootstrap/include"));
     csrt.root_module.addCSourceFiles(.{ .root = b.path("bootstrap/runtime"), .files = &.{"cs_arena.c"}, .flags = &flags });
-    csrt.root_module.addCSourceFiles(.{ .root = b.path("bootstrap/libcsmir"), .files = &.{"cs_common.c"}, .flags = &flags });
+    csrt.root_module.addCSourceFiles(.{ .root = b.path("bootstrap/libcsir"), .files = &.{"cs_common.c"}, .flags = &flags });
 
     const cesium0 = b.addExecutable(.{
         .name = "cesium0" ++ suffix,
         .root_module = b.createModule(.{ .target = target, .optimize = optimize, .link_libc = true }),
     });
     cesium0.root_module.addIncludePath(b.path("bootstrap/include"));
-    cesium0.root_module.addIncludePath(b.path("bootstrap/libcsmir"));
+    cesium0.root_module.addIncludePath(b.path("bootstrap/libcsir"));
     cesium0.root_module.addCSourceFiles(.{ .root = b.path("bootstrap/stage0"), .files = lists.stage0, .flags = &flags });
-    cesium0.root_module.linkLibrary(csmir);
+    cesium0.root_module.linkLibrary(csir);
     // QBE, third-party code built by the devkit pipeline with its entry point
     // renamed to qbe_main
     cesium0.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ devkit, "qbe", "lib", "libqbe.a" }) });
 
-    return .{ .cesium0 = cesium0, .csmir = csmir, .csrt = csrt };
+    return .{ .cesium0 = cesium0, .csir = csir, .csrt = csrt };
 }

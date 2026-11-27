@@ -1,4 +1,4 @@
-/* S0 expressions and their core MIR (s0_lower.c has the rules). */
+/* S0 expressions and their core SIR (s0_lower.c has the rules). */
 #include "s0_lower.h"
 
 bool is_untyped(const S0Expr *e) {
@@ -27,20 +27,20 @@ bool is_untyped(const S0Expr *e) {
 
 /* Reads through pointers until the value has the depth the context wants,
  * then checks the result against the context. */
-static Val settle(L *l, S0Loc loc, MirExpr *v, MirType *t, Want w) {
+static Val settle(L *l, S0Loc loc, SirExpr *v, SirType *t, Want w) {
   int target = w.type != NULL ? depth_of(w.type) : w.ptr_depth;
   while (depth_of(t) > target) {
     t = t->elem;
-    if (!mir_type_is_scalar(t)) {
+    if (!sir_type_is_scalar(t)) {
       s0_error(l->diag, loc, "E0401", "a %s is not a value; use one of its %s", type_name(l, t),
                t->kind == MT_ARRAY ? "elements" : "fields");
       return bad_val();
     }
-    v = mir_unary(l->m, ME_LOAD, v, loc.line);
+    v = sir_unary(l->m, ME_LOAD, v, loc.line);
   }
   if (w.type != NULL) {
-    if (!mir_type_eq(t, w.type)) {
-      if (mir_type_is_int(t) && mir_type_is_int(w.type)) {
+    if (!sir_type_eq(t, w.type)) {
+      if (sir_type_is_int(t) && sir_type_is_int(w.type)) {
         s0_error(l->diag, loc, "E0403", "expected %s, found %s; convert it with 'as'", type_name(l, w.type),
                  type_name(l, t));
       } else {
@@ -54,14 +54,14 @@ static Val settle(L *l, S0Loc loc, MirExpr *v, MirType *t, Want w) {
                type_name(l, t));
       return bad_val();
     }
-  } else if (!mir_type_is_int(t)) {
+  } else if (!sir_type_is_int(t)) {
     s0_error(l->diag, loc, "E0405", "expected a number, found %s", type_name(l, t));
     return bad_val();
   }
   return make_val(v, t);
 }
 
-static MirOp binary_op(S0Tok op) {
+static SirOp binary_op(S0Tok op) {
   switch (op) {
   case TK_PLUS:
     return ME_ADD;
@@ -112,11 +112,11 @@ static bool is_comparison(S0Tok op) {
 /* The two operands of an arithmetic or comparison operator: both numbers of
  * one type. A literal takes the other operand's type. `fallback` is the type
  * for two literals, or NULL when the context gives none. */
-static bool lower_operands(L *l, S0Expr *e, MirType *fallback, Val *a, Val *b) {
+static bool lower_operands(L *l, S0Expr *e, SirType *fallback, Val *a, Val *b) {
   bool lu = is_untyped(e->a);
   bool ru = is_untyped(e->b);
   if (lu && ru) {
-    if (fallback == NULL || !mir_type_is_int(fallback)) {
+    if (fallback == NULL || !sir_type_is_int(fallback)) {
       s0_error(l->diag, e->loc, "E0406",
                "the type of these literals is not determined by their context; write 'as T' after one");
       return false;
@@ -124,7 +124,7 @@ static bool lower_operands(L *l, S0Expr *e, MirType *fallback, Val *a, Val *b) {
     *a = lower_expr(l, e->a, want_type(fallback));
     *b = lower_expr(l, e->b, want_type(fallback));
   } else if (lu) {
-    /* the literal on the left takes the right operand's type; the MIR
+    /* the literal on the left takes the right operand's type; the SIR
      * still evaluates left to right */
     *b = lower_expr(l, e->b, want_value());
     if (!b->ok) {
@@ -140,7 +140,7 @@ static bool lower_operands(L *l, S0Expr *e, MirType *fallback, Val *a, Val *b) {
   } else {
     *a = lower_expr(l, e->a, want_value());
     *b = lower_expr(l, e->b, want_value());
-    if (a->ok && b->ok && !mir_type_eq(a->t, b->t)) {
+    if (a->ok && b->ok && !sir_type_eq(a->t, b->t)) {
       s0_error(l->diag, e->loc, "E0407", "the operands are %s and %s; convert one with 'as'", type_name(l, a->t),
                type_name(l, b->t));
       return false;
@@ -151,24 +151,24 @@ static bool lower_operands(L *l, S0Expr *e, MirType *fallback, Val *a, Val *b) {
 
 Val lower_string(L *l, S0Expr *e) {
   char name[32];
-  MirGlobal *g;
-  MirType *u8 = mir_prim(l->m, MT_U8);
+  SirGlobal *g;
+  SirType *u8 = sir_prim(l->m, MT_U8);
   int n = snprintf(name, sizeof name, "str.%d", l->nstrings++);
   if (n < 0 || (size_t)n >= sizeof name) {
     CS_BUG("string name");
   }
-  g = mir_global_add(l->m, name, mir_array(l->m, u8, (uint64_t)e->len + 1), true, e->loc.line);
+  g = sir_global_add(l->m, name, sir_array(l->m, u8, (uint64_t)e->len + 1), true, e->loc.line);
   g->init = MI_BYTES;
   /* the arena copy is NUL-terminated: len + 1 bytes are the string and its NUL */
   g->bytes = cs_arena_strn(l->arena, e->name, e->len);
   g->nbytes = e->len + 1;
-  return make_val(mir_as(l->m, mir_ptr(l->m, u8), mir_global_ref(l->m, name, e->loc.line), e->loc.line),
-                  mir_ptr(l->m, u8));
+  return make_val(sir_as(l->m, sir_ptr(l->m, u8), sir_global_ref(l->m, name, e->loc.line), e->loc.line),
+                  sir_ptr(l->m, u8));
 }
 
 Val lower_call(L *l, S0Expr *e, Want w) {
   Func *f = find_func(l, e->name);
-  MirExpr **args;
+  SirExpr **args;
   size_t i;
   bool ok = true;
   if (strcmp(e->name, "alloc") == 0) {
@@ -180,14 +180,14 @@ Val lower_call(L *l, S0Expr *e, Want w) {
     s0_error(l->diag, e->loc, "E0305", "unknown function '%s'", e->name);
     return bad_val();
   }
-  if (e->nargs != f->mir->nparams) {
-    s0_error(l->diag, e->loc, "E0601", "'%s' takes %lu arguments, not %lu", e->name, (unsigned long)f->mir->nparams,
+  if (e->nargs != f->sir->nparams) {
+    s0_error(l->diag, e->loc, "E0601", "'%s' takes %lu arguments, not %lu", e->name, (unsigned long)f->sir->nparams,
              (unsigned long)e->nargs);
     return bad_val();
   }
-  args = (MirExpr **)cs_arena_new(&l->m->arena, cs_mul_size(e->nargs == 0 ? 1 : e->nargs, sizeof(MirExpr *)));
+  args = (SirExpr **)cs_arena_new(&l->m->arena, cs_mul_size(e->nargs == 0 ? 1 : e->nargs, sizeof(SirExpr *)));
   for (i = 0; i < e->nargs; i++) {
-    Val a = lower_expr(l, e->args[i], want_type(f->mir->params[i].type));
+    Val a = lower_expr(l, e->args[i], want_type(f->sir->params[i].type));
     if (!a.ok) {
       ok = false;
     } else {
@@ -197,22 +197,22 @@ Val lower_call(L *l, S0Expr *e, Want w) {
   if (!ok) {
     return bad_val();
   }
-  if (f->mir->ret->kind == MT_VOID) {
+  if (f->sir->ret->kind == MT_VOID) {
     if (!w.allow_void) {
       s0_error(l->diag, e->loc, "E0602", "'%s' returns nothing", e->name);
       return bad_val();
     }
-    return make_val(mir_call(l->m, e->name, args, e->nargs, e->loc.line), f->mir->ret);
+    return make_val(sir_call(l->m, e->name, args, e->nargs, e->loc.line), f->sir->ret);
   }
   if (w.allow_void) {
     /* a statement: the result is dropped as it is */
-    return make_val(mir_call(l->m, e->name, args, e->nargs, e->loc.line), f->mir->ret);
+    return make_val(sir_call(l->m, e->name, args, e->nargs, e->loc.line), f->sir->ret);
   }
-  return settle(l, e->loc, mir_call(l->m, e->name, args, e->nargs, e->loc.line), f->mir->ret, w);
+  return settle(l, e->loc, sir_call(l->m, e->name, args, e->nargs, e->loc.line), f->sir->ret, w);
 }
 
 static Val lower_as(L *l, S0Expr *e, Want w) {
-  MirType *to = resolve_type(l, &e->type);
+  SirType *to = resolve_type(l, &e->type);
   Val v;
   if (to == NULL) {
     return bad_val();
@@ -222,11 +222,11 @@ static Val lower_as(L *l, S0Expr *e, Want w) {
     ow.ptr_depth = depth_of(to);
     ow.or_uword = true;
     if (is_untyped(e->a)) {
-      v = lower_expr(l, e->a, want_type(mir_prim(l->m, MT_UWORD)));
+      v = lower_expr(l, e->a, want_type(sir_prim(l->m, MT_UWORD)));
     } else {
       v = lower_expr(l, e->a, ow);
     }
-  } else if (mir_type_is_int(to)) {
+  } else if (sir_type_is_int(to)) {
     if (is_untyped(e->a)) {
       /* a literal simply takes the type */
       v = lower_expr(l, e->a, want_type(to));
@@ -255,8 +255,8 @@ static Val lower_as(L *l, S0Expr *e, Want w) {
   if (!v.ok) {
     return v;
   }
-  if (!mir_type_eq(v.t, to)) {
-    v.e = mir_as(l->m, to, v.e, e->loc.line);
+  if (!sir_type_eq(v.t, to)) {
+    v.e = sir_as(l->m, to, v.e, e->loc.line);
     v.t = to;
   }
   return settle(l, e->loc, v.e, v.t, w);
@@ -265,7 +265,7 @@ static Val lower_as(L *l, S0Expr *e, Want w) {
 Val lower_expr(L *l, S0Expr *e, Want w) {
   switch (e->kind) {
   case EX_INT:
-    if (w.type == NULL || !mir_type_is_int(w.type)) {
+    if (w.type == NULL || !sir_type_is_int(w.type)) {
       if (w.type != NULL) {
         s0_error(l->diag, e->loc, "E0410", "expected %s, found a number", type_name(l, w.type));
       } else {
@@ -278,7 +278,7 @@ Val lower_expr(L *l, S0Expr *e, Want w) {
       s0_error(l->diag, e->loc, "E0412", "%" PRIu64 " does not fit %s", e->ival, type_name(l, w.type));
       return bad_val();
     }
-    return make_val(mir_const(l->m, w.type, e->ival, e->loc.line), w.type);
+    return make_val(sir_const(l->m, w.type, e->ival, e->loc.line), w.type);
 
   case EX_STRING: {
     Val v = lower_string(l, e);
@@ -293,13 +293,13 @@ Val lower_expr(L *l, S0Expr *e, Want w) {
     Const *c = find_local(l, e->name) == NULL ? find_const(l, e->name) : NULL;
     Place p;
     if (c != NULL) {
-      return settle(l, e->loc, mir_const(l->m, c->type, c->value, e->loc.line), c->type, w);
+      return settle(l, e->loc, sir_const(l->m, c->type, c->value, e->loc.line), c->type, w);
     }
     p = lower_place(l, e);
     if (!p.ok) {
       return bad_val();
     }
-    if (!mir_type_is_scalar(p.t)) {
+    if (!sir_type_is_scalar(p.t)) {
       s0_error(l->diag, e->loc, "E0414", "'%s' is a %s, not a value; use one of its %s", e->name, type_name(l, p.t),
                p.t->kind == MT_ARRAY ? "elements" : "fields");
       return bad_val();
@@ -313,7 +313,7 @@ Val lower_expr(L *l, S0Expr *e, Want w) {
     if (!p.ok) {
       return bad_val();
     }
-    if (!mir_type_is_scalar(p.t)) {
+    if (!sir_type_is_scalar(p.t)) {
       s0_error(l->diag, e->loc, "E0401", "a %s is not a value; use one of its %s", type_name(l, p.t),
                p.t->kind == MT_ARRAY ? "elements" : "fields");
       return bad_val();
@@ -326,7 +326,7 @@ Val lower_expr(L *l, S0Expr *e, Want w) {
 
   case EX_ADDROF: {
     Place p;
-    MirType *t;
+    SirType *t;
     if (!is_place_expr(e->a)) {
       s0_error(l->diag, e->loc, "E0508",
                "'#' and '~' take the address of a variable, an element or a field");
@@ -336,10 +336,10 @@ Val lower_expr(L *l, S0Expr *e, Want w) {
     if (!p.ok) {
       return bad_val();
     }
-    t = mir_ptr(l->m, p.t);
+    t = sir_ptr(l->m, p.t);
     /* an explicit address is never read through */
     if (w.type != NULL) {
-      if (!mir_type_eq(t, w.type)) {
+      if (!sir_type_eq(t, w.type)) {
         s0_error(l->diag, e->loc, "E0402", "expected %s, found %s", type_name(l, w.type), type_name(l, t));
         return bad_val();
       }
@@ -356,42 +356,42 @@ Val lower_expr(L *l, S0Expr *e, Want w) {
     if (!a.ok) {
       return a;
     }
-    return settle(l, e->loc, mir_unary(l->m, ME_LNOT, a.e, e->loc.line), mir_prim(l->m, MT_U8), w);
+    return settle(l, e->loc, sir_unary(l->m, ME_LNOT, a.e, e->loc.line), sir_prim(l->m, MT_U8), w);
   }
 
   case EX_BINARY: {
     Val a;
     Val b;
-    MirOp op = binary_op(e->op);
+    SirOp op = binary_op(e->op);
     if (e->op == TK_ANDAND || e->op == TK_OROR) {
       a = lower_expr(l, e->a, want_value());
       b = lower_expr(l, e->b, want_value());
       if (!a.ok || !b.ok) {
         return bad_val();
       }
-      return settle(l, e->loc, mir_binary(l->m, op, a.e, b.e, e->loc.line), mir_prim(l->m, MT_U8), w);
+      return settle(l, e->loc, sir_binary(l->m, op, a.e, b.e, e->loc.line), sir_prim(l->m, MT_U8), w);
     }
     if (is_comparison(e->op)) {
       if (!lower_operands(l, e, NULL, &a, &b)) {
         return bad_val();
       }
-      return settle(l, e->loc, mir_binary(l->m, op, a.e, b.e, e->loc.line), mir_prim(l->m, MT_U8), w);
+      return settle(l, e->loc, sir_binary(l->m, op, a.e, b.e, e->loc.line), sir_prim(l->m, MT_U8), w);
     }
     if (!lower_operands(l, e, w.type, &a, &b)) {
       return bad_val();
     }
-    return settle(l, e->loc, mir_binary(l->m, op, a.e, b.e, e->loc.line), a.t, w);
+    return settle(l, e->loc, sir_binary(l->m, op, a.e, b.e, e->loc.line), a.t, w);
   }
 
   case EX_AS:
     return lower_as(l, e, w);
 
   case EX_SIZEOF: {
-    MirType *t = resolve_type(l, &e->type);
+    SirType *t = resolve_type(l, &e->type);
     if (t == NULL) {
       return bad_val();
     }
-    return settle(l, e->loc, mir_type_op(l->m, ME_SIZEOF, t, e->loc.line), mir_prim(l->m, MT_UWORD), w);
+    return settle(l, e->loc, sir_type_op(l->m, ME_SIZEOF, t, e->loc.line), sir_prim(l->m, MT_UWORD), w);
   }
   }
   CS_BUG("unknown expression");
@@ -400,9 +400,9 @@ Val lower_expr(L *l, S0Expr *e, Want w) {
 
 /* alloc(count) for a pointer of type `to` (cesiumlang/cesium#9, mapping):
  *   as(ptr<T>, call @cs_arena_alloc(mul(n, sizeof(T)), alignof(T))) */
-static Val lower_alloc(L *l, S0Expr *e, MirType *to) {
-  MirType *uword = mir_prim(l->m, MT_UWORD);
-  MirExpr **args;
+static Val lower_alloc(L *l, S0Expr *e, SirType *to) {
+  SirType *uword = sir_prim(l->m, MT_UWORD);
+  SirExpr **args;
   Val n;
   if (e->nargs != 1) {
     s0_error(l->diag, e->loc, "E0509", "alloc takes one argument, the element count");
@@ -417,10 +417,10 @@ static Val lower_alloc(L *l, S0Expr *e, MirType *to) {
     return n;
   }
   l->uses_alloc = true;
-  args = (MirExpr **)cs_arena_new(&l->m->arena, 2 * sizeof(MirExpr *));
-  args[0] = mir_binary(l->m, ME_MUL, n.e, mir_type_op(l->m, ME_SIZEOF, to->elem, e->loc.line), e->loc.line);
-  args[1] = mir_type_op(l->m, ME_ALIGNOF, to->elem, e->loc.line);
-  return make_val(mir_as(l->m, to, mir_call(l->m, "cs_arena_alloc", args, 2, e->loc.line), e->loc.line), to);
+  args = (SirExpr **)cs_arena_new(&l->m->arena, 2 * sizeof(SirExpr *));
+  args[0] = sir_binary(l->m, ME_MUL, n.e, sir_type_op(l->m, ME_SIZEOF, to->elem, e->loc.line), e->loc.line);
+  args[1] = sir_type_op(l->m, ME_ALIGNOF, to->elem, e->loc.line);
+  return make_val(sir_as(l->m, to, sir_call(l->m, "cs_arena_alloc", args, 2, e->loc.line), e->loc.line), to);
 }
 
 static bool is_alloc(const S0Expr *e) {
@@ -428,7 +428,7 @@ static bool is_alloc(const S0Expr *e) {
 }
 
 /* The right side of `:=`, `#=` or `~=` for a pointer of type `to`. */
-Val lower_pointer_value(L *l, S0Expr *e, S0Tok op, MirType *to) {
+Val lower_pointer_value(L *l, S0Expr *e, S0Tok op, SirType *to) {
   if (is_alloc(e)) {
     if (op != TK_OWN) {
       s0_error(l->diag, e->loc, "E0511", "alloc returns ownership; receive it with ':='");

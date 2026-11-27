@@ -1,10 +1,10 @@
-//! Mutation fuzzing of cesium0's two readers: the MIR text parser and the S0
-//! front end (cesiumlang/cesium#10, "consider fuzzing the MIR text parser").
+//! Mutation fuzzing of cesium0's two readers: the SIR text parser and the S0
+//! front end (cesiumlang/cesium#10, "consider fuzzing the SIR text parser").
 //!
 //! Takes the files of the test corpus, damages each a little, and runs
 //! cesium0 on the result up to QBE IL. Whatever the input, cesium0 must exit
 //! with status 0 (accepted) or 1 (rejected with a message), within the time
-//! limit, and without a sanitizer report. MIR text that cesium0 accepts and
+//! limit, and without a sanitizer report. SIR text that cesium0 accepts and
 //! prints must also parse again and print the same.
 //!
 //! Run it on a cesium0 built with sanitizers: tools/portable-c.sh fuzz
@@ -117,7 +117,7 @@ pub fn main(init: std.process.Init) !u8 {
         .timeout_text = options.timeout_text,
         .jobs = jobs,
         .seeds = seeds,
-        .mir_words = try corpus.words(a, seeds, .mir),
+        .sir_words = try corpus.words(a, seeds, .sir),
         .s0_words = try corpus.words(a, seeds, .s0),
     };
 

@@ -136,8 +136,8 @@ void = buf_copy(~Buf b, uword start, uword n) {
   b.len = b.len + n;
 }
 
-// One byte of a MIR string: \" and \\, printable ASCII as it is, else \HH.
-void = buf_put_mir_byte(~Buf b, u8 c) {
+// One byte of a SIR string: \" and \\, printable ASCII as it is, else \HH.
+void = buf_put_sir_byte(~Buf b, u8 c) {
   if (c == '"' || c == '\\') {
     buf_putc(b, '\\');
     buf_putc(b, c);

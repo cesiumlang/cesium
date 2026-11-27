@@ -207,7 +207,7 @@ jobs:
 
       # damaged copies of the corpus: cesium0 must reject or accept each
       # without crashing; the seed is fixed so that a failure can be repeated
-      - name: Fuzz the MIR text parser and the S0 front end
+      - name: Fuzz the SIR text parser and the S0 front end
         run: bash tools/portable-c.sh fuzz clang 6000 1
 
       - name: Keep the failing inputs

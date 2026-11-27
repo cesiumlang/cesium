@@ -42,7 +42,7 @@ static void fail(Parser *p, S0Loc loc, const char *code, const char *fmt, ...) {
   p->peek.kind = TK_EOF;
 }
 
-/* The parser, the lowering and libcsmir recurse as deep as expressions and
+/* The parser, the lowering and libcsir recurse as deep as expressions and
  * statements nest, so the nesting has a limit: without one, a source file can
  * overflow the stack. An operand, the body of an `if` or `while`, and each
  * further `else if` is one level deeper. stage1/parse.csm has the same limit. */

@@ -20,7 +20,7 @@ pub fn add(
     files: []const []const u8,
     cesium0: *std.Build.Step.Compile,
     csrt: *std.Build.Step.Compile,
-    csmir: *std.Build.Step.Compile,
+    csir: *std.Build.Step.Compile,
     devkit: []const u8,
 ) std.mem.Allocator.Error!Stage1 {
     const sources = try b.allocator.alloc(std.Build.LazyPath, files.len);
@@ -29,6 +29,6 @@ pub fn add(
     compile.addArgs(&.{ "-O", @tagName(optimize), "-o" });
     const assembly = compile.addOutputFileArg("cesium1.s");
     for (sources) |source| compile.addFileArg(source);
-    const cesium1 = link.linkCompiler(b, target, csrt, csmir, devkit, "cesium1", assembly);
+    const cesium1 = link.linkCompiler(b, target, csrt, csir, devkit, "cesium1", assembly);
     return .{ .cesium1 = cesium1, .sources = sources };
 }

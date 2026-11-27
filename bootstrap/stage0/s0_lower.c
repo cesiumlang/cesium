@@ -1,4 +1,4 @@
-/* S0 checking and lowering to core MIR, following the "S0 -> core MIR
+/* S0 checking and lowering to core SIR, following the "S0 -> core SIR
  * mapping" of cesiumlang/cesium#9 and its amendment of 2026-11-16.
  *
  * Pointers (cesiumlang/cesium#11; stage 0 parses the ownership forms and
@@ -29,7 +29,7 @@ Val bad_val(void) {
   return v;
 }
 
-Val make_val(MirExpr *e, MirType *t) {
+Val make_val(SirExpr *e, SirType *t) {
   Val v;
   v.ok = true;
   v.e = e;
@@ -48,7 +48,7 @@ Place bad_place(void) {
 
 /* ---- types ------------------------------------------------------------- */
 
-int depth_of(const MirType *t) {
+int depth_of(const SirType *t) {
   int d = 0;
   while (t->kind == MT_PTR) {
     d++;
@@ -58,7 +58,7 @@ int depth_of(const MirType *t) {
 }
 
 /* A type as S0 writes it, for messages. */
-static void type_put(CsBuf *b, const MirType *t) {
+static void type_put(CsBuf *b, const SirType *t) {
   switch (t->kind) {
   case MT_PTR:
     cs_buf_putc(b, '#');
@@ -69,12 +69,12 @@ static void type_put(CsBuf *b, const MirType *t) {
     cs_buf_printf(b, "[%" PRIu64 "]", t->count);
     break;
   default:
-    mir_type_print(b, t);
+    sir_type_print(b, t);
     break;
   }
 }
 
-const char *type_name(L *l, const MirType *t) {
+const char *type_name(L *l, const SirType *t) {
   CsBuf b = {NULL, 0, 0};
   const char *s;
   type_put(&b, t);
@@ -93,31 +93,31 @@ StructName *find_struct(L *l, const char *name) {
   return NULL;
 }
 
-/* The MIR type of a written type, or NULL after an error. */
-MirType *resolve_type(L *l, const S0TypeSyn *syn) {
-  MirType *t;
+/* The SIR type of a written type, or NULL after an error. */
+SirType *resolve_type(L *l, const S0TypeSyn *syn) {
+  SirType *t;
   int i;
   switch (syn->base) {
   case BT_VOID:
-    t = mir_prim(l->m, MT_VOID);
+    t = sir_prim(l->m, MT_VOID);
     break;
   case BT_U8:
-    t = mir_prim(l->m, MT_U8);
+    t = sir_prim(l->m, MT_U8);
     break;
   case BT_I32:
-    t = mir_prim(l->m, MT_I32);
+    t = sir_prim(l->m, MT_I32);
     break;
   case BT_U32:
-    t = mir_prim(l->m, MT_U32);
+    t = sir_prim(l->m, MT_U32);
     break;
   case BT_I64:
-    t = mir_prim(l->m, MT_I64);
+    t = sir_prim(l->m, MT_I64);
     break;
   case BT_U64:
-    t = mir_prim(l->m, MT_U64);
+    t = sir_prim(l->m, MT_U64);
     break;
   case BT_UWORD:
-    t = mir_prim(l->m, MT_UWORD);
+    t = sir_prim(l->m, MT_UWORD);
     break;
   default:
     if (find_struct(l, syn->name) == NULL) {
@@ -126,16 +126,16 @@ MirType *resolve_type(L *l, const S0TypeSyn *syn) {
       }
       return NULL;
     }
-    t = &mir_struct_ref(l->m, syn->name)->type;
+    t = &sir_struct_ref(l->m, syn->name)->type;
     break;
   }
   for (i = 0; i < syn->depth; i++) {
-    t = mir_ptr(l->m, t);
+    t = sir_ptr(l->m, t);
   }
   return t;
 }
 
-bool literal_fits(const MirType *t, uint64_t v) {
+bool literal_fits(const SirType *t, uint64_t v) {
   switch (t->kind) {
   case MT_U8:
     return v <= UINT8_MAX;
@@ -231,7 +231,7 @@ Want want_value(void) {
   return w;
 }
 
-Want want_type(MirType *t) {
+Want want_type(SirType *t) {
   Want w;
   memset(&w, 0, sizeof w);
   w.type = t;

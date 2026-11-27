@@ -4,7 +4,7 @@
 //!   diagnostics <catalog> <source>...
 //!
 //! Every string literal "E" + four digits in a source (`.c`: cesium0, `.csm`:
-//! cesium1, a file of `libcsmir/`: both, which link it) must be a code of the
+//! cesium1, a file of `libcsir/`: both, which link it) must be a code of the
 //! catalog (a heading `### E0101`), and every code of the catalog must appear
 //! in both compilers, or only in the one its entry names with `cesium0 only`
 //! or `cesium1 only`. Each problem is printed, and the exit status is 1.
@@ -24,13 +24,13 @@ const Entry = struct {
 pub const Error = std.Io.Dir.ReadFileAllocError || std.process.Args.ToSliceError;
 
 /// Adds the check to `step`: the catalog against the files of bootstrap/stage0
-/// named in `stage0`, of bootstrap/libcsmir named in `csmir`, and cesium1's
+/// named in `stage0`, of bootstrap/libcsir named in `csir`, and cesium1's
 /// sources.
 pub fn add(
     b: *std.Build,
     step: *std.Build.Step,
     stage0: []const []const u8,
-    csmir: []const []const u8,
+    csir: []const []const u8,
     stage1: []const std.Build.LazyPath,
 ) void {
     const exe = b.addExecutable(.{
@@ -41,7 +41,7 @@ pub fn add(
     run.setName("check the diagnostic codes");
     run.addFileArg(b.path("bootstrap/diagnostics.md"));
     for (stage0) |file| run.addFileArg(b.path(b.fmt("bootstrap/stage0/{s}", .{file})));
-    for (csmir) |file| run.addFileArg(b.path(b.fmt("bootstrap/libcsmir/{s}", .{file})));
+    for (csir) |file| run.addFileArg(b.path(b.fmt("bootstrap/libcsir/{s}", .{file})));
     for (stage1) |source| run.addFileArg(source);
     run.expectExitCode(0);
     step.dependOn(&run.step);
@@ -84,7 +84,7 @@ pub fn main(init: std.process.Init) Error!u8 {
 
     // the sources: every "Ennnn" literal
     for (argv[2..]) |path| {
-        const both = std.mem.find(u8, path, "libcsmir") != null;
+        const both = std.mem.find(u8, path, "libcsir") != null;
         const which: usize = if (std.mem.endsWith(u8, path, ".csm")) 1 else 0;
         const file = std.Io.Dir.path.basename(path);
         const text = try cwd.readFileAlloc(io, path, a, .limited(1 << 24));

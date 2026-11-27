@@ -1,0 +1,20 @@
+# libcsir's C files: the one list of them, read by the build
+# (build-src/sources.zig), tools/portable-c.sh and the check of the
+# diagnostic codes. cs_format.c, the one file that forwards format strings,
+# is built without -Wformat-nonliteral.
+cs_common.c
+cs_format.c
+sir.c
+sir_text.c
+sir_print.c
+sir_verify.c
+sir_qbe.c
+sir_dwarf.c
+sir_dwarf_vars.c
+sir_codeview.c
+sir_codeview_vars.c
+sir_seh.c
+sir_debug.c
+sir_debug_scan.c
+cs_platform.c
+sir_api.c

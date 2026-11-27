@@ -2,18 +2,18 @@
 
 const std = @import("std");
 
-/// Links a compiler from assembly: it calls libcsmir, which runs QBE in-process.
+/// Links a compiler from assembly: it calls libcsir, which runs QBE in-process.
 pub fn linkCompiler(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     csrt: *std.Build.Step.Compile,
-    csmir: *std.Build.Step.Compile,
+    csir: *std.Build.Step.Compile,
     devkit: []const u8,
     name: []const u8,
     assembly: std.Build.LazyPath,
 ) *std.Build.Step.Compile {
     const exe = linkProgram(b, target, csrt, name, assembly);
-    exe.root_module.linkLibrary(csmir);
+    exe.root_module.linkLibrary(csir);
     // QBE, as cesium0 links it (build-src/__root__.zig)
     exe.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ devkit, "qbe", "lib", "libqbe.a" }) });
     return exe;

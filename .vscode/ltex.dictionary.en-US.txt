@@ -16,7 +16,7 @@ cnel
 CodeView
 CPACK
 cppvsdbg
-CSMIR
+CSIR
 csrt
 cstdio
 cstr
@@ -60,7 +60,7 @@ JsonDoc
 katex
 lexer
 libcesiumexe
-libcsmir
+libcsir
 libcsrt
 libqbe
 libtree

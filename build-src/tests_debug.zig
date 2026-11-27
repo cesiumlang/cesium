@@ -72,10 +72,10 @@ const lines = struct {
         // no line ending: QBE writes a text stream, "\r\n" on Windows
         "\t.loc 1 12 3",
     };
-    /// The compile unit libcsmir adds (bootstrap/libcsmir/mir_dwarf.c).
+    /// The compile unit libcsir adds (bootstrap/libcsir/sir_dwarf.c).
     const unit = [_][]const u8{
         "\t.short 4",
-        "\t.asciz \"libcsmir\"",
+        "\t.asciz \"libcsir\"",
         "\t.asciz \"" ++ s0_dir ++ name ++ ".csm\"",
         "\t.set ",
     };
@@ -93,7 +93,7 @@ const lines = struct {
         ".section __DWARF,__debug_str,regular,debug",
         "\t.quad Lcs_text_start",
     };
-    /// CodeView instead (bootstrap/libcsmir/mir_codeview.c): the path absolute,
+    /// CodeView instead (bootstrap/libcsir/sir_codeview.c): the path absolute,
     /// with backslashes, escaped as an assembler string.
     const coff = [_][]const u8{
         ".cv_file 1 \"",
@@ -101,7 +101,7 @@ const lines = struct {
         // the entry has the line of the first statement, for stepping in
         "main:\n\t.cv_func_id 0\n\t.cv_loc 0 1 7 3\n.seh_proc main\n\tendbr64",
         "\t.cv_loc 0 1 12 3",
-        // unwind data (bootstrap/libcsmir/mir_seh.c)
+        // unwind data (bootstrap/libcsir/sir_seh.c)
         "\t.seh_endprologue",
         "\t.seh_endproc\n.Lcs_cv_end0:",
         ".section .debug$S,\"dr\"",
@@ -128,7 +128,7 @@ const lines = struct {
 
 /// s0/frames.csm traps two calls deep, below a frame too large for an unwind
 /// record's frame offset; its COFF assembly must describe each prologue
-/// (bootstrap/libcsmir/mir_seh.c).
+/// (bootstrap/libcsir/sir_seh.c).
 const frames = struct {
     const name = "frames";
     const coff = [_][]const u8{
@@ -143,8 +143,8 @@ const frames = struct {
 };
 
 /// s0/vars.csm has locals in nested scopes; in a debug build its assembly
-/// keeps them in memory and describes them (mir_debug.c,
-/// mir_codeview_vars.c, mir_dwarf_vars.c).
+/// keeps them in memory and describes them (sir_debug.c,
+/// sir_codeview_vars.c, sir_dwarf_vars.c).
 const vars = struct {
     const name = "vars";
     const coff = [_][]const u8{
@@ -162,7 +162,7 @@ const vars = struct {
         "\t.short 0x1103",
         ".section .debug$T,\"dr\"",
     };
-    /// DWARF instead (mir_dwarf_vars.c): the function's and the scope's
+    /// DWARF instead (sir_dwarf_vars.c): the function's and the scope's
     /// labels, and the unit's children
     const elf = [_][]const u8{
         "scale:\n.Lcs_fb0:",

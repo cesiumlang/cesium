@@ -1,6 +1,0 @@
-cesium-mir 0
-
-func @f() -> void {
-  loc "a.csm" 1:536870912
-  return
-}

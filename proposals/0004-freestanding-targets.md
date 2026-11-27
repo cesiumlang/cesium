@@ -30,7 +30,7 @@ Cesium must be usable to write an OS that runs on bare metal. LLVM already gener
    - `memcpy`, `memset`, `memmove`, `memcmp`.
 
    How they are provided is open (Open question 1).
-8. **Controls for kernel code.** The language and code generation provide the following, and the middle IR carries them through to LLVM; most map onto LLVM IR attributes and target features:
+8. **Controls for kernel code.** The language and code generation provide the following, and the semantic IR carries them through to LLVM; most map onto LLVM IR attributes and target features:
 
    | Need | LLVM mechanism |
    | --- | --- |
@@ -51,7 +51,7 @@ Cesium must be usable to write an OS that runs on bare metal. LLVM already gener
 12. **DWARF debug info,** for debugging under QEMU with gdb.
 13. **Freestanding CI follows rstd's QEMU rigs:** x86_64, aarch64, arm (soft-float and hard-float), powerpc-750 (soft-float and hard-float), x86_64-uefi and aarch64-uefi.
 14. **The `core` layer and the compiler-runtime builtins come first.** They must exist before any freestanding target works, and hosted targets build on them too.
-15. **The middle IR has per-function attributes from the start** (calling convention, target features, red zone, stack probes, sections), not as an afterthought.
+15. **The semantic IR has per-function attributes from the start** (calling convention, target features, red zone, stack probes, sections), not as an afterthought.
 16. **Stage 0 needs no freestanding support,** but the compiler written in Cesium does not assume a hosted target anywhere in its code generation path.
 
 ## Alternatives

@@ -8,7 +8,7 @@ const mutate = @import("mutate.zig");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
-pub const Kind = enum { mir, s0 };
+pub const Kind = enum { sir, s0 };
 
 /// One corpus file and how cesium0 is run on a mutant of it.
 pub const Seed = struct {
@@ -25,7 +25,7 @@ pub const Seed = struct {
         var argv: std.ArrayList([]const u8) = .empty;
         try argv.appendSlice(a, &.{ cesium0, emit, "-o", out });
         switch (seed.kind) {
-            .mir => try argv.appendSlice(a, &.{ "--mir", mutant }),
+            .sir => try argv.appendSlice(a, &.{ "--sir", mutant }),
             .s0 => {
                 try argv.appendSlice(a, seed.before);
                 try argv.append(a, mutant);
@@ -54,9 +54,9 @@ fn stage1Files(a: Allocator, io: Io, root: []const u8) Error![]const []const u8 
 /// The corpus under `root`/bootstrap, `root` an absolute path.
 pub fn load(a: Allocator, io: Io, root: []const u8) Error![]const Seed {
     var seeds: std.ArrayList(Seed) = .empty;
-    const mir_files = try list(a, io, root, &.{ "bootstrap/tests/mir", "bootstrap/tests/mir/errors", "bootstrap/tests/s0" }, ".mir");
-    for (mir_files) |name| {
-        try seeds.append(a, .{ .name = name, .kind = .mir, .data = try read(a, io, root, name) });
+    const sir_files = try list(a, io, root, &.{ "bootstrap/tests/sir", "bootstrap/tests/sir/errors", "bootstrap/tests/s0" }, ".sir");
+    for (sir_files) |name| {
+        try seeds.append(a, .{ .name = name, .kind = .sir, .data = try read(a, io, root, name) });
     }
     const lib = try absolute(a, root, "bootstrap/tests/s0/lib.csm");
     const s0_files = try list(a, io, root, &.{ "bootstrap/tests/s0", "bootstrap/tests/s0/errors" }, ".csm");

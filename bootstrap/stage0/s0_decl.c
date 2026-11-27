@@ -20,7 +20,7 @@ static void declare_structs(L *l, S0Decl *decls) {
   }
   for (d = decls; d != NULL; d = d->next) {
     S0Stmt *f;
-    MirField *fields;
+    SirField *fields;
     size_t n = 0;
     size_t i = 0;
     bool ok = true;
@@ -34,9 +34,9 @@ static void declare_structs(L *l, S0Decl *decls) {
       s0_error(l->diag, d->loc, "E0308", "struct '%s' has no fields", d->name);
       continue;
     }
-    fields = (MirField *)cs_arena_new(&l->m->arena, cs_mul_size(n, sizeof(MirField)));
+    fields = (SirField *)cs_arena_new(&l->m->arena, cs_mul_size(n, sizeof(SirField)));
     for (f = d->fields; f != NULL; f = f->next) {
-      MirType *t = resolve_type(l, &f->type);
+      SirType *t = resolve_type(l, &f->type);
       size_t j;
       if (t == NULL) {
         ok = false;
@@ -48,7 +48,7 @@ static void declare_structs(L *l, S0Decl *decls) {
           ok = false;
           continue;
         }
-        t = mir_array(l->m, t, f->count);
+        t = sir_array(l->m, t, f->count);
       }
       for (j = 0; j < i; j++) {
         if (strcmp(fields[j].name, f->name) == 0) {
@@ -61,22 +61,22 @@ static void declare_structs(L *l, S0Decl *decls) {
       i++;
     }
     if (ok) {
-      mir_struct_define(l->m, d->name, fields, n, d->loc.line);
+      sir_struct_define(l->m, d->name, fields, n, d->loc.line);
     } else {
       /* keep later uses from cascading: define it with what resolved */
-      mir_struct_define(l->m, d->name, fields, i, d->loc.line);
+      sir_struct_define(l->m, d->name, fields, i, d->loc.line);
     }
   }
 }
 
 static void declare_const(L *l, S0Decl *d) {
-  MirType *t = resolve_type(l, &d->type);
+  SirType *t = resolve_type(l, &d->type);
   Const *c;
   uint64_t value;
   if (t == NULL) {
     return;
   }
-  if (!mir_type_is_int(t)) {
+  if (!sir_type_is_int(t)) {
     s0_error(l->diag, d->loc, "E0310", "a constant is a number in S0, not a %s", type_name(l, t));
     return;
   }
@@ -88,7 +88,7 @@ static void declare_const(L *l, S0Decl *d) {
     }
   } else if (d->init->kind == EX_NAME && find_const(l, d->init->name) != NULL) {
     Const *other = find_const(l, d->init->name);
-    if (!mir_type_eq(other->type, t)) {
+    if (!sir_type_eq(other->type, t)) {
       s0_error(l->diag, d->init->loc, "E0311", "'%s' is a %s, not a %s", other->name, type_name(l, other->type),
                type_name(l, t));
       return;
@@ -111,8 +111,8 @@ static void declare_const(L *l, S0Decl *d) {
 }
 
 static void declare_global(L *l, S0Decl *d) {
-  MirType *t = resolve_type(l, &d->type);
-  MirGlobal *g;
+  SirType *t = resolve_type(l, &d->type);
+  SirGlobal *g;
   Global *sym;
   if (t == NULL) {
     return;
@@ -122,12 +122,12 @@ static void declare_global(L *l, S0Decl *d) {
       s0_error(l->diag, d->loc, "E0306", "an array has at least one element");
       return;
     }
-    t = mir_array(l->m, t, d->count);
+    t = sir_array(l->m, t, d->count);
   }
   if (name_taken(l, d->name, d->loc, false)) {
     return;
   }
-  g = mir_global_add(l->m, d->name, t, false, d->loc.line);
+  g = sir_global_add(l->m, d->name, t, false, d->loc.line);
   sym = (Global *)cs_arena_new(l->arena, sizeof(Global));
   sym->name = d->name;
   sym->type = t;
@@ -136,7 +136,7 @@ static void declare_global(L *l, S0Decl *d) {
   if (d->op == TK_EOF) {
     return;
   }
-  if (mir_type_is_int(t)) {
+  if (sir_type_is_int(t)) {
     Const *c = d->init->kind == EX_NAME ? find_const(l, d->init->name) : NULL;
     if (d->op != TK_ASSIGN) {
       s0_error(l->diag, d->loc, "E0514", "%s is only for pointers; a plain value is initialized with '='",
@@ -144,7 +144,7 @@ static void declare_global(L *l, S0Decl *d) {
     } else if (d->init->kind == EX_INT && literal_fits(t, d->init->ival)) {
       g->init = MI_INT;
       g->ival = d->init->ival;
-    } else if (c != NULL && mir_type_eq(c->type, t)) {
+    } else if (c != NULL && sir_type_eq(c->type, t)) {
       g->init = MI_INT;
       g->ival = c->value;
     } else {
@@ -170,24 +170,24 @@ static void declare_global(L *l, S0Decl *d) {
 }
 
 static void declare_func(L *l, S0Decl *d) {
-  MirType *ret = resolve_type(l, &d->type);
-  MirParam *params = (MirParam *)cs_arena_new(&l->m->arena, cs_mul_size(d->nparams == 0 ? 1 : d->nparams, sizeof(MirParam)));
+  SirType *ret = resolve_type(l, &d->type);
+  SirParam *params = (SirParam *)cs_arena_new(&l->m->arena, cs_mul_size(d->nparams == 0 ? 1 : d->nparams, sizeof(SirParam)));
   Func *f;
   size_t i;
   size_t j;
   bool ok = ret != NULL;
-  if (ok && ret->kind != MT_VOID && !mir_type_is_scalar(ret)) {
+  if (ok && ret->kind != MT_VOID && !sir_type_is_scalar(ret)) {
     s0_error(l->diag, d->loc, "E0316", "'%s' returns a %s; S0 functions return a number, a pointer or nothing", d->name,
              type_name(l, ret));
     ok = false;
   }
   for (i = 0; i < d->nparams; i++) {
-    MirType *t = resolve_type(l, &d->params[i].type);
+    SirType *t = resolve_type(l, &d->params[i].type);
     if (t == NULL) {
       ok = false;
       continue;
     }
-    if (!mir_type_is_scalar(t)) {
+    if (!sir_type_is_scalar(t)) {
       s0_error(l->diag, d->params[i].loc, "E0317", "parameter '%s' is a %s; S0 parameters are numbers and pointers",
                d->params[i].name, type_name(l, t));
       ok = false;
@@ -207,10 +207,10 @@ static void declare_func(L *l, S0Decl *d) {
   f = (Func *)cs_arena_new(l->arena, sizeof(Func));
   f->name = d->name;
   f->decl = d;
-  f->mir = mir_func_add(l->m, d->name, params, d->nparams, ret, d->loc.line);
-  f->mir->is_extern = d->kind == DK_EXTERN_FUNC;
+  f->sir = sir_func_add(l->m, d->name, params, d->nparams, ret, d->loc.line);
+  f->sir->is_extern = d->kind == DK_EXTERN_FUNC;
   /* the entry point is the one symbol the C runtime must see */
-  f->mir->is_export = d->kind == DK_FUNC && strcmp(d->name, "main") == 0;
+  f->sir->is_export = d->kind == DK_FUNC && strcmp(d->name, "main") == 0;
   f->next = l->funcs;
   l->funcs = f;
 }
@@ -221,7 +221,7 @@ static void lower_func(L *l, S0Decl *d) {
   if (f == NULL || f->decl != d) {
     return; /* its declaration failed, or it is a duplicate */
   }
-  l->fn = f->mir;
+  l->fn = f->sir;
   l->locals = NULL;
   l->loops = 0;
   for (i = 0; i < d->nparams; i++) {
@@ -231,22 +231,22 @@ static void lower_func(L *l, S0Decl *d) {
     }
     v = (Local *)cs_arena_new(l->arena, sizeof(Local));
     v->name = d->params[i].name;
-    v->type = f->mir->params[i].type;
+    v->type = f->sir->params[i].type;
     v->prev = l->locals;
     l->locals = v;
   }
-  f->mir->body = lower_block(l, d->body);
+  f->sir->body = lower_block(l, d->body);
   l->fn = NULL;
   l->locals = NULL;
 }
 
-MirModule *s0_lower(CsArena *arena, S0Diag *diag, S0Decl *decls) {
+SirModule *s0_lower(CsArena *arena, S0Diag *diag, S0Decl *decls) {
   L l;
   S0Decl *d;
   memset(&l, 0, sizeof l);
   l.arena = arena;
   l.diag = diag;
-  l.m = mir_module_new();
+  l.m = sir_module_new();
 
   declare_structs(&l, decls);
   for (d = decls; d != NULL; d = d->next) {
@@ -275,17 +275,17 @@ MirModule *s0_lower(CsArena *arena, S0Diag *diag, S0Decl *decls) {
       s0_error(diag, loc, "E0319",
                "'cs_arena_alloc' is the runtime function behind alloc and cannot be declared");
     } else {
-      MirType *uword = mir_prim(l.m, MT_UWORD);
-      MirParam *params = (MirParam *)cs_arena_new(&l.m->arena, 2 * sizeof(MirParam));
-      MirFunc *f;
+      SirType *uword = sir_prim(l.m, MT_UWORD);
+      SirParam *params = (SirParam *)cs_arena_new(&l.m->arena, 2 * sizeof(SirParam));
+      SirFunc *f;
       params[0].type = uword;
       params[1].type = uword;
-      f = mir_func_add(l.m, "cs_arena_alloc", params, 2, mir_ptr(l.m, mir_prim(l.m, MT_U8)), 0);
+      f = sir_func_add(l.m, "cs_arena_alloc", params, 2, sir_ptr(l.m, sir_prim(l.m, MT_U8)), 0);
       f->is_extern = true;
     }
   }
   if (diag->errors != 0) {
-    mir_module_free(l.m);
+    sir_module_free(l.m);
     return NULL;
   }
   return l.m;
