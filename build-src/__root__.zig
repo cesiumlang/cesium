@@ -96,7 +96,7 @@ pub fn build(b: *std.Build) tests_diff.Error!void {
     const test_step = b.step("test", "Run the stage 0 test corpus");
     test_step.dependOn(&c11.cesium0.step);
     tests.add(b, test_step, target, c99.cesium0, c99.csrt, c99.csmir, s1, tool, devkit);
-    diagnostics.add(b, test_step, &stage0_sources, &s1.sources);
+    diagnostics.add(b, test_step, &stage0_sources, &csmir_sources, &s1.sources);
 
     const lines_step = b.step("lines", "Build bootstrap/tests/s0/lines.csm, frames.csm and vars.csm into zig-out/bin, for a debugger");
     tests_debug.addLines(b, lines_step, target, optimize, c99.cesium0, c99.csrt);

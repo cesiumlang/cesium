@@ -22,13 +22,14 @@ void mir_module_free(MirModule *m) {
   }
 }
 
-void mir_error(MirModule *m, int line, const char *fmt, ...) {
+void mir_error(MirModule *m, int line, const char *code, const char *fmt, ...) {
   va_list ap;
   int n = 0;
   if (m->failed) {
     return;
   }
   m->failed = true;
+  m->err_code = code;
   if (line > 0) {
     n = snprintf(m->err, sizeof m->err, "line %d: ", line);
     if (n < 0 || (size_t)n >= sizeof m->err) {
@@ -104,7 +105,7 @@ MirStruct *mir_struct_ref(MirModule *m, const char *name) {
 MirStruct *mir_struct_define(MirModule *m, const char *name, MirField *fields, size_t nfields, int line) {
   MirStruct *s = mir_struct_ref(m, name);
   if (s->defined) {
-    mir_error(m, line, "struct %s is defined twice", name);
+    mir_error(m, line, "E1144", "struct %s is defined twice", name);
     return s;
   }
   s->defined = true;

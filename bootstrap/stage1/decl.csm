@@ -123,7 +123,7 @@ void = decl_structs() {
       if (decl_contains(g_field_ty[fi], sk, 0)) {
         uword sd = g_structs[sk].decl;
         g_err_file = g_nodes[sd].infile;
-        err_begin_verifier(g_nodes[sd].line, g_nodes[sd].col);
+        err_begin(g_nodes[sd].line, g_nodes[sd].col, "E1135");
         err_s("struct ");
         err_name(g_structs[sk].id);
         err_s(" contains itself through field ");
@@ -352,7 +352,7 @@ void = decl_body(uword f) {
   buf_puts(~g_out_funcs, "}\n");
   if (ty_kind(g_funcs[f].ret) != MT_VOID && !low_block_returns(g_nodes[d].body)) {
     // libcsmir's verifier
-    err_begin_verifier(g_nodes[d].line, g_nodes[d].col);
+    err_begin(g_nodes[d].line, g_nodes[d].col, "E1143");
     err_s("@");
     err_name(id);
     err_s(" does not return a value on every path");
@@ -427,7 +427,7 @@ void = decl_unit() {
     }
     if (sym == SYM_GLOBAL) {
       // libcsmir's verifier: one name for a function and a global
-      err_begin_verifier(g_nodes[g_decls].line, g_nodes[g_decls].col);
+      err_begin(g_nodes[g_decls].line, g_nodes[g_decls].col, "E1142");
       err_s("@cs_arena_alloc names both a function and a global");
       err_end();
     }

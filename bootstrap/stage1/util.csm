@@ -191,12 +191,6 @@ void = err_begin(u64 line, u64 col, #u8 code) {
   buf_puts(~g_err, "]: ");
 }
 
-// Starts "line:col: error: ", for the checks of libcsmir's verifier that
-// cesium1 makes itself: like the verifier's messages, they have no code.
-void = err_begin_verifier(u64 line, u64 col) {
-  err_pos(line, col);
-  buf_puts(~g_err, ": error: ");
-}
 
 void = err_pos(u64 line, u64 col) {
   loc_err_file();

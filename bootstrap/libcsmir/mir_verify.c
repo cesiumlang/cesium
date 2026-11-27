@@ -70,7 +70,7 @@ static MirLocal *declare_local(Verifier *v, const char *name, MirType *type, boo
   MirLocal *l;
   for (s = v->scope; s != NULL && s->depth == v->depth; s = s->prev) {
     if (strcmp(s->local->name, name) == 0) {
-      mir_error(v->m, line, "%%%s is declared twice in the same block", name);
+      mir_error(v->m, line, "E1101", "%%%s is declared twice in the same block", name);
       return s->local;
     }
   }
@@ -103,13 +103,13 @@ static bool check_type(Verifier *v, const MirType *t, int line, const char *what
     return t->elem->kind == MT_VOID || t->elem->kind == MT_STRUCT || check_type(v, t->elem, line, what);
   case MT_ARRAY:
     if (t->elem->kind == MT_VOID) {
-      mir_error(v->m, line, "%s: an array of void", what);
+      mir_error(v->m, line, "E1102", "%s: an array of void", what);
       return false;
     }
     return check_type(v, t->elem, line, what);
   case MT_STRUCT:
     if (!t->st->defined) {
-      mir_error(v->m, line, "%s: struct %s is not defined", what, t->st->name);
+      mir_error(v->m, line, "E1103", "%s: struct %s is not defined", what, t->st->name);
       return false;
     }
     return true;
@@ -120,7 +120,7 @@ static bool check_type(Verifier *v, const MirType *t, int line, const char *what
 
 static bool no_floats(Verifier *v, const MirType *t, int line) {
   if (t->kind == MT_F32 || t->kind == MT_F64) {
-    mir_error(v->m, line, "floating-point types are reserved in MIR version %d", MIR_VERSION);
+    mir_error(v->m, line, "E1104", "floating-point types are reserved in MIR version %d", MIR_VERSION);
     return false;
   }
   return true;
@@ -136,7 +136,7 @@ static bool verify_int(Verifier *v, MirExpr *e, const char *what) {
     return false;
   }
   if (!mir_type_is_int(e->type)) {
-    mir_error(v->m, e->line, "%s must be an integer, not %s", what, type_text(v, e->type));
+    mir_error(v->m, e->line, "E1105", "%s must be an integer, not %s", what, type_text(v, e->type));
     return false;
   }
   return true;
@@ -151,7 +151,7 @@ static bool verify_expr(Verifier *v, MirExpr *e) {
   switch (e->op) {
   case ME_CONST:
     if (!mir_type_is_int(e->type)) {
-      mir_error(m, e->line, "a constant needs an integer type");
+      mir_error(m, e->line, "E1106", "a constant needs an integer type");
       return false;
     }
     return true;
@@ -159,11 +159,11 @@ static bool verify_expr(Verifier *v, MirExpr *e) {
   case ME_LOCAL:
     e->local = find_local(v, e->name);
     if (e->local == NULL) {
-      mir_error(m, e->line, "unknown local %%%s", e->name);
+      mir_error(m, e->line, "E1107", "unknown local %%%s", e->name);
       return false;
     }
     if (!mir_type_is_scalar(e->local->type)) {
-      mir_error(m, e->line, "%%%s has type %s and cannot be read as a value; use addr(%%%s)", e->name,
+      mir_error(m, e->line, "E1108", "%%%s has type %s and cannot be read as a value; use addr(%%%s)", e->name,
                 type_text(v, e->local->type), e->name);
       return false;
     }
@@ -174,10 +174,10 @@ static bool verify_expr(Verifier *v, MirExpr *e) {
     e->global = find_global(m, e->name);
     if (e->global == NULL) {
       if (find_func(m, e->name) != NULL) {
-        mir_error(m, e->line, "@%s is a function; function addresses are not values in MIR version %d", e->name,
-                  MIR_VERSION);
+        mir_error(m, e->line, "E1109", "@%s is a function; function addresses are not values in MIR version %d",
+                  e->name, MIR_VERSION);
       } else {
-        mir_error(m, e->line, "unknown global @%s", e->name);
+        mir_error(m, e->line, "E1110", "unknown global @%s", e->name);
       }
       return false;
     }
@@ -187,7 +187,7 @@ static bool verify_expr(Verifier *v, MirExpr *e) {
   case ME_ADDR:
     e->local = find_local(v, e->name);
     if (e->local == NULL) {
-      mir_error(m, e->line, "unknown local %%%s", e->name);
+      mir_error(m, e->line, "E1107", "unknown local %%%s", e->name);
       return false;
     }
     e->type = mir_ptr(m, e->local->type);
@@ -198,11 +198,12 @@ static bool verify_expr(Verifier *v, MirExpr *e) {
       return false;
     }
     if (e->a->type->kind != MT_PTR) {
-      mir_error(m, e->line, "load needs a pointer, not %s", type_text(v, e->a->type));
+      mir_error(m, e->line, "E1111", "load needs a pointer, not %s", type_text(v, e->a->type));
       return false;
     }
     if (!mir_type_is_scalar(e->a->type->elem)) {
-      mir_error(m, e->line, "load of %s: only integers and pointers are loaded", type_text(v, e->a->type->elem));
+      mir_error(m, e->line, "E1112", "load of %s: only integers and pointers are loaded",
+                type_text(v, e->a->type->elem));
       return false;
     }
     e->type = e->a->type->elem;
@@ -213,7 +214,7 @@ static bool verify_expr(Verifier *v, MirExpr *e) {
       return false;
     }
     if (e->a->type->kind != MT_PTR || e->a->type->elem->kind == MT_VOID) {
-      mir_error(m, e->line, "index needs a pointer to a sized type, not %s", type_text(v, e->a->type));
+      mir_error(m, e->line, "E1113", "index needs a pointer to a sized type, not %s", type_text(v, e->a->type));
       return false;
     }
     if (!check_type(v, e->a->type->elem, e->line, "index")) {
@@ -228,7 +229,7 @@ static bool verify_expr(Verifier *v, MirExpr *e) {
       return false;
     }
     if (e->a->type->kind != MT_PTR || e->a->type->elem->kind != MT_STRUCT) {
-      mir_error(m, e->line, "field needs a pointer to a struct, not %s", type_text(v, e->a->type));
+      mir_error(m, e->line, "E1114", "field needs a pointer to a struct, not %s", type_text(v, e->a->type));
       return false;
     }
     st = e->a->type->elem->st;
@@ -239,18 +240,18 @@ static bool verify_expr(Verifier *v, MirExpr *e) {
         return true;
       }
     }
-    mir_error(m, e->line, "struct %s has no field %s", st->name, e->name);
+    mir_error(m, e->line, "E1115", "struct %s has no field %s", st->name, e->name);
     return false;
   }
 
   case ME_CALL:
     e->callee = find_func(m, e->name);
     if (e->callee == NULL) {
-      mir_error(m, e->line, "unknown function @%s", e->name);
+      mir_error(m, e->line, "E1116", "unknown function @%s", e->name);
       return false;
     }
     if (e->nargs != e->callee->nparams) {
-      mir_error(m, e->line, "@%s takes %lu arguments, not %lu", e->name, (unsigned long)e->callee->nparams,
+      mir_error(m, e->line, "E1117", "@%s takes %lu arguments, not %lu", e->name, (unsigned long)e->callee->nparams,
                 (unsigned long)e->nargs);
       return false;
     }
@@ -259,7 +260,7 @@ static bool verify_expr(Verifier *v, MirExpr *e) {
         return false;
       }
       if (!mir_type_eq(e->args[i]->type, e->callee->params[i].type)) {
-        mir_error(m, e->args[i]->line, "argument %lu of @%s is %s, not %s", (unsigned long)(i + 1), e->name,
+        mir_error(m, e->args[i]->line, "E1118", "argument %lu of @%s is %s, not %s", (unsigned long)(i + 1), e->name,
                   type_text(v, e->args[i]->type), type_text(v, e->callee->params[i].type));
         return false;
       }
@@ -281,7 +282,7 @@ static bool verify_expr(Verifier *v, MirExpr *e) {
       return false;
     }
     if (!mir_type_eq(e->a->type, e->b->type)) {
-      mir_error(m, e->line, "%s of %s and %s: the operands must have the same type", mir_op_name(e->op),
+      mir_error(m, e->line, "E1119", "%s of %s and %s: the operands must have the same type", mir_op_name(e->op),
                 type_text(v, e->a->type), type_text(v, e->b->type));
       return false;
     }
@@ -306,7 +307,7 @@ static bool verify_expr(Verifier *v, MirExpr *e) {
       return false;
     }
     if (!mir_type_is_scalar(e->a->type) || !mir_type_eq(e->a->type, e->b->type)) {
-      mir_error(m, e->line, "%s of %s and %s: the operands must be integers or pointers of the same type",
+      mir_error(m, e->line, "E1120", "%s of %s and %s: the operands must be integers or pointers of the same type",
                 mir_op_name(e->op), type_text(v, e->a->type), type_text(v, e->b->type));
       return false;
     }
@@ -339,7 +340,7 @@ static bool verify_expr(Verifier *v, MirExpr *e) {
     ok = (mir_type_is_int(from) && mir_type_is_int(to)) || (from->kind == MT_PTR && to->kind == MT_PTR) ||
          (from->kind == MT_PTR && to->kind == MT_UWORD) || (from->kind == MT_UWORD && to->kind == MT_PTR);
     if (!ok) {
-      mir_error(m, e->line, "no conversion from %s to %s", type_text(v, from), type_text(v, to));
+      mir_error(m, e->line, "E1121", "no conversion from %s to %s", type_text(v, from), type_text(v, to));
       return false;
     }
     e->type = e->targ;
@@ -349,7 +350,7 @@ static bool verify_expr(Verifier *v, MirExpr *e) {
   case ME_SIZEOF:
   case ME_ALIGNOF:
     if (e->targ->kind == MT_VOID) {
-      mir_error(m, e->line, "%s of void", mir_op_name(e->op));
+      mir_error(m, e->line, "E1122", "%s of void", mir_op_name(e->op));
       return false;
     }
     if (!check_type(v, e->targ, e->line, mir_op_name(e->op))) {
@@ -377,7 +378,7 @@ static void verify_stmt(Verifier *v, MirStmt *s) {
   switch (s->kind) {
   case MS_LOCAL:
     if (s->type->kind == MT_VOID) {
-      mir_error(m, s->line, "%%%s cannot have type void", s->name);
+      mir_error(m, s->line, "E1123", "%%%s cannot have type void", s->name);
       return;
     }
     if (!check_type(v, s->type, s->line, "local") || !no_floats(v, s->type, s->line)) {
@@ -389,7 +390,7 @@ static void verify_stmt(Verifier *v, MirStmt *s) {
         return;
       }
       if (!mir_type_eq(s->a->type, s->type)) {
-        mir_error(m, s->line, "%%%s is %s but its initializer is %s", s->name, type_text(v, s->type),
+        mir_error(m, s->line, "E1124", "%%%s is %s but its initializer is %s", s->name, type_text(v, s->type),
                   type_text(v, s->a->type));
         return;
       }
@@ -400,15 +401,15 @@ static void verify_stmt(Verifier *v, MirStmt *s) {
   case MS_SET:
     s->local = find_local(v, s->name);
     if (s->local == NULL) {
-      mir_error(m, s->line, "unknown local %%%s", s->name);
+      mir_error(m, s->line, "E1107", "unknown local %%%s", s->name);
       return;
     }
     if (!verify_expr(v, s->a)) {
       return;
     }
     if (!mir_type_is_scalar(s->local->type) || !mir_type_eq(s->a->type, s->local->type)) {
-      mir_error(m, s->line, "set %%%s: the local is %s and the value is %s", s->name, type_text(v, s->local->type),
-                type_text(v, s->a->type));
+      mir_error(m, s->line, "E1125", "set %%%s: the local is %s and the value is %s", s->name,
+                type_text(v, s->local->type), type_text(v, s->a->type));
     }
     return;
 
@@ -417,7 +418,7 @@ static void verify_stmt(Verifier *v, MirStmt *s) {
       return;
     }
     if (s->a->type->kind != MT_PTR || !mir_type_is_scalar(s->b->type) || !mir_type_eq(s->a->type->elem, s->b->type)) {
-      mir_error(m, s->line, "store of %s through %s", type_text(v, s->b->type), type_text(v, s->a->type));
+      mir_error(m, s->line, "E1126", "store of %s through %s", type_text(v, s->b->type), type_text(v, s->a->type));
     }
     return;
 
@@ -445,14 +446,14 @@ static void verify_stmt(Verifier *v, MirStmt *s) {
   case MS_BREAK:
   case MS_CONTINUE:
     if (v->loops == 0) {
-      mir_error(m, s->line, "%s outside a loop", s->kind == MS_BREAK ? "break" : "continue");
+      mir_error(m, s->line, "E1127", "%s outside a loop", s->kind == MS_BREAK ? "break" : "continue");
     }
     return;
 
   case MS_RETURN:
     if (s->a == NULL) {
       if (v->fn->ret->kind != MT_VOID) {
-        mir_error(m, s->line, "@%s must return a %s", v->fn->name, type_text(v, v->fn->ret));
+        mir_error(m, s->line, "E1128", "@%s must return a %s", v->fn->name, type_text(v, v->fn->ret));
       }
       return;
     }
@@ -460,7 +461,8 @@ static void verify_stmt(Verifier *v, MirStmt *s) {
       return;
     }
     if (v->fn->ret->kind == MT_VOID || !mir_type_eq(s->a->type, v->fn->ret)) {
-      mir_error(m, s->line, "@%s returns %s, not %s", v->fn->name, type_text(v, v->fn->ret), type_text(v, s->a->type));
+      mir_error(m, s->line, "E1129", "@%s returns %s, not %s", v->fn->name, type_text(v, v->fn->ret),
+                type_text(v, s->a->type));
     }
     return;
   }
@@ -520,19 +522,19 @@ static void verify_signature(Verifier *v, MirFunc *f) {
   size_t i;
   size_t j;
   if (f->ret->kind != MT_VOID && !mir_type_is_scalar(f->ret)) {
-    mir_error(m, f->line, "@%s returns %s: only integers, pointers and void in MIR version %d", f->name,
+    mir_error(m, f->line, "E1130", "@%s returns %s: only integers, pointers and void in MIR version %d", f->name,
               type_text(v, f->ret), MIR_VERSION);
     return;
   }
   for (i = 0; i < f->nparams; i++) {
     if (!mir_type_is_scalar(f->params[i].type)) {
-      mir_error(m, f->line, "parameter %lu of @%s is %s: only integers and pointers in MIR version %d",
+      mir_error(m, f->line, "E1131", "parameter %lu of @%s is %s: only integers and pointers in MIR version %d",
                 (unsigned long)(i + 1), f->name, type_text(v, f->params[i].type), MIR_VERSION);
       return;
     }
     for (j = 0; j < i && !f->is_extern; j++) {
       if (strcmp(f->params[i].name, f->params[j].name) == 0) {
-        mir_error(m, f->line, "@%s has two parameters named %%%s", f->name, f->params[i].name);
+        mir_error(m, f->line, "E1132", "@%s has two parameters named %%%s", f->name, f->params[i].name);
         return;
       }
     }
@@ -556,19 +558,19 @@ bool mir_verify(MirModule *m) {
 
   for (s = m->structs; s != NULL && !m->failed; s = s->next) {
     if (!s->defined) {
-      mir_error(m, 0, "struct %s is used but never defined", s->name);
+      mir_error(m, 0, "E1133", "struct %s is used but never defined", s->name);
       break;
     }
     for (i = 0; i < s->nfields && !m->failed; i++) {
       MirType *ft = s->fields[i].type;
       if (ft->kind == MT_VOID) {
-        mir_error(m, s->line, "field %s of struct %s has type void", s->fields[i].name, s->name);
+        mir_error(m, s->line, "E1134", "field %s of struct %s has type void", s->fields[i].name, s->name);
       } else if (check_type(&v, ft, s->line, "field") && no_floats(&v, ft, s->line) && struct_contains(ft, s, 0)) {
-        mir_error(m, s->line, "struct %s contains itself through field %s", s->name, s->fields[i].name);
+        mir_error(m, s->line, "E1135", "struct %s contains itself through field %s", s->name, s->fields[i].name);
       }
       for (j = 0; j < i && !m->failed; j++) {
         if (strcmp(s->fields[i].name, s->fields[j].name) == 0) {
-          mir_error(m, s->line, "struct %s has two fields named %s", s->name, s->fields[i].name);
+          mir_error(m, s->line, "E1136", "struct %s has two fields named %s", s->name, s->fields[i].name);
         }
       }
     }
@@ -577,7 +579,7 @@ bool mir_verify(MirModule *m) {
   for (g = m->globals; g != NULL && !m->failed; g = g->next) {
     for (g2 = m->globals; g2 != g; g2 = g2->next) {
       if (strcmp(g->name, g2->name) == 0) {
-        mir_error(m, g->line, "@%s is defined twice", g->name);
+        mir_error(m, g->line, "E1137", "@%s is defined twice", g->name);
         break;
       }
     }
@@ -585,7 +587,7 @@ bool mir_verify(MirModule *m) {
       break;
     }
     if (g->type->kind == MT_VOID) {
-      mir_error(m, g->line, "@%s cannot have type void", g->name);
+      mir_error(m, g->line, "E1138", "@%s cannot have type void", g->name);
       break;
     }
     if (!check_type(&v, g->type, g->line, "global") || !no_floats(&v, g->type, g->line)) {
@@ -596,21 +598,21 @@ bool mir_verify(MirModule *m) {
       break;
     case MI_INT:
       if (!mir_type_is_int(g->type)) {
-        mir_error(m, g->line, "@%s is not an integer but has an integer initializer", g->name);
+        mir_error(m, g->line, "E1139", "@%s is not an integer but has an integer initializer", g->name);
       }
       break;
     case MI_BYTES:
       if (g->type->kind != MT_ARRAY || g->type->elem->kind != MT_U8 || g->type->count != g->nbytes) {
-        mir_error(m, g->line, "@%s: a string of %lu bytes needs the type [%lu x u8]", g->name,
+        mir_error(m, g->line, "E1140", "@%s: a string of %lu bytes needs the type [%lu x u8]", g->name,
                   (unsigned long)g->nbytes, (unsigned long)g->nbytes);
       }
       break;
     case MI_ADDR: {
       MirGlobal *target = find_global(m, g->addr_name);
       if (target == NULL) {
-        mir_error(m, g->line, "@%s: unknown global @%s", g->name, g->addr_name);
+        mir_error(m, g->line, "E1110", "@%s: unknown global @%s", g->name, g->addr_name);
       } else if (g->type->kind != MT_PTR) {
-        mir_error(m, g->line, "@%s is not a pointer but is initialized with an address", g->name);
+        mir_error(m, g->line, "E1141", "@%s is not a pointer but is initialized with an address", g->name);
       }
       break;
     }
@@ -620,12 +622,12 @@ bool mir_verify(MirModule *m) {
   for (f = m->funcs; f != NULL && !m->failed; f = f->next) {
     for (f2 = m->funcs; f2 != f; f2 = f2->next) {
       if (strcmp(f->name, f2->name) == 0) {
-        mir_error(m, f->line, "@%s is defined twice", f->name);
+        mir_error(m, f->line, "E1137", "@%s is defined twice", f->name);
         break;
       }
     }
     if (!m->failed && find_global(m, f->name) != NULL) {
-      mir_error(m, f->line, "@%s names both a function and a global", f->name);
+      mir_error(m, f->line, "E1142", "@%s names both a function and a global", f->name);
     }
     if (!m->failed) {
       verify_signature(&v, f);
@@ -648,7 +650,7 @@ bool mir_verify(MirModule *m) {
     }
     verify_block(&v, f->body);
     if (!m->failed && f->ret->kind != MT_VOID && !block_returns(f->body)) {
-      mir_error(m, f->line, "@%s does not return a value on every path", f->name);
+      mir_error(m, f->line, "E1143", "@%s does not return a value on every path", f->name);
     }
   }
 

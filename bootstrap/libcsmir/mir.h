@@ -219,9 +219,10 @@ struct MirModule {
   MirFunc *funcs, *funcs_tail;
   const char *loc_file; /* the last file name mir_stmt_loc copied */
   bool verified;
-  /* the first error, if any */
+  /* the first error, if any, and its code (bootstrap/diagnostics.md) */
   bool failed;
   char err[512];
+  const char *err_code;
 };
 
 /* ---- construction ------------------------------------------------------ */
@@ -229,8 +230,9 @@ struct MirModule {
 MirModule *mir_module_new(void);
 void mir_module_free(MirModule *m);
 
-/* Records the first error (printf-style); later ones are dropped. */
-void mir_error(MirModule *m, int line, const char *fmt, ...);
+/* Records the first error (printf-style), with its code, a literal such as
+ * "E1101"; later ones are dropped. */
+void mir_error(MirModule *m, int line, const char *code, const char *fmt, ...);
 
 MirType *mir_prim(MirModule *m, MirTypeKind kind);
 MirType *mir_ptr(MirModule *m, MirType *elem);

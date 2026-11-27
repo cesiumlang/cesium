@@ -85,13 +85,13 @@ static int hex_value(int c) {
   return -1;
 }
 
-static void perr(Parser *p, const char *fmt, ...) {
+static void perr(Parser *p, const char *code, const char *fmt, ...) {
   va_list ap;
   char msg[256];
   va_start(ap, fmt);
   cs_vsnprintf(msg, sizeof msg, fmt, ap);
   va_end(ap);
-  mir_error(p->m, p->tok_line, "%s", msg);
+  mir_error(p->m, p->tok_line, code, "%s", msg);
   /* stop consuming input so every loop ends */
   p->pos = p->len;
   p->tok = T_EOF;
@@ -132,7 +132,7 @@ static void next(Parser *p) {
         p->pos++;
       }
       if (p->pos == start) {
-        perr(p, "expected a name after '%c'", c);
+        perr(p, "E1001", "expected a name after '%c'", c);
         return;
       }
       p->tok = c == '%' ? T_LOCAL : T_GLOBAL;
@@ -173,7 +173,7 @@ static void next(Parser *p) {
       for (;;) {
         if (p->pos >= p->len || s[p->pos] == '\n') {
           cs_buf_free(&b);
-          perr(p, "unterminated string");
+          perr(p, "E1002", "unterminated string");
           return;
         }
         if (s[p->pos] == '"') {
@@ -191,7 +191,7 @@ static void next(Parser *p) {
             p->pos += 3;
           } else {
             cs_buf_free(&b);
-            perr(p, "bad escape in string: expected \\HH, \\\\ or \\\"");
+            perr(p, "E1003", "bad escape in string: expected \\HH, \\\\ or \\\"");
             return;
           }
         } else {
@@ -218,7 +218,7 @@ static void next(Parser *p) {
       p->punct = (char)c;
       return;
     }
-    perr(p, "unexpected character '%c'", c);
+    perr(p, "E1004", "unexpected character '%c'", c);
   }
 }
 
@@ -232,7 +232,7 @@ static bool at_name(const Parser *p, const char *name) {
 
 static void expect_punct(Parser *p, char c) {
   if (!at_punct(p, c)) {
-    perr(p, "expected '%c'", c);
+    perr(p, "E1005", "expected '%c'", c);
     return;
   }
   next(p);
@@ -240,7 +240,7 @@ static void expect_punct(Parser *p, char c) {
 
 static void expect_name(Parser *p, const char *name) {
   if (!at_name(p, name)) {
-    perr(p, "expected '%s'", name);
+    perr(p, "E1005", "expected '%s'", name);
     return;
   }
   next(p);
@@ -250,7 +250,7 @@ static void expect_name(Parser *p, const char *name) {
 static const char *take(Parser *p, Tok kind, const char *what) {
   const char *text;
   if (p->tok != kind) {
-    perr(p, "expected %s", what);
+    perr(p, "E1005", "expected %s", what);
     return "";
   }
   text = p->text;
@@ -266,7 +266,7 @@ static const char *take(Parser *p, Tok kind, const char *what) {
 
 static bool enter(Parser *p) {
   if (p->depth >= MAX_NESTING) {
-    perr(p, "nested too deeply (the limit is %d levels)", MAX_NESTING);
+    perr(p, "E1006", "nested too deeply (the limit is %d levels)", MAX_NESTING);
     return false;
   }
   p->depth++;
@@ -292,7 +292,7 @@ static MirType *parse_type_at_depth(Parser *p) {
     MirType *elem;
     next(p);
     if (p->tok != T_INT || p->int_overflow) {
-      perr(p, "expected an array length");
+      perr(p, "E1005", "expected an array length");
       return mir_prim(m, MT_VOID);
     }
     count = p->ival;
@@ -319,7 +319,7 @@ static MirType *parse_type_at_depth(Parser *p) {
     }
     return &mir_struct_ref(m, name)->type;
   }
-  perr(p, "expected a type");
+  perr(p, "E1005", "expected a type");
   return mir_prim(m, MT_VOID);
 }
 
@@ -386,11 +386,11 @@ static bool parse_const(Parser *p, MirType **type, uint64_t *value) {
     next(p);
   }
   if (p->tok != T_INT) {
-    perr(p, "expected an integer");
+    perr(p, "E1005", "expected an integer");
     return false;
   }
   if (p->int_overflow) {
-    perr(p, "integer constant is too large");
+    perr(p, "E1007", "integer constant is too large");
     return false;
   }
   mag = p->ival;
@@ -401,11 +401,11 @@ static bool parse_const(Parser *p, MirType **type, uint64_t *value) {
     return false;
   }
   if (!mir_type_is_int(*type)) {
-    perr(p, "a constant needs an integer type");
+    perr(p, "E1106", "a constant needs an integer type");
     return false;
   }
   if (!const_fits(*type, negative, mag)) {
-    perr(p, "constant does not fit its type");
+    perr(p, "E1008", "constant does not fit its type");
     return false;
   }
   *value = truncate_to(*type, negative ? (uint64_t)0 - mag : mag);
@@ -485,7 +485,7 @@ static MirExpr *parse_expr_at_depth(Parser *p) {
       expect_punct(p, '(');
       while (!at_punct(p, ')') && !m->failed) {
         if (n == sizeof args / sizeof args[0]) {
-          perr(p, "too many arguments");
+          perr(p, "E1009", "too many arguments");
           break;
         }
         args[n++] = parse_expr(p);
@@ -530,7 +530,7 @@ static MirExpr *parse_expr_at_depth(Parser *p) {
     }
     op = op_by_name(name);
     if (op == ME_OP_COUNT) {
-      perr(p, "unknown operation '%s'", name);
+      perr(p, "E1010", "unknown operation '%s'", name);
       return mir_const(m, mir_prim(m, MT_I64), 0, line);
     }
     {
@@ -544,7 +544,7 @@ static MirExpr *parse_expr_at_depth(Parser *p) {
       return mir_binary(m, op, a, b, line);
     }
   }
-  perr(p, "expected an expression");
+  perr(p, "E1005", "expected an expression");
   return mir_const(m, mir_prim(m, MT_I64), 0, line);
 }
 
@@ -582,7 +582,7 @@ static MirStmt *parse_stmt_at_depth(Parser *p) {
   int line = p->tok_line;
   MirStmt *s;
   if (p->tok != T_NAME) {
-    perr(p, "expected a statement");
+    perr(p, "E1005", "expected a statement");
     return mir_stmt(m, MS_BREAK, line);
   }
   if (at_name(p, "local")) {
@@ -653,7 +653,7 @@ static MirStmt *parse_stmt_at_depth(Parser *p) {
     }
     return s;
   }
-  perr(p, "unknown statement '%s'", p->text);
+  perr(p, "E1011", "unknown statement '%s'", p->text);
   return mir_stmt(m, MS_BREAK, line);
 }
 
@@ -661,11 +661,11 @@ static MirStmt *parse_stmt_at_depth(Parser *p) {
 static uint32_t parse_loc_number(Parser *p, const char *what) {
   uint32_t v;
   if (p->tok != T_INT) {
-    perr(p, "expected a %s number", what);
+    perr(p, "E1005", "expected a %s number", what);
     return 0;
   }
   if (p->int_overflow || p->ival == 0 || p->ival >= MIR_LOC_MAX) {
-    perr(p, "a %s number in a loc is from 1 to %" PRIu32, what, MIR_LOC_MAX - 1);
+    perr(p, "E1012", "a %s number in a loc is from 1 to %" PRIu32, what, MIR_LOC_MAX - 1);
     return 0;
   }
   v = (uint32_t)p->ival;
@@ -681,24 +681,24 @@ static bool parse_loc(Parser *p, const char **file, uint32_t *line, uint32_t *co
   next(p);
   if (p->tok == T_STRING) {
     if (p->text_len == 0) {
-      perr(p, "empty file name in a loc");
+      perr(p, "E1013", "empty file name in a loc");
       return false;
     }
     if (memchr(p->text, '\0', p->text_len) != NULL) {
-      perr(p, "a file name in a loc has a zero byte");
+      perr(p, "E1014", "a file name in a loc has a zero byte");
       return false;
     }
     p->loc_file = p->text;
     next(p);
   } else if (p->loc_file == NULL) {
-    perr(p, "the first loc of a function names its file");
+    perr(p, "E1015", "the first loc of a function names its file");
     return false;
   }
   *line = parse_loc_number(p, "line");
   expect_punct(p, ':');
   *col = parse_loc_number(p, "column");
   if (at_punct(p, '}') || p->tok == T_EOF) {
-    perr(p, "a loc stands before a statement");
+    perr(p, "E1016", "a loc stands before a statement");
   }
   *file = p->loc_file;
   return !p->m->failed;
@@ -744,7 +744,7 @@ static void parse_func(Parser *p, bool is_extern, bool is_export) {
   expect_punct(p, '(');
   while (!at_punct(p, ')') && !m->failed) {
     if (n == MAX_PARAMS) {
-      perr(p, "too many parameters");
+      perr(p, "E1017", "too many parameters");
       break;
     }
     if (is_extern) {
@@ -761,7 +761,7 @@ static void parse_func(Parser *p, bool is_extern, bool is_export) {
   }
   expect_punct(p, ')');
   if (!(p->tok == T_PUNCT && p->arrow)) {
-    perr(p, "expected '->'");
+    perr(p, "E1005", "expected '->'");
     return;
   }
   next(p);
@@ -796,7 +796,7 @@ static void parse_struct(Parser *p) {
   expect_punct(p, '{');
   while (!at_punct(p, '}') && !m->failed) {
     if (n == sizeof fields / sizeof fields[0]) {
-      perr(p, "too many fields");
+      perr(p, "E1018", "too many fields");
       break;
     }
     fields[n].name = take(p, T_NAME, "a field name");
@@ -851,7 +851,7 @@ static void parse_global(Parser *p, bool is_const) {
     uint64_t value = 0;
     if (parse_const(p, &ctype, &value)) {
       if (!mir_type_eq(ctype, type)) {
-        perr(p, "initializer type differs from the type of @%s", name);
+        perr(p, "E1019", "initializer type differs from the type of @%s", name);
         return;
       }
       g->init = MI_INT;
@@ -872,7 +872,7 @@ MirModule *mir_parse(const char *text, size_t len) {
   expect_name(&p, "cesium-mir");
   if (!m->failed) {
     if (p.tok != T_INT || p.ival != MIR_VERSION) {
-      perr(&p, "expected MIR version %d", MIR_VERSION);
+      perr(&p, "E1020", "expected MIR version %d", MIR_VERSION);
     } else {
       next(&p);
     }
@@ -893,7 +893,7 @@ MirModule *mir_parse(const char *text, size_t len) {
     } else if (at_name(&p, "global")) {
       parse_global(&p, false);
     } else {
-      perr(&p, "expected a declaration");
+      perr(&p, "E1005", "expected a declaration");
     }
   }
   return m;
