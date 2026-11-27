@@ -46,5 +46,8 @@ int cs_compile_mir(const char *mir, size_t len, int backend, const char *triple,
 
 /* The message of the last failed call. Owned by the library. */
 const char *cs_last_error(void);
+/* Its diagnostic code (bootstrap/diagnostics.md) if it is an error in the
+ * MIR, such as "E1101"; "" otherwise. */
+const char *cs_last_error_code(void);
 
 #endif

@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
     m = mir_parse(text, len);
     free(text);
     if (m->failed) {
-      fprintf(stderr, "%s: error: %s\n", mir_path, m->err);
+      fprintf(stderr, "%s: error[%s]: %s\n", mir_path, m->err_code, m->err);
       return 1;
     }
   } else {
@@ -150,7 +150,7 @@ int main(int argc, char *argv[]) {
     /* A few errors in S0 source are left to the verifier: a function that
      * does not return on every path, a struct that contains itself, and a
      * name that collides with the runtime's. */
-    fprintf(stderr, "%s: error: %s\n", mir_path != NULL ? mir_path : "cesium0", m->err);
+    fprintf(stderr, "%s: error[%s]: %s\n", mir_path != NULL ? mir_path : "cesium0", m->err_code, m->err);
     return 1;
   }
 

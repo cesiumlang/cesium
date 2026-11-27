@@ -6,16 +6,28 @@
 int qbe_main(int argc, char *argv[]);
 
 static char last_error[600];
+static const char *last_code = "";
 
 static void set_error(const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   cs_vsnprintf(last_error, sizeof last_error, fmt, ap);
   va_end(ap);
+  last_code = "";
+}
+
+/* An error in the MIR, with its code. */
+static void set_mir_error(const MirModule *m) {
+  set_error("MIR: %s", m->err);
+  last_code = m->err_code != NULL ? m->err_code : "";
 }
 
 const char *cs_last_error(void) {
   return last_error;
+}
+
+const char *cs_last_error_code(void) {
+  return last_code;
 }
 
 int cs_backend_init(void) {
@@ -162,7 +174,7 @@ int csmir_emit_qbe(MirModule *m, const MirTarget *t, const char *out_path, bool 
   bool rewrite;
   int argc = 6;
   if (!mir_verify(m)) {
-    set_error("MIR: %s", m->err);
+    set_mir_error(m);
     return 1;
   }
   file = mir_lower_qbe(&il, m, t, variables);
@@ -226,7 +238,7 @@ int cs_compile_mir(const char *mir, size_t len, int backend, const char *triple,
   }
   m = mir_parse(mir, len);
   if (m->failed) {
-    set_error("MIR: %s", m->err);
+    set_mir_error(m);
     mir_module_free(m);
     return 1;
   }

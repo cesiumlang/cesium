@@ -37,7 +37,15 @@ const Run = struct {
     /// An S0 test compiled together with lib.csm, as one unit.
     lib: bool = false,
 };
-const Reject = struct { name: []const u8, message: []const u8 };
+/// A test the compiler rejects: its message, and the code it is given
+/// (`error[E1101]: `) where the message does not hold it.
+const Reject = struct { name: []const u8, message: []const u8, code: ?[]const u8 = null };
+
+fn checkReject(b: *std.Build, run: *std.Build.Step.Run, t: Reject) void {
+    run.expectExitCode(1);
+    run.addCheck(.{ .expect_stderr_match = t.message });
+    if (t.code) |code| run.addCheck(.{ .expect_stderr_match = b.fmt("error[{s}]: ", .{code}) });
+}
 
 pub const s0_dir = "bootstrap/tests/s0/";
 const mir_dir = "bootstrap/tests/mir/";
@@ -83,7 +91,7 @@ const s0_rejects = [_]Reject{
     .{ .name = "shadow", .message = "is already the name of" },
     .{ .name = "hex_literal", .message = "S0 has decimal integer literals only" },
     .{ .name = "alloc_borrow", .message = "alloc returns ownership" },
-    .{ .name = "missing_return", .message = "does not return a value on every path" },
+    .{ .name = "missing_return", .code = "E1143", .message = "does not return a value on every path" },
     .{ .name = "deep_expression", .message = "nested too deeply (the limit is 128 levels)" },
     .{ .name = "deep_blocks", .message = "nested too deeply (the limit is 128 levels)" },
     .{ .name = "c_function_header", .message = "[E0214]: expected ';', found '('; a function is written 'T = name(parameters) { ... }'" },
@@ -106,19 +114,19 @@ const mir_runs = [_]Run{
 };
 
 const mir_rejects = [_]Reject{
-    .{ .name = "type_mismatch", .message = "the operands must have the same type" },
-    .{ .name = "break_outside_loop", .message = "break outside a loop" },
-    .{ .name = "no_return", .message = "does not return a value on every path" },
-    .{ .name = "unknown_local", .message = "unknown local %x" },
-    .{ .name = "bad_version", .message = "expected MIR version 0" },
-    .{ .name = "struct_by_value_param", .message = "only integers and pointers" },
-    .{ .name = "deep_nesting", .message = "nested too deeply (the limit is 1024 levels)" },
-    .{ .name = "loc_no_file", .message = "line 9: the first loc of a function names its file" },
-    .{ .name = "loc_line_zero", .message = "a line number in a loc is from 1 to 536870911" },
-    .{ .name = "loc_column_too_big", .message = "a column number in a loc is from 1 to 536870911" },
-    .{ .name = "loc_empty_file", .message = "empty file name in a loc" },
-    .{ .name = "loc_before_brace", .message = "a loc stands before a statement" },
-    .{ .name = "loc_zero_byte", .message = "a file name in a loc has a zero byte" },
+    .{ .name = "type_mismatch", .code = "E1119", .message = "the operands must have the same type" },
+    .{ .name = "break_outside_loop", .code = "E1127", .message = "break outside a loop" },
+    .{ .name = "no_return", .code = "E1143", .message = "does not return a value on every path" },
+    .{ .name = "unknown_local", .code = "E1107", .message = "unknown local %x" },
+    .{ .name = "bad_version", .code = "E1020", .message = "expected MIR version 0" },
+    .{ .name = "struct_by_value_param", .code = "E1131", .message = "only integers and pointers" },
+    .{ .name = "deep_nesting", .code = "E1006", .message = "nested too deeply (the limit is 1024 levels)" },
+    .{ .name = "loc_no_file", .code = "E1015", .message = "line 9: the first loc of a function names its file" },
+    .{ .name = "loc_line_zero", .code = "E1012", .message = "a line number in a loc is from 1 to 536870911" },
+    .{ .name = "loc_column_too_big", .code = "E1012", .message = "a column number in a loc is from 1 to 536870911" },
+    .{ .name = "loc_empty_file", .code = "E1013", .message = "empty file name in a loc" },
+    .{ .name = "loc_before_brace", .code = "E1016", .message = "a loc stands before a statement" },
+    .{ .name = "loc_zero_byte", .code = "E1014", .message = "a file name in a loc has a zero byte" },
 };
 
 pub fn add(
@@ -155,8 +163,7 @@ pub fn add(
         run.addArg("-o");
         _ = run.addOutputFileArg(b.fmt("{s}.s", .{t.name}));
         run.addFileArg(b.path(b.fmt(s0_dir ++ "errors/{s}.csm", .{t.name})));
-        run.expectExitCode(1);
-        run.addCheck(.{ .expect_stderr_match = t.message });
+        checkReject(b, run, t);
         step.dependOn(&run.step);
     }
     for (mir_runs) |t| {
@@ -183,8 +190,7 @@ pub fn add(
         _ = run.addOutputFileArg(b.fmt("{s}.s", .{t.name}));
         run.addArg("--mir");
         run.addFileArg(b.path(b.fmt(mir_dir ++ "errors/{s}.mir", .{t.name})));
-        run.expectExitCode(1);
-        run.addCheck(.{ .expect_stderr_match = t.message });
+        checkReject(b, run, t);
         step.dependOn(&run.step);
     }
 
