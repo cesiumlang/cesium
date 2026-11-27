@@ -27,6 +27,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      sign:
+        description: Sign the Windows and macOS programs, as a release does
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -50,6 +55,7 @@ jobs:
     outputs:
       version: ${{ steps.ver.outputs.version }}
       release: ${{ steps.ver.outputs.release }}
+      sign: ${{ steps.ver.outputs.sign }}
       sha: ${{ steps.ver.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
@@ -65,6 +71,9 @@ jobs:
           REF: ${{ github.ref }}
           BASE_REF: ${{ github.base_ref }}
           GH_TOKEN: ${{ github.token }}
+          INPUT_SIGN: ${{ inputs.sign }}
+          SIGN_WINDOWS: ${{ vars.SIGN_AZURE_CLIENT_ID }}
+          SIGN_MACOS: ${{ vars.APPLE_SIGNING }}
         run: |
           # every place that states the version agrees (version.sh lists them)
           if ! version=$(bash .github/workflows/version.sh); then
@@ -98,13 +107,22 @@ jobs:
               release=true
             fi
           fi
+          # signing (#123): for a release, or a run started by hand that asks;
+          # each platform is skipped while it is not configured
+          sign=false
+          if [ "$release" = true ] || { [ "$EVENT" = workflow_dispatch ] && [ "$INPUT_SIGN" = true ]; }; then
+            sign=true
+            [ -n "$SIGN_WINDOWS" ] || echo "::warning::Windows signing is not configured (SIGN_AZURE_CLIENT_ID); the .exe files stay unsigned"
+            [ "$SIGN_MACOS" = true ] || echo "::warning::macOS signing is not configured (APPLE_SIGNING); the macOS programs stay unsigned"
+          fi
           sha=$(git rev-parse HEAD)
           {
             echo "version=$version"
             echo "release=$release"
+            echo "sign=$sign"
             echo "sha=$sha"
           } >> "$GITHUB_OUTPUT"
-          echo "version $version at $sha; release: $release" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "version $version at $sha; release: $release; sign: $sign" | tee -a "$GITHUB_STEP_SUMMARY"
 
   stage0:
     name: Stage 0 on ${{ matrix.host }}
@@ -131,29 +149,32 @@ jobs:
         run: .devkit/zig/zig build install test -Dtarget="${{ matrix.host }}" --summary all
 
       # the install tree as the release holds it (cesiumlang/cesium#165):
-      # cesium0 and cesium1, libcsir and libcsrt, the readme and the license
-      - name: Archive the install tree
+      # cesium0 and cesium1, libcsir and libcsrt, the readme and the license;
+      # a tar keeps the execute bits
+      - name: Stage the install tree
         env:
           VERSION: ${{ needs.version.outputs.version }}
           HOST: ${{ matrix.host }}
         run: |
           name="cesium-v$VERSION-$HOST"
-          mkdir -p "dist/$name"
-          cp -R zig-out/. "dist/$name/"
-          cp readme.md LICENSE "dist/$name/"
-          find "dist/$name" -type f | sort
-          if [[ $HOST == *windows* ]]; then
-            (cd dist && 7z a -tzip -bso0 "$name.zip" "$name")
-          else
-            tar -C dist -czf "dist/$name.tar.gz" "$name"
-          fi
-          rm -rf "dist/$name"
-          ls -l dist
+          mkdir -p "tree/$name"
+          cp -R zig-out/. "tree/$name/"
+          cp readme.md LICENSE "tree/$name/"
+          find "tree/$name" -type f | sort
+          tar -C tree -cf "tree-$HOST.tar" "$name"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: dist-${{ matrix.host }}
-          path: dist/*
+          name: tree-${{ matrix.host }}
+          path: tree-${{ matrix.host }}.tar
+          if-no-files-found: error
+
+      # the Windows programs to sign, as a tree (sign-windows.yml of cesiumlang/.github)
+      - uses: actions/upload-artifact@v7
+        if: matrix.host == 'x86_64-windows-gnu'
+        with:
+          name: windows-tree
+          path: tree/
           if-no-files-found: error
 
       # the DWARF compile unit (cesiumlang/cesium#78): lines.csm traps at 12
@@ -362,10 +383,319 @@ jobs:
       - name: Coverage in the job summary
         run: .skein-bin/bin/skein coverage --markdown >> "$GITHUB_STEP_SUMMARY"
 
+  # Signing (#123): only for a release and a run started by hand that asks
+  # (signings are limited per month); each job is skipped while unconfigured,
+  # and a failed signing fails the run.
+  sign-windows:
+    name: Sign the Windows programs
+    needs: [version, stage0]
+    if: ${{ !cancelled() && needs.stage0.result == 'success' && needs.version.outputs.sign == 'true' && vars.SIGN_AZURE_CLIENT_ID != '' }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: cesiumlang/.github/.github/workflows/sign-windows.yml@main
+    with:
+      artifact: windows-tree
+      signed-artifact: windows-tree-signed
+      count: 2
+      # the signed compilers compile a program, outside the tree that ships
+      run: >-
+        t=$(mktemp -d) && printf 'i32 = main(i32 argc, ##u8 argv) {\n    return 0;\n}\n' > "$t/t.csm"
+        && cesium-v*/bin/cesium0.exe -o "$t/t0.s" "$t/t.csm" && cesium-v*/bin/cesium1.exe -o "$t/t1.s" "$t/t.csm"
+      client-id: ${{ vars.SIGN_AZURE_CLIENT_ID }}
+      tenant-id: ${{ vars.SIGN_AZURE_TENANT_ID }}
+      subscription-id: ${{ vars.SIGN_AZURE_SUBSCRIPTION_ID }}
+      endpoint: ${{ vars.SIGN_ENDPOINT }}
+      account: ${{ vars.SIGN_ACCOUNT }}
+      profile: ${{ vars.SIGN_PROFILE }}
+
+  # cesium0 and cesium1 of both macOS hosts, with the Developer ID (hardened
+  # runtime, secure timestamp), notarized; no entitlements until a program
+  # debugs (#123)
+  sign-macos:
+    name: Sign and notarize the macOS programs
+    needs: [version, stage0]
+    if: ${{ !cancelled() && needs.stage0.result == 'success' && needs.version.outputs.sign == 'true' && vars.APPLE_SIGNING == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+      APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+      APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: tree-*-macos-none
+          merge-multiple: true
+          path: unsigned
+
+      - name: Unpack the macOS trees
+        run: |
+          mkdir pkg
+          for t in unsigned/*.tar; do tar -C pkg -xf "$t"; done
+          ls pkg
+
+      - name: Import the Developer ID certificate
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          pass=$(uuidgen)
+          echo "$APPLE_DEVELOPER_ID_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$pass" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$pass" "$keychain"
+          security import "$RUNNER_TEMP/cert.p12" -P "$APPLE_DEVELOPER_ID_P12_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$pass" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          rm "$RUNNER_TEMP/cert.p12"
+          security find-identity -v -p codesigning "$keychain"
+
+      - name: Sign
+        run: |
+          identity=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)
+          [ -n "$identity" ] || { echo "::error::no Developer ID Application identity"; exit 1; }
+          for exe in pkg/*/bin/cesium0 pkg/*/bin/cesium1; do
+            codesign --force --options runtime --timestamp --sign "$identity" "$exe"
+            codesign --verify --strict --verbose=2 "$exe"
+          done
+
+      # A bare executable cannot be stapled: Gatekeeper looks the ticket up
+      # online. notarytool takes a zip.
+      - name: Notarize
+        run: |
+          echo "$APPLE_NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          auth=(--key "$RUNNER_TEMP/notary.p8" --key-id "$APPLE_NOTARY_KEY_ID" --issuer "$APPLE_NOTARY_ISSUER_ID")
+          ids=()
+          for dir in pkg/*/; do
+            name=$(basename "$dir")
+            ditto -c -k --keepParent "$dir/bin" "$RUNNER_TEMP/$name.zip"
+            id=$(xcrun notarytool submit "$RUNNER_TEMP/$name.zip" --no-wait --output-format json "${auth[@]}" | jq -r .id)
+            echo "$name: submission $id"
+            ids+=("$id")
+          done
+          failed=0
+          for id in "${ids[@]}"; do
+            xcrun notarytool wait "$id" --timeout 90m --output-format json "${auth[@]}" > "$RUNNER_TEMP/result.json" || true
+            status=$(jq -r '.status // "no answer"' "$RUNNER_TEMP/result.json")
+            echo "submission $id: $status"
+            if [ "$status" != Accepted ]; then
+              xcrun notarytool log "$id" "${auth[@]}" || true
+              failed=1
+            fi
+          done
+          rm "$RUNNER_TEMP/notary.p8"
+          exit "$failed"
+
+      - name: The signed compilers run
+        run: |
+          t=$(mktemp -d)
+          printf 'i32 = main(i32 argc, ##u8 argv) {\n    return 0;\n}\n' > "$t/t.csm"
+          for exe in pkg/*/bin/cesium0 pkg/*/bin/cesium1; do
+            codesign -dv --verbose=2 "$exe" 2>&1 | grep -E "Authority=Developer|flags|Timestamp"
+          done
+          for c in cesium0 cesium1; do
+            pkg/cesium-v*-aarch64-macos-none/bin/$c -o "$t/$c.s" "$t/t.csm"
+            arch -x86_64 pkg/cesium-v*-x86_64-macos-none/bin/$c -o "$t/$c-x86.s" "$t/t.csm" || echo "::warning::the x86_64 $c did not run here (Rosetta?)"
+          done
+
+      - name: Stage the signed trees
+        run: tar -C pkg -cf signed-macos.tar .
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: signed-macos
+          path: signed-macos.tar
+          if-no-files-found: error
+
+  # Universal cesium0, cesium1, libcsir and libcsrt in a signed, notarized and
+  # stapled installer package (Developer ID Installer), installed into
+  # /usr/local; skipped while the variable APPLE_PKG is not true
+  pkg-macos:
+    name: macOS installer package
+    needs: [version, sign-macos]
+    if: ${{ !cancelled() && needs.sign-macos.result == 'success' && vars.APPLE_PKG == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+      APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+      APPLE_INSTALLER_P12: ${{ secrets.APPLE_INSTALLER_P12 }}
+      APPLE_INSTALLER_P12_PASSWORD: ${{ secrets.APPLE_INSTALLER_P12_PASSWORD }}
+      APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: signed-macos
+          path: signed
+
+      - name: Import the certificates
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          pass=$(uuidgen)
+          security create-keychain -p "$pass" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$pass" "$keychain"
+          for kind in DEVELOPER_ID INSTALLER; do
+            p12="APPLE_${kind}_P12"
+            pw="APPLE_${kind}_P12_PASSWORD"
+            echo "${!p12}" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+            security import "$RUNNER_TEMP/cert.p12" -P "${!pw}" -A -t cert -f pkcs12 -k "$keychain"
+            rm "$RUNNER_TEMP/cert.p12"
+          done
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$pass" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          security find-identity -v
+
+      # lipo of the two signed trees; the programs are signed again
+      - name: Build the universal tree and the installer
+        run: |
+          app=$(security find-identity -v | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)
+          inst=$(security find-identity -v | sed -n 's/.*"\(Developer ID Installer:.*\)"/\1/p' | head -1)
+          [ -n "$app" ] && [ -n "$inst" ] || { echo "::error::an identity is missing"; exit 1; }
+          mkdir pkg
+          tar -C pkg -xf signed/signed-macos.tar
+          x86=$(echo pkg/cesium-v*-x86_64-macos-none) arm=$(echo pkg/cesium-v*-aarch64-macos-none)
+          root="$RUNNER_TEMP/root"
+          mkdir -p "$root/usr/local/bin" "$root/usr/local/lib" "$root/usr/local/share/doc/cesium"
+          for c in cesium0 cesium1; do
+            lipo -create "$x86/bin/$c" "$arm/bin/$c" -output "$root/usr/local/bin/$c"
+            codesign --force --options runtime --timestamp --sign "$app" "$root/usr/local/bin/$c"
+          done
+          for l in "$arm"/lib/*.a; do
+            lipo -create "$x86/lib/$(basename "$l")" "$l" -output "$root/usr/local/lib/$(basename "$l")"
+          done
+          lipo -info "$root"/usr/local/bin/* "$root"/usr/local/lib/*
+          cp "$arm/LICENSE" "$arm/readme.md" "$root/usr/local/share/doc/cesium/"
+          pkgbuild --root "$root" --identifier com.github.cesiumlang.cesium --version "$VERSION" \
+            --install-location / "$RUNNER_TEMP/cesium-component.pkg"
+          mkdir out
+          productbuild --package "$RUNNER_TEMP/cesium-component.pkg" --sign "$inst" --timestamp \
+            "out/cesium-v$VERSION-macos.pkg"
+          pkgutil --check-signature "out/cesium-v$VERSION-macos.pkg"
+
+      - name: Notarize and staple the installer
+        run: |
+          echo "$APPLE_NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          auth=(--key "$RUNNER_TEMP/notary.p8" --key-id "$APPLE_NOTARY_KEY_ID" --issuer "$APPLE_NOTARY_ISSUER_ID")
+          pkg="out/cesium-v$VERSION-macos.pkg"
+          xcrun notarytool submit "$pkg" --wait --timeout 90m --output-format json "${auth[@]}" > "$RUNNER_TEMP/result.json" || true
+          status=$(jq -r '.status // "no answer"' "$RUNNER_TEMP/result.json")
+          echo "notarization: $status"
+          if [ "$status" != Accepted ]; then
+            xcrun notarytool log "$(jq -r .id "$RUNNER_TEMP/result.json")" "${auth[@]}" || true
+            exit 1
+          fi
+          rm "$RUNNER_TEMP/notary.p8"
+          xcrun stapler staple "$pkg"
+          xcrun stapler validate "$pkg"
+
+      - name: The installer is accepted and its compilers run
+        run: |
+          pkg="out/cesium-v$VERSION-macos.pkg"
+          spctl --assess --type install -vv "$pkg"
+          pkgutil --expand-full "$pkg" "$RUNNER_TEMP/expanded"
+          t=$(mktemp -d)
+          printf 'i32 = main(i32 argc, ##u8 argv) {\n    return 0;\n}\n' > "$t/t.csm"
+          for c in cesium0 cesium1; do
+            exe=$(find "$RUNNER_TEMP/expanded" -path "*usr/local/bin/$c" | head -1)
+            "$exe" -o "$t/$c.s" "$t/t.csm"
+            arch -x86_64 "$exe" -o "$t/$c-x86.s" "$t/t.csm" || echo "::warning::the x86_64 slice of $c did not run here (Rosetta?)"
+          done
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-pkg
+          path: out/*.pkg
+          if-no-files-found: error
+
+  # What a release publishes: an archive of each host's tree, signed where a
+  # signing job ran, and the macOS installer package when there is one
+  archive:
+    name: Archives
+    needs: [version, stage0, sign-windows, sign-macos, pkg-macos]
+    if: >-
+      ${{ !cancelled() && needs.stage0.result == 'success'
+      && needs.sign-windows.result != 'failure' && needs.sign-macos.result != 'failure' && needs.pkg-macos.result != 'failure' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      WINDOWS_SIGNED: ${{ needs.sign-windows.result == 'success' }}
+      MACOS_SIGNED: ${{ needs.sign-macos.result == 'success' }}
+      PKG: ${{ needs.pkg-macos.result == 'success' }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: tree-*
+          merge-multiple: true
+          path: unsigned
+
+      - uses: actions/download-artifact@v8
+        if: env.WINDOWS_SIGNED == 'true'
+        with:
+          name: windows-tree-signed
+          path: signed-windows
+
+      - uses: actions/download-artifact@v8
+        if: env.MACOS_SIGNED == 'true'
+        with:
+          name: signed-macos
+          path: signed-macos
+
+      - uses: actions/download-artifact@v8
+        if: env.PKG == 'true'
+        with:
+          name: macos-pkg
+          path: dist
+
+      - name: The trees, signed where signing ran
+        run: |
+          mkdir -p staged dist
+          for t in unsigned/*.tar; do tar -C staged -xf "$t"; done
+          if [ "$WINDOWS_SIGNED" = true ]; then cp -R signed-windows/. staged/; fi
+          if [ "$MACOS_SIGNED" = true ]; then tar -C staged -xf signed-macos/signed-macos.tar; fi
+          find staged -type f | sort
+
+      # a signing that succeeded must be what ships
+      - name: What ships is what was signed
+        run: |
+          if [ "$WINDOWS_SIGNED" = true ]; then
+            for c in cesium0 cesium1; do cmp staged/cesium-v*-x86_64-windows-gnu/bin/$c.exe signed-windows/cesium-v*-x86_64-windows-gnu/bin/$c.exe; done
+            echo "Windows: the signed programs"
+          fi
+          if [ "$MACOS_SIGNED" = true ]; then
+            mkdir check && tar -C check -xf signed-macos/signed-macos.tar
+            for h in x86_64 aarch64; do for c in cesium0 cesium1; do cmp staged/cesium-v*-$h-macos-none/bin/$c check/cesium-v*-$h-macos-none/bin/$c; done; done
+            echo "macOS: the signed programs"
+          fi
+
+      - name: The archives
+        run: |
+          for dir in staged/*/; do
+            name=$(basename "$dir")
+            if [[ $name == *windows* ]]; then
+              (cd staged && zip -qr "../dist/$name.zip" "$name")
+            else
+              tar -C staged -czf "dist/$name.tar.gz" "$name"
+            fi
+          done
+          ls -l dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error
+
   # the one check the rulesets require
   ci:
     name: CI
-    needs: [version, stage0, dialect, msvc, skein]
+    needs: [version, stage0, dialect, msvc, skein, sign-windows, sign-macos, pkg-macos, archive]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -400,8 +730,7 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          pattern: dist-*
-          merge-multiple: true
+          name: dist
           path: dist
 
       - name: Check the archives
