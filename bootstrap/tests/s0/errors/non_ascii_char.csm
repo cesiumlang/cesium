@@ -1,0 +1,6 @@
+// A character literal holds one ASCII character.
+// spec: lex.lit.char.ascii
+i32 = main(i32 argc, ##u8 argv) {
+  u8 c = 'é';
+  return 0;
+}

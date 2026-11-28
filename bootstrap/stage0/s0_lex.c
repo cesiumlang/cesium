@@ -233,6 +233,11 @@ S0Token s0_lex_next(S0Lexer *lx) {
         cs_buf_free(&b);
         return fail(lx, loc, "E0106", "unknown escape: stage 0 accepts \\n \\t \\r \\0 \\\\ \\' \\\"");
       }
+      /* lex.lit.char.ascii */
+      if (quote == '\'' && ch >= 0x80) {
+        cs_buf_free(&b);
+        return fail(lx, loc, "E0108", "a character literal holds one ASCII character; write other text as a string");
+      }
       cs_buf_putc(&b, (char)(unsigned char)ch);
       nchars++;
     }

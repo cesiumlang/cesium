@@ -1,7 +1,7 @@
 # Review records, written by skein. Do not edit: use 'skein review'.
 "bootstrap/tests/s0/tokens.csm"."cite:test"."lex.comment.line" = "fc82fc1a8e8569aacfa8c519c9606620"
 "bootstrap/tests/s0/tokens.csm"."cite:test"."lex.lit.char" = "f4168707fadc2b285a3b0b57486a179a"
-"bootstrap/tests/s0/tokens.csm"."cite:test"."s0.assign.pointer" = "2cfc78fe455cf6decc083726842d1e88"
+"bootstrap/tests/s0/tokens.csm"."cite:test"."s0.assign.pointer" = "65f4eb26a9164f034dd47ae04969e0ca"
 "bootstrap/tests/s0/tokens.csm"."cite:test"."s0.const" = "8438daafc4b57113e1b1dba38cad10e7"
 "bootstrap/tests/s0/tokens.csm"."cite:test"."s0.entry" = "6bf37c4383a02a68b599c0382f3f3795"
 "bootstrap/tests/s0/tokens.csm"."cite:test"."s0.expr.alloc" = "d0ca21c8d345f5c4f16656390d155300"

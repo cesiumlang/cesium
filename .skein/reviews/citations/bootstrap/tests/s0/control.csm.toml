@@ -3,5 +3,5 @@
 "bootstrap/tests/s0/control.csm"."cite:test"."s0.func" = "e8af8173fba65e23679944016f3cdf6f"
 "bootstrap/tests/s0/control.csm"."cite:test"."s0.func.single-return" = "0492d42c3d4774581bab7aa6ed01df43"
 "bootstrap/tests/s0/control.csm"."cite:test"."s0.statement" = "0d0964526d489bd4dd1264c1fcef1d89"
-"bootstrap/tests/s0/control.csm"."cite:test"."s0.statement.braces" = "5e40ee5fa68473aa97b8fffa7a2d06ff"
+"bootstrap/tests/s0/control.csm"."cite:test"."s0.statement.braces" = "9ff81ec0e2b676132083fb0b369a91e7"
 "bootstrap/tests/s0/control.csm"."cite:test"."s0.statement.loops" = "ae96152e5c4c1516ab62fac279cac806"
