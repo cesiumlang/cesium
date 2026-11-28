@@ -786,14 +786,14 @@ jobs:
       # grammar and cspell-cesium record the state of Cesium at a version, so
       # they are released with it, at the head of their main: as the Cesium
       # Agent app (a workflow's own token cannot write to them)
-      - name: The app's token for grammar and cspell-cesium
+      - name: The app's token for grammar, cspell-cesium and cesiumlang.org
         id: app
         uses: actions/create-github-app-token@v3
         with:
           client-id: Iv23liXrtnf12IOEFv6c
           private-key: ${{ secrets.CESIUM_AGENT_PRIVATE_KEY }}
           owner: cesiumlang
-          repositories: grammar,cspell-cesium
+          repositories: grammar,cspell-cesium,cesiumlang.org
 
       - name: Release grammar and cspell-cesium v${{ needs.version.outputs.version }}
         env:
@@ -809,6 +809,14 @@ jobs:
             m=$(gh api "repos/$repo/milestones?state=open&per_page=100" --jq ".[] | select(.title == \"v$VERSION\") | .number")
             if [ -n "$m" ]; then gh api -X PATCH "repos/$repo/milestones/$m" -f state=closed --jq '"closed milestone " + .title'; fi
           done
+
+      # cesiumlang.org's root is the latest release and has an edition of each
+      # (cesiumlang/cesiumlang.org#43): rebuilt once the tag exists, since the
+      # rebuild site.yml starts for the push to main may run before it
+      - name: Rebuild cesiumlang.org with v${{ needs.version.outputs.version }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: gh workflow run deploy.yml --repo cesiumlang/cesiumlang.org --ref main
 
   # The next version is begun on dev: main keeps the version it released.
   # The version's milestone is closed, and the next version is the lowest
