@@ -32,7 +32,7 @@ Open: what the later pass does when it cannot tell `A~*B` apart (presumably an e
 
 %rule[lex.comment.block syntax draft introduced-by=P-0000] A block comment starts with `/*` and ends with the next `*/`. A block comment that is not closed is an error. Decided in the reference ([lexical-structure]).
 
-```cesium %example[.open rejects]
+```cesium %example[.open rejects error=E0101]
 /* not closed
 ```
 
@@ -63,7 +63,7 @@ digit      = "0" ... "9" ;
 
 %rule[lex.ident.keyword legality draft introduced-by=P-0000] A keyword (%[lex.keywords]) is not an identifier. Decided in the reference ([lexical-structure]).
 
-```cesium %example[.list rejects]
+```cesium %example[.list rejects error=E0102]
 i32 = main(i32 argc, ##u8 argv) {
   i32 list = 0;
   return list;
@@ -130,7 +130,7 @@ u8 newline = '\n';
 
 %rule[lex.lit.char.ascii legality draft introduced-by=P-0000] A character literal that holds a character outside ASCII, such as `'é'`, is an error; such text is written as a string, `"é"`. Direction in [#39], 2026-11-24, which replaced an earlier answer that took such a literal as its UTF-8 bytes.
 
-```cesium %example[.accented rejects]
+```cesium %example[.accented rejects error=E0108]
 u8 c = 'é';
 ```
 

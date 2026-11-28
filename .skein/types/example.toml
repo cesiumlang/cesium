@@ -6,3 +6,11 @@ tombstone = "removed"
 [example]
 link = "shows"
 extensions = { cesium = ".csm" }
+message = "error"
+
+# the codes of the errors a rejected example must be refused with
+# (bootstrap/diagnostics.md), checked by tools/spec-examples.sh; not part
+# of what the rule says, so a change does not ask its citations for review
+[attributes.error]
+list = true
+normative = false

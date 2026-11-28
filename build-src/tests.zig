@@ -90,6 +90,7 @@ const s0_rejects = [_]Reject{
     .{ .name = "unary_minus", .message = "S0 has no unary minus" },
     .{ .name = "shadow", .message = "is already the name of" },
     .{ .name = "hex_literal", .message = "S0 has decimal integer literals only" },
+    .{ .name = "non_ascii_char", .message = "[E0108]: a character literal holds one ASCII character; write other text as a string" },
     .{ .name = "alloc_borrow", .message = "alloc returns ownership" },
     .{ .name = "missing_return", .code = "E1143", .message = "does not return a value on every path" },
     .{ .name = "deep_expression", .message = "nested too deeply (the limit is 128 levels)" },
