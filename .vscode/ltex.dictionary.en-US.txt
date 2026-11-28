@@ -62,6 +62,7 @@ JsonDoc
 katex
 leaq
 lexer
+libc
 libcesiumexe
 libcsir
 libcsrt

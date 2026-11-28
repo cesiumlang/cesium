@@ -1,5 +1,5 @@
 # Review records, written by skein. Do not edit: use 'skein review'.
-"bootstrap/tests/s0/pointers.csm"."cite:test"."s0.assign.pointer" = "2cfc78fe455cf6decc083726842d1e88"
+"bootstrap/tests/s0/pointers.csm"."cite:test"."s0.assign.pointer" = "65f4eb26a9164f034dd47ae04969e0ca"
 "bootstrap/tests/s0/pointers.csm"."cite:test"."s0.check.address-context" = "b47317c83d53e385289ff92562f7b31f"
 "bootstrap/tests/s0/pointers.csm"."cite:test"."s0.check.pointer-argument" = "0bd1903d0228f144342bd553b413a4d4"
 "bootstrap/tests/s0/pointers.csm"."cite:test"."s0.expr.deref" = "d5576345d849b9e4668ab8b4dffc457c"

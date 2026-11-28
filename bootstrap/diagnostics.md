@@ -50,6 +50,12 @@ A backslash in a literal is followed by a character that is not one of the escap
 
 The character begins no token of S0, such as `^`, `@`, `?` or `$`. Exclusive or is written `><`, and S0 has no `?:`; write an `if`.
 
+### E0108
+
+`a character literal holds one ASCII character; write other text as a string`
+
+A character literal between single quotes holds a character outside ASCII, such as `'é'`: its value is one byte, so only ASCII fits (`lex.lit.char.ascii`). Write the text as a string, `"é"`, whose bytes are its UTF-8.
+
 ## Syntax (E02xx)
 
 ### E0201

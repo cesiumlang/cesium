@@ -449,6 +449,10 @@ void = lex_quoted(~Token t, u8 quote) {
     if (v == 256) {
       lex_fail(t.line, t.col, "E0106", "unknown escape: stage 0 accepts \\n \\t \\r \\0 \\\\ \\' \\\"");
     }
+    // lex.lit.char.ascii
+    if (quote == '\'' && v >= 128) {
+      lex_fail(t.line, t.col, "E0108", "a character literal holds one ASCII character; write other text as a string");
+    }
     buf_putc(~g_strs, v as u8);
     nchars = nchars + 1;
   }
